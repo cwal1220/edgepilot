@@ -133,6 +133,34 @@ bool black_check_ignition(void){
   return harness_check_ignition();
 }
 
+#define BLACK_CAN_BYPASS_OFF_DELAY_TICKS 2U
+static uint8_t black_can_bypass_off_delay = 0U;
+
+void black_usb_power_mode_tick(uint32_t uptime) {
+  UNUSED(uptime);
+
+  bool ignition = black_check_ignition();
+
+  if (!ignition) {
+    black_set_usb_power_mode(USB_POWER_CLIENT);
+
+    // When the car is off, reconnect the harness buses directly. Debounce
+    // the ignition input so a short SBU glitch cannot switch the relay.
+    if (black_can_bypass_off_delay < BLACK_CAN_BYPASS_OFF_DELAY_TICKS) {
+      black_can_bypass_off_delay++;
+    }
+    if (black_can_bypass_off_delay >= BLACK_CAN_BYPASS_OFF_DELAY_TICKS) {
+      set_intercept_relay(false);
+    }
+  } else {
+    black_can_bypass_off_delay = 0U;
+    set_intercept_relay(true);
+    // Apply USB power as soon as ignition is detected. The MDPS relay
+    // behavior above remains unchanged.
+    black_set_usb_power_mode(USB_POWER_CDP);
+  }
+}
+
 void black_init(void) {
   common_init_gpio();
 
@@ -160,11 +188,11 @@ void black_init(void) {
   // Turn on GPS load switch.
   black_set_gps_load_switch(true);
 
-  // Turn on USB load switch.
-  black_set_usb_load_switch(true);
-
-  // Set right power mode
-  black_set_usb_power_mode(USB_POWER_CDP);
+  // Black Panda controls USB power from black_usb_power_mode_tick().
+  // Do not let the generic CDP path override the ignition-based behavior.
+  usb_power_mode_auto = false;
+  black_can_bypass_off_delay = 0U;
+  black_set_usb_power_mode(USB_POWER_CLIENT);
 
   // Initialize harness
   harness_init();
@@ -218,7 +246,7 @@ const board board_black = {
   .set_usb_power_mode = black_set_usb_power_mode,
   .set_gps_mode = black_set_gps_mode,
   .set_can_mode = black_set_can_mode,
-  .usb_power_mode_tick = unused_usb_power_mode_tick,
+  .usb_power_mode_tick = black_usb_power_mode_tick,
   .check_ignition = black_check_ignition,
   .read_current = unused_read_current,
   .set_fan_power = unused_set_fan_power,

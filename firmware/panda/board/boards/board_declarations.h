@@ -75,3 +75,6 @@ struct board {
 
 // ********************* Globals **********************
 uint8_t usb_power_mode = USB_POWER_NONE;
+// Boards with a custom USB power sequence can disable the generic CDP
+// auto-enable path in main.c.
+bool usb_power_mode_auto = true;

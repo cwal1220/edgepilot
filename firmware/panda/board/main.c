@@ -233,7 +233,7 @@ void tick_handler(void) {
         }
 
         // enter CDP mode when car starts to ensure we are charging a turned off EON
-        if (check_started() && ((usb_power_mode != USB_POWER_CDP) || !usb_enumerated)) {
+        if (usb_power_mode_auto && check_started() && ((usb_power_mode != USB_POWER_CDP) || !usb_enumerated)) {
           current_board->set_usb_power_mode(USB_POWER_CDP);
         }
       }
@@ -266,7 +266,9 @@ void EXTI_IRQ_Handler(void) {
     exti_irq_clear();
     clock_init();
 
-    current_board->set_usb_power_mode(USB_POWER_CDP);
+    if (usb_power_mode_auto) {
+      current_board->set_usb_power_mode(USB_POWER_CDP);
+    }
     set_power_save_state(POWER_SAVE_STATUS_DISABLED);
     deepsleep_requested = false;
     heartbeat_counter = 0U;
