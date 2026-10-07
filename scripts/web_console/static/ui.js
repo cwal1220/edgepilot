@@ -48,7 +48,7 @@ export function clock(date = new Date()) {
 
 // ------------------------------------------------------------ 배지·표·카드
 // [텍스트, 톤] 목록. 톤: good, warn, bad, accent, muted
-function badges(list) {
+export function badges(list) {
   return list.filter(Boolean).map(([text, tone]) => el(`span.badge.${tone || "muted"}`, {text}));
 }
 

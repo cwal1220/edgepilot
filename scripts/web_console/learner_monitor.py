@@ -1,5 +1,6 @@
-"""실시간 학습 탭의 상태: controlsd가 내는 paramsd·torqued 학습값(LearnerState)과 그 10분 추이, locationd가 내는
-자세·조향 지연(LocalizationState). 필드 배치는 src/common/ipc_messages.h와 같고 check_web_console.py가 대조한다."""
+"""차량 특성 탭의 학습 상태: controlsd가 내는 paramsd·torqued 학습값(LearnerState)과 그 10분 추이, locationd가 내는
+자세·조향 지연(LocalizationState). 필드 배치는 src/common/ipc_messages.h와 같고 check_web_console.py가 대조한다.
+수동값은 페이지가 파라미터에서 직접 읽는다."""
 from __future__ import annotations
 
 import collections
@@ -91,17 +92,6 @@ def learner_trend_row(state: Dict[str, Any]) -> list[float]:
     ]
 
 
-def manual_lateral_values(steering: Dict[str, Any]) -> Dict[str, Any]:
-    """학습값과 나란히 보여 줄 수동값(params/steering.json)."""
-    return {
-        "steer_ratio": steering.get("steer_ratio"),
-        "tire_stiffness_factor": steering.get("tire_stiffness_factor"),
-        "angle_offset_deg": steering.get("angle_offset_deg"),
-        "torque_lat_accel_offset": steering.get("torque_lat_accel_offset"),
-        "live_bank_compensation": steering.get("live_bank_compensation"),
-    }
-
-
 class LearnerMonitor:
     """1초마다 최신 학습 상태를 읽어 10분 추이를 남긴다. 탭을 늦게 열어도 추이가 보인다."""
 
@@ -137,9 +127,9 @@ class LearnerMonitor:
     def stop(self) -> None:
         self._stop.set()
 
-    def status(self, steering: Dict[str, Any]) -> Dict[str, Any]:
+    def status(self) -> Dict[str, Any]:
         latest = self.sample()
-        result: Dict[str, Any] = {"available": latest is not None, "manual": manual_lateral_values(steering)}
+        result: Dict[str, Any] = {"available": latest is not None}
         if latest is not None:
             _, stamp, state = latest
             result.update(age_s=age_s(stamp), state=state, trend_row=learner_trend_row(state))
@@ -152,8 +142,8 @@ class LocalizationReader(IpcReader):
     def __init__(self, path: str = topic_path(LOCALIZATION_TOPIC)):
         super().__init__(path, LOCALIZATION_STATE.size)
 
-    def status(self, steering: Dict[str, Any]) -> Dict[str, Any]:
-        result: Dict[str, Any] = {"available": False, "manual_delay_s": steering.get("steer_actuator_delay")}
+    def status(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {"available": False}
         latest = self.read_payload()
         if latest is not None:
             _, stamp, payload = latest

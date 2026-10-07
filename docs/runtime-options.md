@@ -213,11 +213,23 @@ cd /root/edgepilot && python3 -m web_console --host 0.0.0.0 --port 8080
 
 The header shows the processes the manager runs (its `ManagerState`, a red or
 amber pill when one is down or the manager stopped publishing) and the
-backlight. There is one tab per parameter file, then 실시간 학습 (the learners,
-calibration and steering lag) and BEV. The address keeps the tab (`#steering`,
-`#bev`), so a reload stays on it, and only the tab on screen polls the board.
-Parameter tabs search, show only the changed items, mark each item's default
-and put it back with one press. A value is written as soon as it is changed.
+backlight. There is one tab per parameter file, with 차량 특성 after 조향, and
+BEV. The address keeps the tab (`#steering`, `#vehicle`, `#bev`), so a reload
+stays on it, and only the tab on screen polls the board. Parameter tabs search,
+show only the changed items, mark each item's default and put it back with one
+press. A value is written as soon as it is changed.
+
+차량 특성 holds the steering values that belong to the car rather than to the
+controller. The values a learner replaces come in one group per learner
+(paramsd, torqued, lagd), as the learners publish them, with one 자동 학습 /
+수동 choice per group (the `use_live_*` switches). Each value's card shows the
+value control uses now and where it comes from (controlsd's LearnerState says
+whether the learned values are in use), the learned value, the manual value
+with what it does while learning is on, and a button that copies the learned
+value into the manual one. Below are the camera calibration, the learners' last
+ten minutes, the learner input source and the fixed specs (mass, wheelbase,
+centre of gravity, rear steer ratio, torque sign). 조향 keeps the controller
+tuning, and searching it for a moved value links to 차량 특성.
 
 > [!WARNING]
 > The web console has no authentication and writes steering parameters that

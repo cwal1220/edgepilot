@@ -7,30 +7,34 @@ from __future__ import annotations
 from typing import Any, Dict
 
 
+def _with(meta: Dict[str, Any], **extra: Any) -> Dict[str, Any]:
+    """비어 있지 않은 선택 필드만 붙인다."""
+    meta.update({key: value for key, value in extra.items() if value})
+    return meta
+
+
 def number(label: str, section: str, unit: str, step: float, minimum: float, maximum: float,
-           description: str, increase: str, decrease: str, *, control: str = "") -> Dict[str, Any]:
-    """숫자 항목. control="slider"면 −/+ 대신 슬라이더로 고친다."""
-    meta = {"label": label, "section": section, "unit": unit, "step": step, "min": minimum, "max": maximum,
-            "description": description, "increase": increase, "decrease": decrease}
-    if control:
-        meta["control"] = control
-    return meta
+           description: str, increase: str, decrease: str, *, control: str = "", tab: str = "",
+           learned_role: str = "", caution: str = "") -> Dict[str, Any]:
+    """숫자 항목. control="slider"면 −/+ 대신 슬라이더로 고친다. tab="vehicle"이면 조향 탭 대신 차량 특성 탭(아래
+    VEHICLE_TAB)에 나온다. learned_role은 자동 학습 중 이 수동값이 하는 일("자동 학습 중에는 ..."에 이어지는 문장),
+    caution은 언제나 보이는 주의다."""
+    return _with({"label": label, "section": section, "unit": unit, "step": step, "min": minimum, "max": maximum,
+                  "description": description, "increase": increase, "decrease": decrease},
+                 control=control, tab=tab, learned_role=learned_role, caution=caution)
 
 
-def toggle(label: str, section: str, description: str, on: str, off: str, *, hidden: bool = False) -> Dict[str, Any]:
-    """켜고 끄는 항목. increase/decrease에 켜면·끄면의 설명을 둔다. hidden이면 파라미터 탭에 보이지 않는다
-    (실시간 학습 탭의 스위치처럼 다른 화면이 고친다)."""
-    meta = {"label": label, "section": section, "description": description, "increase": on, "decrease": off}
-    if hidden:
-        meta["hidden"] = True
-    return meta
+def toggle(label: str, section: str, description: str, on: str, off: str, *, tab: str = "",
+           learned_role: str = "") -> Dict[str, Any]:
+    """켜고 끄는 항목. increase/decrease에 켜면·끄면의 설명을 둔다. tab·learned_role은 number와 같다."""
+    return _with({"label": label, "section": section, "description": description, "increase": on, "decrease": off},
+                 tab=tab, learned_role=learned_role)
 
 
 PARAM_GROUPS: Dict[str, Dict[str, Any]] = {
     "steering": {
         "label": "조향", "file": "steering.json", "notify": "controlsd", "note": "",
-        "sections": ["기본 토크 제한", "토크 컨트롤러", "조향 반응", "차량 중심 보정", "운전자 개입", "차량 모델",
-                     "LKAS fault 보호", "고정 차량 설정", "실시간 학습"],
+        "sections": ["기본 토크 제한", "토크 컨트롤러", "차량 중심 보정", "운전자 개입", "LKAS fault 보호"],
     },
     "driving": {
         "label": "주행 제한", "file": "driving.json", "notify": "controlsd", "note": "",
@@ -55,6 +59,23 @@ PARAM_GROUPS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# 차량 특성 탭: steering.json 항목 중 차의 성질인 것(tab="vehicle"), 섹션 순서대로. 학습기 섹션의 값들은 학습기
+# 하나가 함께 내므로 스위치도 하나다. 켜면(자동 학습) 학습값을, 학습이 값을 내기 전과 끄면(수동) 수동값을 제어에
+# 쓴다(controlsd LateralController::live_params, plan_delay_s). 고정 제원은 학습하지 않는 차량 값이다.
+VEHICLE_TAB: Dict[str, Any] = {
+    "label": "차량 특성",
+    "note": "학습기는 늘 계산하고 기록합니다. 묶음마다 제어에 학습값을 쓸지(자동 학습) 수동값을 쓸지(수동) 고릅니다. "
+            "카드 맨 위의 큰 숫자가 지금 제어에 쓰는 값입니다.",
+    "sections": ["차량 모델", "토크 모델", "조향 지연", "학습 입력", "고정 제원"],
+    "learners": {
+        "차량 모델": {"learner": "paramsd", "switch": "use_live_vehicle_params"},
+        "토크 모델": {"learner": "torqued", "switch": "use_live_torque_params"},
+        "조향 지연": {"learner": "lagd", "switch": "use_live_delay"},
+    },
+}
+
+TORQUED_RESTART = "바꾸면 controlsd 다음 시작 때 torqued 학습이 이 값을 사전값으로 처음부터 다시 시작합니다."
+
 PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
     "steering": {
         "enabled": toggle(
@@ -69,11 +90,12 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "작은 핸들 입력도 더 빨리 운전자 개입으로 판단합니다.",
         ),
         "torque_lat_accel_factor": number(
-            "배율 latAccelFactor", "토크 컨트롤러", "m/s²", 0.01, 0.5, 5.0,
+            "배율 latAccelFactor", "토크 모델", "m/s²", 0.01, 0.5, 5.0,
             "정규화 토크 1.0이 내는 횡가속도입니다(openpilot latAccelFactor). 선행·비례·적분 토크가 모두 이 값으로 "
             "나뉩니다. torqued 학습값이나 fit_lateral_params.py fit 결과를 넣습니다.",
             "같은 목표에 토크가 작아져 추종이 약해지고 언더스티어가 늘어납니다.",
             "같은 목표에 토크가 커져 추종이 강해지고 포화 여유가 줄어듭니다.",
+            tab="vehicle", learned_role="학습의 사전값이자 허용 폭(±30%)의 기준으로만 씁니다.", caution=TORQUED_RESTART,
         ),
         "torque_kp": number(
             "비례 이득 Kp", "토크 컨트롤러", "gain", 0.05, 0, 10,
@@ -89,10 +111,11 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "누적 보정이 느려져 일정한 편향이 오래 남을 수 있습니다.",
         ),
         "torque_friction": number(
-            "조향 마찰 보상", "토크 컨트롤러", "정규화 토크", 0.005, 0, 0.3,
+            "조향 마찰 보상", "토크 모델", "정규화 토크", 0.005, 0, 0.3,
             "조향계 마찰을 넘기 위해 오차 방향으로 더하는 토크입니다(openpilot friction).",
             "작은 커브에도 핸들이 더 즉각 움직이지만 좌우 튐이 생길 수 있습니다.",
             "미세 조향이 부드러워지지만 dead zone이 커질 수 있습니다.",
+            tab="vehicle", learned_role="학습의 사전값이자 허용 폭(±50%)의 기준으로만 씁니다.", caution=TORQUED_RESTART,
         ),
         "torque_use_angle": toggle(
             "조향각 기반 곡률", "토크 컨트롤러", "실제 곡률 계산에 조향각 센서를 우선 사용합니다.",
@@ -100,28 +123,33 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "끄면 유효한 ESP yaw-rate와 속도별로 혼합합니다.",
         ),
         "torque_output_sign": number(
-            "토크 출력 방향", "고정 차량 설정", "부호", 2, -1, 1,
+            "토크 출력 방향", "고정 제원", "부호", 2, -1, 1,
             "차량에 보내는 조향 토크의 부호입니다. 차량마다 정해진 값이라 기본값에서 바꾸지 않습니다.",
             "+1 방향으로 토크를 냅니다. 기본값과 다르면 조향 방향이 반대가 됩니다.",
             "-1 방향으로 토크를 냅니다. 기본값과 다르면 조향 방향이 반대가 됩니다.",
+            tab="vehicle",
         ),
         "steer_ratio": number(
             "조향비", "차량 모델", "ratio", 0.1, 8, 25,
             "핸들 조향각과 전륜 조향각 사이의 차량 조향비입니다.",
             "같은 핸들 각도를 더 작은 전륜 조향으로 추정합니다.",
             "같은 핸들 각도를 더 큰 전륜 조향으로 추정합니다.",
+            tab="vehicle",
+            learned_role="학습의 출발점과 허용 범위(0.5~2배)로만 씁니다. 저장된 학습값이 있으면 거기서 이어 갑니다.",
         ),
         "tire_stiffness_factor": number(
             "타이어 횡강성", "차량 모델", "배", 0.05, 0.2, 2,
             "차량 모델의 기준 타이어 횡강성에 곱하는 보정값입니다.",
             "타이어가 횡력에 더 단단하게 반응한다고 계산합니다.",
             "타이어가 더 유연하게 반응한다고 계산합니다.",
+            tab="vehicle", learned_role="학습한 배율을 이 값에 곱해 씁니다.",
         ),
         "steer_actuator_delay": number(
-            "조향 반응 지연", "조향 반응", "초", 0.01, 0.01, 1,
+            "조향 반응 지연", "조향 지연", "초", 0.01, 0.01, 1,
             "현재 조향 명령이 차량에 반영되기까지의 예측 지연입니다.",
             "경로를 더 앞에서 읽어 커브 진입을 선행하지만 과하면 오버슈트할 수 있습니다.",
             "조향 선행량이 줄어 커브 반응이 늦어질 수 있습니다.",
+            tab="vehicle", learned_role="추정이 확정되기 전까지 이 값을 쓰고, lagd가 이 값에서 추정을 시작합니다.",
         ),
         "avoid_lkas_fault_enabled": toggle(
             "LKAS fault 회피", "LKAS fault 보호",
@@ -157,81 +185,88 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "request를 더 짧게 끊습니다.",
         ),
         "live_bank_compensation": toggle(
-            "실시간 편경사 보정", "차량 중심 보정", "ESP12 실측 횡가속으로 추정한 도로 편경사를 FF에서 보정합니다.",
+            "실시간 편경사 보정", "차량 모델", "ESP12 실측 횡가속으로 추정한 도로 편경사를 FF에서 보정합니다.",
             "켜면 커브별 편경사까지 실시간 보정합니다.",
             "끄면 상수 offset만 사용합니다.",
+            tab="vehicle", learned_role="쓰지 않습니다. 학습한 도로 롤로 보정합니다.",
         ),
         "use_live_vehicle_params": toggle(
-            "paramsd 학습값 사용", "실시간 학습",
+            "paramsd 학습값 사용", "차량 모델",
             "주행 중 학습한 조향비·타이어 강성·조향각 영점·도로 롤을 차량 모델과 feed-forward에 씁니다(openpilot "
             "paramsd). 끄면 계산·기록만 합니다.",
             "켜면 학습값을 쓰고 롤 보정이 실시간 편경사 보정을 대신합니다.",
-            "끄면 조향 탭의 수동 차량 값을 씁니다.",
-            hidden=True,
+            "끄면 수동값을 씁니다(학습은 계속 계산·기록합니다).",
+            tab="vehicle",
         ),
         "use_live_torque_params": toggle(
-            "torqued 학습값 사용", "실시간 학습",
+            "torqued 학습값 사용", "토크 모델",
             "주행 중 학습한 토크→횡가속 배율·편향·마찰을 토크 컨트롤러에 씁니다(openpilot torqued). 사전값 대비 배율 "
             "±30%, 마찰 ±50% 안에서 움직입니다.",
             "켜면 학습값을 씁니다.",
-            "끄면 조향 탭의 수동 토크 값을 씁니다.",
-            hidden=True,
+            "끄면 수동값을 씁니다(학습은 계속 계산·기록합니다).",
+            tab="vehicle",
         ),
         "use_live_delay": toggle(
-            "lagd 조향 지연 사용", "실시간 학습",
+            "lagd 조향 지연 사용", "조향 지연",
             "주행 중 추정한 조향 지연(목표 곡률 → 실제 요레이트, openpilot lagd)을 목표 곡률을 읽는 경로 지연과 토크 "
             "컨트롤러·torqued의 지연에 씁니다(openpilot과 같음). 추정이 확정(5블록)된 뒤에만 적용되고, 그 전에는 "
             "steer_actuator_delay를 씁니다.",
             "켜면 확정된 추정 지연을 씁니다(길수록 커브를 일찍 꺾습니다).",
             "끄면 steer_actuator_delay를 씁니다.",
-            hidden=True,
+            tab="vehicle",
         ),
         "use_locationd_learner_inputs": toggle(
-            "학습 입력을 locationd로", "실시간 학습",
+            "학습 입력을 locationd로", "학습 입력",
             "paramsd·torqued가 요레이트·도로 롤을 locationd(IMU·카메라 융합)에서 받습니다(openpilot과 같음). 끄면 "
             "ESP12 요레이트(자체 바이어스 추정)와 ESP12 횡가속으로 구한 롤을 씁니다. locationd가 없거나 끊기거나 그 "
             "틱의 자세가 무효면 ESP12로 대신합니다. torqued는 시작할 때의 출처로만 점을 모으고, 출처가 바뀐 캐시는 "
             "배율·마찰만 이어 쓰고 점·절편은 처음부터 다시 모읍니다(유효해지기까지 몇 시간).",
             "켜면 조향각 영점·롤은 locationd 기준으로 몇 분 안에, torqued는 다음 시작부터 다시 수렴합니다.",
             "끄면 ESP12 기준으로 학습합니다(torqued는 다음 시작부터).",
-            hidden=True,
+            tab="vehicle",
         ),
         "torque_lat_accel_offset": number(
-            "횡가속 편향 보정", "차량 중심 보정", "m/s²", 0.01, -1.0, 1.0,
+            "횡가속 편향 보정", "토크 모델", "m/s²", 0.01, -1.0, 1.0,
             "장착 롤 오차 등이 만드는 상수 횡가속 편향을 feed-forward에서 뺍니다. fit_lateral_params.py fit의 "
             "latAccelOffset을 그대로 넣습니다.",
             "차가 오른쪽으로 쏠릴 때 키우는 방향입니다.",
             "차가 왼쪽으로 쏠릴 때 줄이는 방향입니다.",
+            tab="vehicle", learned_role="쓰지 않습니다. 학습한 편향을 씁니다.",
         ),
         "angle_offset_deg": number(
-            "직진 조향각 오프셋", "차량 중심 보정", "°", 0.1, -10, 10,
+            "직진 조향각 오프셋", "차량 모델", "°", 0.1, -10, 10,
             "직진 상태의 조향각 센서 편차를 실제 곡률 계산 전에 뺍니다.",
             "현재 센서 각도를 더 작게 보정합니다.",
             "현재 센서 각도를 더 크게 보정합니다.",
+            tab="vehicle", learned_role="쓰지 않습니다. 학습한 영점을 씁니다.",
         ),
         "mass_kg": number(
-            "차량 질량", "차량 모델", "kg", 10, 1000, 2600,
+            "차량 질량", "고정 제원", "kg", 10, 1000, 2600,
             "차량 모델과 타이어 횡강성 계산에 사용하는 질량입니다.",
             "차량이 더 무겁다고 계산합니다.",
             "차량이 더 가볍다고 계산합니다.",
+            tab="vehicle",
         ),
         "wheelbase_m": number(
-            "축거", "차량 모델", "m", 0.01, 2, 3.5,
+            "축거", "고정 제원", "m", 0.01, 2, 3.5,
             "전륜과 후륜 사이 거리입니다.",
             "같은 곡률에 더 큰 조향각이 필요하다고 계산합니다.",
             "같은 곡률에 더 작은 조향각이 필요하다고 계산합니다.",
+            tab="vehicle",
         ),
         "center_to_front_ratio": number(
-            "전축 무게중심 비율", "차량 모델", "ratio", 0.01, 0.2, 0.7,
+            "전축 무게중심 비율", "고정 제원", "ratio", 0.01, 0.2, 0.7,
             "무게중심에서 전축까지 거리를 축거 비율로 나타냅니다.",
             "무게중심을 후방 쪽으로 계산합니다.",
             "무게중심을 전방 쪽으로 계산합니다.",
+            tab="vehicle",
         ),
         "steer_ratio_rear": number(
-            "후륜 조향비", "고정 차량 설정", "ratio", 0.01, -0.5, 0.5,
+            "후륜 조향비", "고정 제원", "ratio", 0.01, -0.5, 0.5,
             "후륜 조향 차량의 곡률 보정값입니다. 후륜 조향이 없는 차는 0입니다.",
             "후륜 조향의 양의 보정량이 커집니다.",
             "후륜 조향의 음의 보정량이 커집니다.",
+            tab="vehicle",
         ),
         "path_offset_m": number(
             "주행 경로 좌우 보정", "차량 중심 보정", "m", 0.01, -1, 1,

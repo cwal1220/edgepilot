@@ -1,4 +1,4 @@
-"""웹 콘솔 서버(FastAPI): 파라미터 편집, 런타임 상태, 실시간 학습·카메라 보정, Panda 펌웨어, BEV 스트림을 내고
+"""웹 콘솔 서버(FastAPI): 파라미터 편집, 런타임 상태, 학습 상태·카메라 보정, Panda 펌웨어, BEV 스트림을 내고
 페이지(static/)를 서빙한다. 매니저가 함께 띄운다.
 
 사용: python3 -m web_console [--host 주소] [--port 포트]   (기본 0.0.0.0:8080,
@@ -131,9 +131,7 @@ def create_app(store: ParamStore | None = None, processes: ProcessStatus | None 
 
     @application.get("/api/learners")
     def get_learners() -> Dict[str, Any]:
-        steering = store.read_group("steering")
-        return {**learners.status(steering), "calibration": calibration.status(),
-                "localization": localization.status(steering)}
+        return {**learners.status(), "calibration": calibration.status(), "localization": localization.status()}
 
     @application.get("/api/learners/trend")
     def get_learner_trend() -> Dict[str, Any]:

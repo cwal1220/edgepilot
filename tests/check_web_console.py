@@ -32,7 +32,6 @@ from scripts.web_console.learner_monitor import (
     LearnerMonitor,
     LearnerStateReader,
     LocalizationReader,
-    manual_lateral_values,
 )
 from scripts.web_console.panda_update import (
     PANDA_APP_MAX_BYTES,
@@ -42,7 +41,7 @@ from scripts.web_console.panda_update import (
     PandaUpdate,
     panda_image_info,
 )
-from scripts.web_console.param_metadata import PARAM_GROUPS, PARAM_METADATA
+from scripts.web_console.param_metadata import PARAM_GROUPS, PARAM_METADATA, VEHICLE_TAB
 from scripts.web_console.param_store import ParamStore, group_paths
 from scripts.web_console.process_status import (
     MANAGER_STATE_HEAD,
@@ -232,7 +231,7 @@ class ParamStoreTest(unittest.TestCase):
 
     def test_snapshot_has_what_the_page_reads(self):
         snapshot = self.store.snapshot()
-        self.assertEqual(set(snapshot), {"groups", "params", "defaults", "metadata", "paths"})
+        self.assertEqual(set(snapshot), {"groups", "vehicle_tab", "params", "defaults", "metadata", "paths"})
         self.assertEqual(list(snapshot["groups"]), list(PARAM_GROUPS), "tab order")
         for group, spec in snapshot["groups"].items():
             self.assertEqual(set(spec), {"label", "note", "sections", "notify"}, group)
@@ -241,31 +240,52 @@ class ParamStoreTest(unittest.TestCase):
 
 class ParamMetadataTest(unittest.TestCase):
     def test_repository_params_have_complete_ui_metadata(self):
+        """항목마다 설명이 다 있고, 섹션은 그 항목이 나오는 탭(파일 그룹, tab="vehicle"이면 차량 특성 탭)의 섹션이고,
+        빈 섹션이 없다."""
+        tabs = {}
         for group, spec in PARAM_GROUPS.items():
             params = json.loads((ROOT / "params" / spec["file"]).read_text(encoding="utf-8"))
             metadata = PARAM_METADATA[group]
             self.assertEqual(set(params), set(metadata), group)
+            tabs.setdefault(group, (spec["sections"], set()))
             for key, value in params.items():
                 meta = metadata[key]
                 for field in ("label", "section", "description", "increase", "decrease"):
                     self.assertTrue(meta.get(field), f"{group}.{key}.{field}")
-                self.assertIn(meta["section"], spec["sections"], f"{group}.{key}")
+                self.assertIn(meta.get("tab", group), {group, "vehicle"}, f"{group}.{key}")
+                if meta.get("tab") == "vehicle":
+                    self.assertEqual(group, "steering", f"{group}.{key}: the vehicle tab edits steering.json")
+                tab = meta.get("tab", group)
+                sections, used = tabs.setdefault(tab, (VEHICLE_TAB["sections"], set()))
+                self.assertIn(meta["section"], sections, f"{group}.{key}")
+                used.add(meta["section"])
                 if isinstance(value, (int, float)) and not isinstance(value, bool):
                     for field in ("step", "min", "max"):
                         self.assertIsInstance(meta.get(field), (int, float), f"{group}.{key}.{field}")
                     self.assertLessEqual(meta["min"], value, f"{group}.{key}")
                     self.assertLessEqual(value, meta["max"], f"{group}.{key}")
-            used = {meta["section"] for meta in metadata.values()}
-            self.assertEqual([name for name in spec["sections"] if name not in used], [], f"{group}: empty sections")
+        for tab, (sections, used) in tabs.items():
+            self.assertEqual([name for name in sections if name not in used], [], f"{tab}: empty sections")
 
-    def test_learner_switches_live_on_the_learner_tab(self):
-        """학습 스위치는 학습값을 보면서 켜도록 실시간 학습 탭에만 둔다(조향 탭에서 숨김)."""
-        hidden = {key for key, meta in PARAM_METADATA["steering"].items() if meta.get("hidden")}
-        self.assertEqual(hidden, {"use_live_vehicle_params", "use_live_torque_params", "use_live_delay",
-                                  "use_locationd_learner_inputs"})
-        page = (STATIC_DIR / "learner_view.js").read_text(encoding="utf-8")
-        for key in hidden:
-            self.assertIn(f'"{key}"', page)
+    def test_vehicle_tab_matches_the_page(self):
+        """차량 특성 탭: 학습기 섹션마다 스위치가 하나 있고, 나머지 항목은 학습값을 읽는 법(vehicle_view.js LIVE)과
+        자동 학습 중의 쓰임(learned_role)이 있다. 학습기 이름은 페이지의 LEARNERS와 같다."""
+        steering = PARAM_METADATA["steering"]
+        page = (STATIC_DIR / "vehicle_view.js").read_text(encoding="utf-8")
+        live = set(re.findall(r"^  (\w+): \{$", re.search(r"const LIVE = \{\n(.*?)\n\};", page, re.S).group(1), re.M))
+        learners = set(re.findall(r"^  (\w+): \{$", re.search(r"const LEARNERS = \{\n(.*?)\n\};", page, re.S).group(1), re.M))
+        learned = set()
+        for name, spec in VEHICLE_TAB["learners"].items():
+            self.assertIn(name, VEHICLE_TAB["sections"])
+            switch = steering[spec["switch"]]
+            self.assertEqual((switch.get("tab"), switch["section"]), ("vehicle", name), spec["switch"])
+            keys = {key for key, meta in steering.items() if meta.get("tab") == "vehicle" and meta["section"] == name}
+            for key in keys - {spec["switch"]}:
+                self.assertTrue(steering[key].get("learned_role"), key)
+                learned.add(key)
+        self.assertEqual(live, learned)
+        self.assertEqual(learners, {spec["learner"] for spec in VEHICLE_TAB["learners"].values()})
+        self.assertFalse([key for key, meta in steering.items() if meta.get("learned_role") and key not in learned])
 
     def test_ui_ranges_match_runtime_clamps(self):
         """The loaders clamp to their Json*Field tables; the editor must show
@@ -353,28 +373,18 @@ class LearnerStateTest(unittest.TestCase):
 
     def test_monitor_keeps_one_trend_row_per_publish(self):
         monitor = LearnerMonitor(LearnerStateReader(str(self.path)))
-        self.assertFalse(monitor.status({})["available"])
+        self.assertFalse(monitor.status()["available"])
         self.publish(2, timestamp_ns=1_000_000_000, lat_accel_factor=4.44)
         monitor.sample()
         monitor.sample()
         self.publish(4, timestamp_ns=2_000_000_000, lat_accel_factor=4.40)
-        steering = json.loads((ROOT / "params" / "steering.json").read_text(encoding="utf-8"))
-        status = monitor.status(steering)
+        status = monitor.status()
         self.assertTrue(status["available"])
-        self.assertEqual(status["manual"]["steer_ratio"], steering["steer_ratio"])
         self.assertEqual([row[0] for row in monitor.trend()["rows"]], [1.0, 2.0])
         self.assertAlmostEqual(status["trend_row"][7], 4.40, places=5)
         self.publish(6, timestamp_ns=500_000_000)  # 시각이 거꾸로: 다른 부팅
         monitor.sample()
         self.assertEqual([row[0] for row in monitor.trend()["rows"]], [0.5])
-
-    def test_manual_values_are_what_the_page_compares(self):
-        steering = {"steer_ratio": 14.9, "tire_stiffness_factor": 0.83, "angle_offset_deg": -1.5,
-                    "torque_lat_accel_offset": -0.06, "live_bank_compensation": True, "torque_kp": 0.8}
-        self.assertEqual(manual_lateral_values(steering), {key: value for key, value in steering.items()
-                                                           if key != "torque_kp"})
-        page = (STATIC_DIR / "learner_view.js").read_text(encoding="utf-8")
-        self.assertEqual(set(re.findall(r"\bm\.(\w+)", page)), set(manual_lateral_values({})))
 
 
 class LocalizationStateTest(unittest.TestCase):
@@ -391,13 +401,12 @@ class LocalizationStateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "edgepilot_localization"
             reader = LocalizationReader(str(path))
-            self.assertFalse(reader.status({})["available"])
+            self.assertFalse(reader.status()["available"])
             publish(path, pack_fields(LOCALIZATION_STATE, LOCALIZATION_FIELDS, {
                 "flags": 0b100001, "lag_status": 1, "input_flags": 0b1010, "lateral_delay_s": 0.42,
                 "lag_valid_blocks": 6, "angular_velocity_calib": [0.0, 0.0, 0.1]}))
-            result = reader.status({"steer_actuator_delay": 0.34})
+            result = reader.status()
             self.assertTrue(result["available"])
-            self.assertEqual(result["manual_delay_s"], 0.34)
             state = result["state"]
             self.assertAlmostEqual(state["lateral_delay_s"], 0.42, places=5)
             self.assertEqual(state["lag_valid_blocks"], 6)

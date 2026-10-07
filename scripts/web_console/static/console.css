@@ -298,7 +298,56 @@ main {
   font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums;
 }
 
-/* ------------------------------------------------------------ 실시간 학습 추이, BEV */
+/* ------------------------------------------------------------ 차량 특성: 학습기 묶음과 값 카드 */
+.learner-group .group-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; }
+.group-title { flex: 1 1 320px; min-width: 0; }
+.group-title .section-title { margin-bottom: 4px; }
+.group-description { margin: 0; color: var(--faint); font-size: 12px; line-height: 1.5; }
+.group-status { margin: 10px 0; }
+.group-summary { margin: 8px 0 0; color: var(--faint); font-size: 12px; line-height: 1.5; }
+.segmented { display: inline-flex; flex: 0 0 auto; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-sunken); }
+.segmented button {
+  height: 34px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.segmented button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); box-shadow: inset 0 0 0 1px #2b4d73; }
+.segmented button:hover:not([aria-pressed="true"]):not(:disabled) { color: var(--text); }
+.card.quantity.busy { opacity: 0.66; }
+.card.quantity.saved { border-color: #397659; }
+.card.quantity .card-head { justify-content: space-between; margin-bottom: 4px; }
+.quantity-now-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.quantity-now { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.quantity-now small { color: var(--faint); font-size: 13px; font-weight: 600; }
+.quantity-caption { color: var(--faint); font-size: 11px; }
+.quantity-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: var(--surface-sunken);
+}
+.quantity-row.in-use { box-shadow: inset 3px 0 0 var(--accent); }
+.quantity-label { color: var(--muted); font-size: 12px; font-weight: 700; }
+.quantity-row.in-use .quantity-label { color: var(--accent); }
+.quantity-row.in-use .quantity-label::after { content: " · 사용 중"; font-weight: 600; }
+.quantity-value { color: #fff; font-weight: 750; font-variant-numeric: tabular-nums; }
+.quantity-row:not(.in-use) .quantity-value { color: var(--text-soft); }
+.quantity-value.bad, .quantity-row:not(.in-use) .quantity-value.bad { color: var(--bad); }
+.quantity-detail { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.quantity-detail.warn { color: var(--warn); }
+.quantity-row.manual > .stepper, .quantity-row.manual > .switch-control { flex: 1 1 100%; margin-top: 4px; }
+.quantity-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-left: auto; color: var(--faint); font-size: 11px; }
+.quantity-foot .param-status { margin-left: 0; }
+.card.quantity .card-note.prior { margin-top: 8px; }
+.adopt-button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin-top: 10px; padding: 8px 12px;
+  border: 1px solid var(--btn-border); border-radius: var(--radius); background: var(--btn-bg);
+  color: #e5e9ec; text-align: left; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.adopt-button:hover:not(:disabled) { background: var(--btn-bg-hover); }
+.adopt-button small { color: #8f99a1; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.card.quantity .param-effects { margin-top: 10px; }
+.card.quantity .param-effects .param-description { margin: 0 0 8px; cursor: default; }
+.group-note a { color: var(--accent); }
+
+/* ------------------------------------------------------------ 추이, BEV */
 .trend-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 13px; }
 .trend-now { color: #fff; font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; }
 .trend svg { display: block; width: 100%; height: 90px; border-radius: 5px; background: var(--surface-sunken); }

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List
 
 from .backlight import DisplayBacklight
-from .param_metadata import PARAM_GROUPS, PARAM_METADATA
+from .param_metadata import PARAM_GROUPS, PARAM_METADATA, VEHICLE_TAB
 from .process_status import signal_process
 
 # 백라이트 하드웨어에 적용하는 기기 설정 항목. 나머지(알림음 등)는 overlayd·modeld가 파일에서 읽는다.
@@ -113,12 +113,13 @@ class ParamStore:
 
     def snapshot(self) -> Dict[str, Any]:
         """페이지가 파라미터 탭을 그리는 데 필요한 것 전부: 그룹 구성(이름, 안내, 섹션 순서, 알릴 프로세스),
-        현재값, 기본값, 항목 설명, 파일 경로."""
+        차량 특성 탭 구성, 현재값, 기본값, 항목 설명, 파일 경로."""
         with self.lock:
             documents = {group: self.read_group(group) for group in self.paths}
         return {
             "groups": {group: {key: spec[key] for key in ("label", "note", "sections", "notify")}
                        for group, spec in PARAM_GROUPS.items() if group in self.paths},
+            "vehicle_tab": VEHICLE_TAB,
             "params": documents,
             "defaults": self.defaults(),
             "metadata": PARAM_METADATA,

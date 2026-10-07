@@ -1,21 +1,18 @@
-// 웹 콘솔 페이지: 머리 줄(런타임 상태, 다시 불러오기)과 탭(파라미터 그룹들, 실시간 학습, BEV). 주소의 #탭 이름이
+// 웹 콘솔 페이지: 머리 줄(런타임 상태, 다시 불러오기)과 탭(파라미터 그룹들과 차량 특성, BEV). 주소의 #탭 이름이
 // 지금 탭이라 새로고침해도 그 탭에 머문다. 탭 화면은 처음 열 때 만들고, 보이는 탭만(페이지가 가려지지 않은
 // 동안만) 폴링·스트림을 돌린다.
 import {createBevView} from "./bev_view.js";
-import {createLearnerView} from "./learner_view.js";
 import {createPandaCard} from "./panda_card.js";
 import {loadParams, params} from "./param_state.js";
 import {createParamView} from "./param_view.js";
 import {api, el, poller, toast} from "./ui.js";
+import {createVehicleView} from "./vehicle_view.js";
 
 const STATUS_INTERVAL_MS = 2000;
-// 파라미터 탭 뒤의 탭들. keep: 다시 불러와도 새로 만들지 않는다(파라미터를 읽지 않는 탭).
-const EXTRA_TABS = [
-  {id: "learners", label: "실시간 학습", create: createLearnerView},
-  {id: "bev", label: "BEV", create: createBevView, keep: true},
-];
 // 파라미터 탭 아래에 붙는 카드
 const PARAM_EXTRAS = {display: () => [createPandaCard()]};
+// 예전 주소(#learners: 실시간 학습 탭)
+const ALIASES = {learners: "vehicle"};
 
 const main = document.getElementById("main");
 const nav = document.getElementById("tabs");
@@ -23,11 +20,14 @@ let tabs = [];
 const views = new Map();
 let current = null;
 
+/* 탭 순서: 조향, 차량 특성(조향 값 중 차의 성질), 나머지 파라미터 그룹, BEV. keep: 다시 불러와도 새로 만들지
+ * 않는다(파라미터를 읽지 않는 탭). */
 function tabSpecs() {
   const groups = Object.entries(params().groups).map(([id, group]) => ({
     id, label: group.label, create: () => createParamView(id, {extras: (PARAM_EXTRAS[id] || (() => []))()}),
   }));
-  return [...groups, ...EXTRA_TABS];
+  const vehicle = {id: "vehicle", label: params().vehicle_tab.label, create: createVehicleView};
+  return [groups[0], vehicle, ...groups.slice(1), {id: "bev", label: "BEV", create: createBevView, keep: true}];
 }
 
 function view(tab) {
@@ -54,7 +54,8 @@ function show(id) {
 }
 
 function route() {
-  show(decodeURIComponent(window.location.hash.slice(1)));
+  const id = decodeURIComponent(window.location.hash.slice(1));
+  show(ALIASES[id] || id);
 }
 
 /* 파라미터를 (다시) 읽고 탭을 만든다. 다시 읽을 때는 파라미터를 쓰는 화면을 버리고 새로 만든다. */

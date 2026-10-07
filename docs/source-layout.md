@@ -478,8 +478,10 @@ only in the board build, against `deps/ax630` from
 - `scripts/web_console/static/`
   - the page, plain ES modules with no build step: `index.html`, `console.css`,
     `console.js` (header, tabs, routing), `ui.js` (DOM helpers, cards, toasts,
-    API calls, polling), `param_state.js` and `param_view.js` (the parameter
-    tabs), `learner_view.js`, `panda_card.js`, and the BEV tab: `bev_view.js`,
+    API calls, polling), `param_state.js`, `param_editor.js` (the controls,
+    saving and the item card) and `param_view.js` (the parameter tabs),
+    `vehicle_view.js` (차량 특성: learned and manual values side by side),
+    `panda_card.js`, and the BEV tab: `bev_view.js`,
     `bev.js` (three.js view, ported from sv_recorder_bev), `bev_ego.js` (the
     ego car; today a black 2017 K7 made in code), `bev_car.js` (the lead's car
     model), `bev_data.js` (reads the ModelState and ControlState bytes the
