@@ -228,7 +228,7 @@ whether the learned values are in use), the learned value, the manual value
 with what it does while learning is on, and a button that copies the learned
 value into the manual one. Below are the camera calibration, the learners' last
 ten minutes, the learner input source and the fixed specs (mass, wheelbase,
-centre of gravity, rear steer ratio, torque sign). 조향 keeps the controller
+centre of gravity, rear steer ratio). 조향 keeps the controller
 tuning, and searching it for a moved value links to 차량 특성.
 
 > [!WARNING]

@@ -116,7 +116,6 @@ private:
   VehicleParamsLearner vehicle_;
   TorqueEstimator torque_;
   int steer_max_ = 1;
-  int output_sign_ = -1;  // torque_output_sign: 보낸 토크 = 부호 × 우측 양수 제어 출력
   LiveLateralParams live_{};
   bool vehicle_published_ = false;
   bool torque_published_ = false;

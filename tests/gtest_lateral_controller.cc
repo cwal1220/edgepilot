@@ -425,7 +425,7 @@ TEST(LateralController, SteerSaturatedWarnsWhenTurnExceedsLimit) {
     target.curvatures[i] = 0.02f;
     target.psis[i] = 0.02f * 17.0f * model_t_idx(i);
   }
-  // 실제 곡률은 상류처럼 조향각(차량 모델)에서 나온다(torque_use_angle).
+  // 실제 곡률은 상류처럼 조향각(차량 모델)에서 나온다.
   auto run = [&](float steering_angle_deg) {
     LateralController controller(config);
     LateralControlResult r;

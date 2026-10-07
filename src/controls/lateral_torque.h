@@ -5,6 +5,11 @@
 
 #include "controls/control_params.h"
 
+/* 보내는 조향 토크의 부호. 이 코드의 횡제어는 오른쪽이 양수이고 MDPS 토크(LKAS11 요청, MDPS12 운전자
+ * 토크)는 왼쪽이 양수다(현대·기아 공통, openpilot과 같다). 토크 제한과 운전자 토크 비교는 MDPS 쪽 부호로
+ * 한다. */
+constexpr int kTorqueOutputSign = -1;
+
 /* 학습값. 상류 controlsd가 vehicleParameters·lateralTorqueParameters를 쓰는 자리다.
  * 끈 쪽은 SteeringParams를 그대로 쓴다. */
 struct LiveLateralParams {
@@ -60,8 +65,7 @@ public:
   float error() const { return error_; }
   float feedforward() const { return feedforward_; }
   float actual_curvature() const { return actual_curvature_; }
-  // 조향각 차량 모델 기반 곡률과 ESP yaw rate 기반 곡률. 주행 로그에서 두
-  // 값의 부호/크기 일치를 확인해 torque_use_angle 설정을 검증하는 용도.
+  // 조향각 차량 모델 곡률(제어가 쓰는 실제 곡률)과 ESP12 요레이트 곡률(주행 로그용).
   float actual_curvature_vm() const { return actual_curvature_vm_; }
   float actual_curvature_yaw() const { return actual_curvature_yaw_; }
 

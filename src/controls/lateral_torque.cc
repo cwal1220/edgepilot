@@ -151,8 +151,7 @@ int TorqueController::update(bool active,
   const float pid_output =
       pid_update(error, feedforward, freeze_integrator, params, g, speed_mps);
 
-  const int sign = params.torque_output_sign >= 0 ? 1 : -1;
-  normalized_output_ = clamp_float(static_cast<float>(sign) * pid_output, -1.0f, 1.0f);
+  normalized_output_ = clamp_float(static_cast<float>(kTorqueOutputSign) * pid_output, -1.0f, 1.0f);
   error_ = error;
   feedforward_ = feedforward;
   actual_curvature_ = actual_curvature;
@@ -182,7 +181,8 @@ float TorqueController::curvature_at_angle(float speed_mps,
   return -curvature;
 }
 
-// 현재 조향각/속도에서 차량 모델 기반 실제 curvature를 추정한다.
+/* 현재 조향각·속도에서 차량 모델로 실제 곡률을 낸다(상류 useSteeringAngle, 현대·기아와 같음). ESP12 요레이트
+ * 곡률은 주행 로그(curveYaw, fit_lateral_params.py)에 남기려고 함께 계산한다. */
 float TorqueController::estimate_actual_curvature(float speed_mps,
                                                            float steering_angle_deg,
                                                            const SteeringParams &params,
@@ -202,8 +202,7 @@ float TorqueController::estimate_actual_curvature(float speed_mps,
     actual_curvature_yaw = -yaw_rate_rad_s / std::max(speed_mps, 1e-3f);
   }
   actual_curvature_yaw_ = actual_curvature_yaw;
-  if (params.torque_use_angle) return actual_curvature_vm;
-  return interp(speed_mps, {2.0f, 5.0f}, {actual_curvature_vm, actual_curvature_yaw});
+  return actual_curvature_vm;
 }
 
 TorqueController::Gains TorqueController::gains(const SteeringParams &params,

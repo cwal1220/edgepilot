@@ -18,7 +18,6 @@ TEST(LateralTorque, DelayCompensatedError) {
   SteeringParams params;
   params.enabled = true;
   params.steer_actuator_delay = 0.30f;
-  params.torque_use_angle = true;
   // 검증 대상은 요청 버퍼/지연 보상이다. 차량별 센서 트림은 배제한다.
   params.angle_offset_deg = 0.0f;
   const float v = 20.0f;
@@ -46,7 +45,6 @@ TEST(LateralTorque, ReengageHasNoStaleBufferSpike) {
   SteeringParams params;
   params.enabled = true;
   params.steer_actuator_delay = 0.30f;
-  params.torque_use_angle = true;
   // 검증 대상은 요청 버퍼/지연 보상이다. 차량별 센서 트림은 배제한다.
   params.angle_offset_deg = 0.0f;
   const float v = 20.0f;
@@ -68,7 +66,6 @@ TEST(LateralTorque, ReengageHasNoStaleBufferSpike) {
 TEST(LateralTorque, TorqueSetpointFollowsLateralDelay) {
   SteeringParams params;
   params.enabled = true;
-  params.torque_use_angle = true;
   params.steer_actuator_delay = 0.34f;
   params.angle_offset_deg = 0.0f;  // 조향각 0이면 측정 곡률 0
   for (const float delay : {0.34f, 0.5f}) {
@@ -88,7 +85,6 @@ TEST(LateralTorque, TorqueSetpointFollowsLateralDelay) {
 TEST(LateralTorque, KpSpeedSchedule) {
   SteeringParams base;
   base.enabled = true;
-  base.torque_use_angle = true;
   base.angle_offset_deg = 0.0f;
   base.torque_friction = 0.0f;   // P항만 남긴다
   base.torque_lat_accel_offset = 0.0f;  // 오차가 순수 횡가속도인지 본다
@@ -141,7 +137,6 @@ TEST(LateralTorque, LiveBankCompensation) {
   TorqueController with_bank, without_bank;
   SteeringParams params;
   params.enabled = true;
-  params.torque_use_angle = true;
   params.live_bank_compensation = true;
   SteeringParams off = params;
   off.live_bank_compensation = false;
@@ -162,7 +157,6 @@ TEST(LateralTorque, LatAccelOffsetShiftsFeedforward) {
   TorqueController a, b;
   SteeringParams params;
   params.enabled = true;
-  params.torque_use_angle = true;
   params.torque_lat_accel_offset = 0.0f;
   SteeringParams offset_params = params;
   offset_params.torque_lat_accel_offset = 0.25f;
@@ -208,7 +202,6 @@ double upstream_measured_curvature(const SteeringParams &p, const LiveLateralPar
 TEST(LateralTorque, LiveVehicleParamsFollowVehicleModel) {
   SteeringParams params;
   params.enabled = true;
-  params.torque_use_angle = true;
   LiveLateralParams live = odd_live_params();
   live.use_torque = false;
   for (float u : {3.0f, 12.0f, 27.0f}) {
@@ -239,7 +232,6 @@ TEST(LateralTorque, LiveVehicleParamsFollowVehicleModel) {
 TEST(LateralTorque, LiveTorqueParamsMatchUpstreamStructure) {
   SteeringParams params;
   params.enabled = true;
-  params.torque_use_angle = true;
   params.torque_friction = 0.0f;
   params.torque_lat_accel_offset = 0.0f;  // 사전값 경로도 절편 없이 비교한다
   params.live_bank_compensation = false;
@@ -271,8 +263,7 @@ TEST(LateralTorque, LiveTorqueParamsMatchUpstreamStructure) {
     ASSERT_LT(std::fabs(low[i]), 0.9f);
     const float ref = base[i] * prior;
     worst_scale = std::max({worst_scale, std::fabs(low[i] * 3.0f - ref), std::fabs(high[i] * 5.5f - ref)});
-    const float sign = params.torque_output_sign >= 0 ? 1.0f : -1.0f;
-    worst_offset = std::max(worst_offset, std::fabs((offset[i] - low[i]) * 3.0f + sign * 0.1f));
+    worst_offset = std::max(worst_offset, std::fabs((offset[i] - low[i]) * 3.0f + kTorqueOutputSign * 0.1f));
     // 마찰은 |오차| < 0.2에서 선형이라 차이가 토크 공간 0.05 이하, 부호는 오차를 따른다
     worst_friction = std::max(worst_friction, std::fabs(friction[i] - low[i]) - 0.05f);
   }

@@ -238,8 +238,6 @@ int main(int argc, char **argv) {
   constexpr uint64_t kControllerNowNs = 1'000'000'000'000ULL;  // plan 나이를 재는 컨트롤러 시계(고정)
   controller.set_clock([] { return kControllerNowNs; });
   TorqueController inverse_model;
-  SteeringParams angle_params = steering;
-  angle_params.torque_use_angle = true;
 
   const char *out_path = opt.positional[0];
   const bool want_csv = std::strcmp(out_path, "-") != 0;
@@ -330,8 +328,8 @@ int main(int argc, char **argv) {
         controller.update(path, t, vehicle, sim_t, frame++, true, true);
     active_prev = r.active;
 
-    // 토크 -> 요청 횡가속도. 부호는 torque_output_sign(-1)의 역이다.
-    const float a_cmd = -static_cast<float>(r.apply_torque) /
+    // 토크 -> 요청 횡가속도. 부호는 kTorqueOutputSign의 역이다(±1이라 같은 값을 곱한다).
+    const float a_cmd = static_cast<float>(kTorqueOutputSign * r.apply_torque) /
         ((1.0f / steering.torque_lat_accel_factor) * static_cast<float>(steering.steer_max));
     const float a_act = plant.step(a_cmd, v_mps);
     k_sim = a_act / (v_clamped * v_clamped);
@@ -340,10 +338,10 @@ int main(int argc, char **argv) {
      * 써서, 컨트롤러가 재는 곡률이 시뮬 곡률과 같다. */
     const LiveLateralParams live_vm =
         steering.use_live_vehicle_params ? live_now : LiveLateralParams{};
-    const float offset_deg = live_vm.use_vehicle ? live_vm.angle_offset_deg : angle_params.angle_offset_deg;
-    const float k0 = inverse_model.estimate_actual_curvature(v_mps, offset_deg, angle_params, 0.0f, false, live_vm);
+    const float offset_deg = live_vm.use_vehicle ? live_vm.angle_offset_deg : steering.angle_offset_deg;
+    const float k0 = inverse_model.estimate_actual_curvature(v_mps, offset_deg, steering, 0.0f, false, live_vm);
     const float per_deg =
-        inverse_model.estimate_actual_curvature(v_mps, offset_deg + 1.0f, angle_params, 0.0f, false, live_vm) - k0;
+        inverse_model.estimate_actual_curvature(v_mps, offset_deg + 1.0f, steering, 0.0f, false, live_vm) - k0;
     if (std::fabs(per_deg) > 1e-9f)
       angle_sim = (k_sim - k0) / per_deg + offset_deg;
 

@@ -112,7 +112,7 @@ LateralControlResult LateralController::update(const LateralPath &path,
   const float speed_mps = result.control_speed_kph / 3.6f;
   const LiveLateralParams live = live_params();
   const float plan_age = plan_age_s(target);
-  result.active_block = active_block_reason(gated_path, target, vehicle_state, now_s,
+  result.active_block = active_block_reason(gated_path, target, vehicle_state,
                                             result.seeds_ready, result.vehicle_fresh,
                                             panda_ready, panda_controls_allowed,
                                             result.control_speed_kph, plan_age);
@@ -506,7 +506,6 @@ BlockReason LateralController::active_block_reason(
     const LateralPath &path,
     const LateralTarget &target,
     const VehicleCanState &vehicle_state,
-    double now_s,
     bool seeds_ready,
     bool vehicle_fresh,
     bool panda_ready,
@@ -535,14 +534,6 @@ BlockReason LateralController::active_block_reason(
    * 안전벨트/기어 같은 하드 결함이 가려진 채 engage 톤이 울린 뒤 해제된다. */
   if (!panda_ready) return BlockReason::PandaNotReady;
   if (!panda_controls_allowed) return BlockReason::PandaControlsOff;
-  if (!config_.steering_params.torque_use_angle) {
-    if (!signal_time_fresh(vehicle_state.esp12_time_s, now_s,
-                      static_cast<double>(config_.driving_params.vehicle_state_timeout_ms) /
-                          1000.0)) {
-      return BlockReason::EspStale;
-    }
-    if (!vehicle_state.yaw_rate_valid) return BlockReason::YawRateInvalid;
-  }
   if (!path.usable_for_steering) {
     /* 정지에서는 plan이 원래 짧아 path 무효가 정상이다. 오류가 아니라
      * 대기로 보고한다. 이 속도 밑은 min_steer_speed로 토크도 0이다. */

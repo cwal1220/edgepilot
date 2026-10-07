@@ -71,7 +71,7 @@ struct LateralControlResult {
   float control_speed_kph = 0.0f;
   float desired_curvature = 0.0f;
   float actual_curvature = 0.0f;
-  // 조향각 모델/ESP yaw 기반 실측 곡률. torque_use_angle 전환 검증용 로그 값.
+  // 조향각 차량 모델 곡률과 ESP12 요레이트 곡률(주행 로그의 curveVm·curveYaw).
   float actual_curvature_vm = 0.0f;
   float actual_curvature_yaw = 0.0f;
   float curvature_error = 0.0f;
@@ -157,7 +157,6 @@ private:
   BlockReason active_block_reason(const LateralPath &path,
                                   const LateralTarget &target,
                                   const VehicleCanState &vehicle_state,
-                                  double now_s,
                                   bool seeds_ready,
                                   bool vehicle_fresh,
                                   bool panda_ready,

@@ -8,6 +8,7 @@
 #include "recorded_vehicle_can.h"
 #include "recording/recording_format.h"
 #include "controls/control_params.h"
+#include "controls/lateral_torque.h"
 #include "recording/event_log_reader.h"
 #include "car/vehicle_can.h"
 
@@ -62,10 +63,8 @@ int main(int argc, char **argv) {
                "la_p03,la_p06,la_p10,la_p15,"
                "roll_p03,roll_p06,roll_p10,roll_p15,model_age\n");
 
-  const SteeringParams params;  // steer_max 384 / 부호 -1 (실차 설정과 동일)
-  const float torque_scale =
-      static_cast<float>(params.torque_output_sign >= 0 ? 1 : -1) /
-      static_cast<float>(params.steer_max);
+  const SteeringParams params;  // steer_max 384 (실차 설정과 동일)
+  const float torque_scale = static_cast<float>(kTorqueOutputSign) / static_cast<float>(params.steer_max);
 
   VehicleCanState vehicle{};
   ModelState model{};

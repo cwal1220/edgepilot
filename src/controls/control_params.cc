@@ -10,7 +10,6 @@ namespace {
 
 constexpr JsonBoolField<SteeringParams> kSteeringBools[] = {
     {"enabled", &SteeringParams::enabled},
-    {"torque_use_angle", &SteeringParams::torque_use_angle},
     {"avoid_lkas_fault_enabled", &SteeringParams::avoid_lkas_fault_enabled},
     {"live_bank_compensation", &SteeringParams::live_bank_compensation},
     {"use_live_vehicle_params", &SteeringParams::use_live_vehicle_params},
@@ -20,7 +19,6 @@ constexpr JsonBoolField<SteeringParams> kSteeringBools[] = {
 };
 constexpr JsonIntField<SteeringParams> kSteeringInts[] = {
     {"steering_pressed_threshold", 0, 500, &SteeringParams::steering_pressed_threshold},
-    {"torque_output_sign", -1, 1, &SteeringParams::torque_output_sign},
     {"avoid_lkas_fault_max_frames", 0, 300, &SteeringParams::avoid_lkas_fault_max_frames},
     {"avoid_lkas_fault_cut_frames", 1, 100, &SteeringParams::avoid_lkas_fault_cut_frames},
 };
@@ -76,8 +74,6 @@ bool load_steering_params_json(const std::string &path,
     parse_json_fields(text, kSteeringBools, params);
     parse_json_fields(text, kSteeringInts, params);
     parse_json_fields(text, kSteeringFloats, params);
-    // 0은 허용하지 않는다: 부호는 +1 아니면 -1.
-    params->torque_output_sign = params->torque_output_sign >= 0 ? 1 : -1;
   }, error);
 }
 

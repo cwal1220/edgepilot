@@ -71,8 +71,7 @@ LateralLearners::LateralLearners(const SteeringParams &params, const std::string
                options),
       torque_(torque_tuning(params), params.steer_actuator_delay, seed, torque_cache,
               params.use_locationd_learner_inputs),
-      steer_max_(std::max(1, params.steer_max)),
-      output_sign_(params.torque_output_sign >= 0 ? 1 : -1) {}
+      steer_max_(std::max(1, params.steer_max)) {}
 
 void LateralLearners::set_localizer(bool use, const LocalizerSample &sample) {
   use_localizer_ = use;
@@ -138,7 +137,7 @@ void LateralLearners::update(const VehicleCanState &vehicle, double now_s, doubl
   tin.t_s = now_s;
   tin.inputs_fresh = in.inputs_fresh;
   tin.lat_active = lat_active;
-  tin.steer_torque = static_cast<double>(output_sign_ * apply_torque) / steer_max_;
+  tin.steer_torque = static_cast<double>(kTorqueOutputSign * apply_torque) / steer_max_;
   tin.speed_mps = in.speed_mps;
   tin.steer_override = steering_pressed;
 

@@ -41,6 +41,7 @@ STEER_BUCKET_BOUNDS = [(-0.5, -0.3), (-0.3, -0.2), (-0.2, -0.1), (-0.1, 0.0),
                        (0.0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.5)]
 MIN_BUCKET_POINTS = [10, 30, 50, 50, 50, 50, 30, 10]  # qlog 스케일(/10)
 STEER_MAX = 384.0
+TORQUE_OUTPUT_SIGN = -1       # controlsd kTorqueOutputSign: 보낸 토크(좌측 양수) = 부호 × 제어 출력(우측 양수)
 
 HZ_RE = re.compile(r"controlsd: hz=")
 
@@ -50,7 +51,7 @@ def _field(line, key, cast=float):
     return cast(m.group(1)) if m else None
 
 
-def parse_log_samples(paths, min_speed_kph, driver_max, sign, steer_max):
+def parse_log_samples(paths, min_speed_kph, driver_max, steer_max):
     """hz= 라인에서 (정규화 토크, 실측 횡가속) 표본을 뽑는다."""
     samples = []
     cluster_fallback = [False]
@@ -94,9 +95,8 @@ def parse_log_samples(paths, min_speed_kph, driver_max, sign, steer_max):
                     if m is None or curve_yaw is None:
                         skipped["no_yaw"] += 1
                         continue
-                    # 랙에 실제로 걸린 값은 적용 토크다. 부호는
-                    # torque_output_sign을 반영해 곡률 관례로 되돌린다.
-                    torque_norm = sign * int(m.group(2)) / steer_max
+                    # 랙에 실제로 걸린 값은 적용 토크다. 곡률 관례(우측 양수)로 되돌린다.
+                    torque_norm = TORQUE_OUTPUT_SIGN * int(m.group(2)) / steer_max
                     if abs(torque_norm) < STEER_MIN_THRESHOLD:
                         skipped["small"] += 1
                         continue
@@ -163,8 +163,7 @@ def bucket_and_fit(samples):
 
 def cmd_fit(args):
     samples, skipped = parse_log_samples(args.logs, args.min_speed,
-                                         args.driver_max, args.sign,
-                                         args.steer_max)
+                                         args.driver_max, args.steer_max)
     print(f"표본 {len(samples)}개  (제외: " +
           " ".join(f"{k}={v}" for k, v in skipped.items() if v) + ")")
     if len(samples) < 100:
@@ -318,10 +317,8 @@ def main():
     f.add_argument("--min-speed", type=float, default=MIN_SPEED_KPH,
                    help="km/h, 기본 54 (openpilot MIN_VEL)")
     f.add_argument("--driver-max", type=int, default=50)
-    f.add_argument("--sign", type=int, default=-1, choices=(-1, 1),
-                   help="steering.json torque_output_sign")
     f.add_argument("--steer-max", type=float, default=STEER_MAX,
-                   help="steering.json steer_max")
+                   help="controlsd steer_max")
     f.set_defaults(func=cmd_fit)
     l = sub.add_parser("lag", help="actuator delay 추정 (v3 녹화 events)")
     l.add_argument("events", nargs="+", help="events 디렉토리 또는 .bin 파일")

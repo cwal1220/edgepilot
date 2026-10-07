@@ -32,8 +32,6 @@ struct SteeringParams {
   float torque_kp = 0.8f;
   float torque_ki = 0.15f;
   float torque_friction = 0.083f;  // 토크 공간, torqued 학습값(2026-09-27)
-  bool torque_use_angle = true;
-  int torque_output_sign = -1;
 
   // paramsd 학습값(2026-09-27): 조향비 14.72, 타이어 강성 0.83.
   float steer_ratio = 14.72f;

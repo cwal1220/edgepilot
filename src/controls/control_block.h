@@ -43,8 +43,6 @@ enum class BlockKind : uint8_t {
   X(ParamsdInvalid,     "paramsd_invalid",      "PARAMS INVALID",  BlockKind::Hard)         \
   X(PandaNotReady,      "panda_not_ready",      "PANDA NOT READY", BlockKind::Transient)    \
   X(PandaControlsOff,   "panda_controls_off",   "PANDA CTRL OFF",  BlockKind::Transient)    \
-  X(EspStale,           "esp_stale",            "ESP STALE",       BlockKind::Reject)       \
-  X(YawRateInvalid,     "yaw_rate_invalid",     "YAW INVALID",     BlockKind::Reject)       \
   X(Stopped,            "stopped",              "STOPPED",         BlockKind::Availability) \
   X(PathInvalid,        "path_invalid",         "PATH INVALID",    BlockKind::Availability) \
   X(LateralPlanInvalid, "lateral_plan_invalid", "PLAN INVALID",    BlockKind::Reject)       \

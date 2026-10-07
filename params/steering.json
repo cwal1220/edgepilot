@@ -5,8 +5,6 @@
   "torque_kp": 0.8,
   "torque_ki": 0.15,
   "torque_friction": 0.083,
-  "torque_use_angle": true,
-  "torque_output_sign": -1,
   "steer_ratio": 14.72,
   "tire_stiffness_factor": 0.83,
   "steer_actuator_delay": 0.42,
