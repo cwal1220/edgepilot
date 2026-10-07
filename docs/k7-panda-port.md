@@ -29,6 +29,11 @@ The controller uses the validated K7 YG HEV bus split:
 - TX bus 1: mirrored `LKAS11` at 100 Hz and `CLU11` at 50 Hz.
 - TX bus 2: `MDPS12` at 100 Hz.
 
+The Panda runs the firmware in `firmware/panda` (see
+[Panda firmware](../firmware/panda/README.md)): health packet version 7, CAN
+packet version 2, and the `hyundaiCommunity` safety mode, which `pandad`
+checks when it connects.
+
 While steering is active below the MDPS threshold, the bus-1 `CLU11` helper
 reports 60 kph (38 mph) and preserves the source decimal-speed field. This
 matches the K7 branch in the reference openpilot controller.

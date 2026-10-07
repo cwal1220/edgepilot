@@ -59,7 +59,7 @@ defined in one of those libraries means linking it.
   (`CMakeLists.txt`, `README.md`, `Dockerfile`), systemd units and the scripts
   installed under their names (`edgepilot-drivers.service`,
   `wifi-dhcp-renew.sh`), `requirements-param-server.txt`, and vendored
-  third-party files (`scripts/web/three/`).
+  third-party files (`scripts/web/three/`, the panda tree in `firmware/panda/`).
 
 ## src/common
 
@@ -394,6 +394,13 @@ Library `panda`, process `pandad`.
 - `panda_client.*`, `panda_can_codec.*`, `pandad.cc`
   - optional panda USB bridge. It handles USB, health, heartbeat, receive CAN,
     and the final TX gate, but does not generate vehicle control messages.
+
+## firmware/panda
+
+The Panda's firmware for the STM32F413 boards, imported from openpilot_c2 with
+upstream's file names (`board/`, `crypto/`, `certs/`). `make -C firmware/panda`
+builds and signs it; `panda_version.py` names a build by its sources. See
+[Panda firmware](../firmware/panda/README.md).
 
 ## platform/maixcam2
 

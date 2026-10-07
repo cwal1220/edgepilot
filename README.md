@@ -200,6 +200,7 @@ src/            runtime code, one folder per subsystem (docs/source-layout.md)
 platform/       MaixCAM2 camera (VI), display (VO), CMM, and GDC wrappers
 params/         runtime parameters, hot-reloaded by the processes
 models/         the axmodel and its manifest
+firmware/       the Panda firmware (firmware/panda)
 tests/          host unit tests and the Python layout checks
 diagnostics/    replay, dataset, and HUD tools
 scripts/        SDK fetch, deploy, host tests, board-side Python
@@ -210,7 +211,7 @@ docs/           documentation; docs/images holds the README media
 ## Documentation
 
 - **Setup:** [Board setup](docs/board-setup.md) · [Build and deploy](docs/build-and-deploy.md) ·
-  [Boot time](docs/boot-time.md)
+  [Boot time](docs/boot-time.md) · [Panda firmware](firmware/panda/README.md)
 - **How it works:** [Split runtime](docs/runtime.md) · [Model pipeline](docs/model-pipeline.md) ·
   [Model package](models/README.md) · [Source layout](docs/source-layout.md)
 - **Operating:** [Runtime options](docs/runtime-options.md) · [Parameters](params/README.md) ·
@@ -223,8 +224,8 @@ docs/           documentation; docs/images holds the README media
 - [openpilot](https://github.com/commaai/openpilot) by comma.ai: the supercombo
   model, and the planner, MPC, calibration, and parameter estimators this
   runtime ports
-- [panda](https://github.com/commaai/panda): the CAN interface and its safety
-  firmware
+- [panda](https://github.com/commaai/panda) by comma.ai: the CAN interface, and
+  the firmware in `firmware/panda` (MIT), by way of crwusiz's openpilot import
 - [MaixCDK](https://github.com/sipeed/MaixCDK) by Sipeed: the MaixCAM2 MSP SDK
   and `libmaixcam_lib` headers
 - Pulsar2 by Axera: the AX630C NPU compiler
