@@ -52,3 +52,38 @@ The firmware reports its version over USB (request `0xd6`).
 everything that shapes it: `board/`, `crypto/`, `certs/`, the `Makefile` and the
 script itself. It is computed from file contents, so a checkout and a copy on
 the board agree. openpilot_c2 built every version as `DEV-23456789-DEBUG`.
+
+## Flashing
+
+The board flashes the Panda over the USB-C port it is already on. The image is
+`obj/panda.bin.signed`, installed on the board as `firmware/panda.bin.signed`
+in the install directory (`EDGEPILOT_PANDA_FIRMWARE` overrides the path).
+
+From the web console, the device settings tab (기기 설정) has a Panda firmware
+card: the version the Panda runs, the installed image, and a flash button. The
+button works only with the car parked: a fresh control state, the vehicle state
+alive, steering and engagement off, in P and standing still. `param_server.py`
+checks that and writes the image's version to `/dev/shm/edgepilot_panda_flash`;
+`pandad` checks it again, closes its own Panda connection and flashes, reporting
+progress through `/dev/shm/edgepilot_panda_status.json`. It takes about 10 s,
+during which the Panda reboots twice, the harness relay falls back to the stock
+camera wiring and steering control stops.
+
+With the runtime stopped, `panda_flash` in the install directory does the same
+from a shell: without `--yes` it only shows the image and the Panda.
+
+What the flasher does (`src/panda/panda_flasher.cc`):
+
+1. On the application, check the board is an F413 one and ask the firmware to
+   reboot into its bootstub; wait for the bootstub to enumerate.
+2. Check the bootstub's flasher answers, unlock the flash and erase sectors 1–3,
+   the 48 KB application area.
+3. Write the image to the flasher's endpoint in 16-byte chunks, then check the
+   bootstub's write pointer stopped exactly at the end of the image.
+4. Reset, wait for the application to enumerate, and check it reports the
+   image's version.
+
+The bootstub never erases sector 0, where it lives, so a flash that stops
+halfway, or an image whose signature it rejects, leaves the Panda in its
+bootstub, still flashable: the card then shows `bootstub` and offers to write
+the firmware again.
