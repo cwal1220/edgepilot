@@ -1,6 +1,7 @@
 #include "panda/panda_client.h"
 
 #include "panda/panda_can_codec.h"
+#include "panda/panda_protocol.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -9,43 +10,14 @@
 
 namespace {
 
-constexpr uint16_t kPandaVendorId = 0xbbaa;
-constexpr uint16_t kPandaProductId = 0xddcc;
 constexpr uint8_t kUsbRequestOut = LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE;
 constexpr uint8_t kUsbRequestIn = LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE;
 constexpr uint8_t kCanRxEndpoint = 0x81;
 constexpr uint8_t kCanTxEndpoint = 3;
-constexpr uint8_t kExpectedHealthPacketVersion = 7;
-constexpr uint8_t kExpectedCanPacketVersion = 2;
 constexpr int kRecvSize = 0x4000;
 constexpr int kUsbTxSoftLimit = 0x100;
 constexpr int kUsbBulkWriteRetries = 3;
 constexpr uint32_t kMaxConsecutiveMalformedRx = 3;
-
-struct __attribute__((packed)) PandaHealthPacket {
-    uint32_t uptime_pkt;
-    uint32_t voltage_pkt;
-    uint32_t current_pkt;
-    uint32_t can_rx_errs_pkt;
-    uint32_t can_send_errs_pkt;
-    uint32_t can_fwd_errs_pkt;
-    uint32_t gmlan_send_errs_pkt;
-    uint32_t faults_pkt;
-    uint8_t ignition_line_pkt;
-    uint8_t ignition_can_pkt;
-    uint8_t controls_allowed_pkt;
-    uint8_t gas_interceptor_detected_pkt;
-    uint8_t car_harness_status_pkt;
-    uint8_t usb_power_mode_pkt;
-    uint8_t safety_mode_pkt;
-    uint16_t safety_param_pkt;
-    uint8_t fault_status_pkt;
-    uint8_t power_save_enabled_pkt;
-    uint8_t heartbeat_lost_pkt;
-    uint16_t alternative_experience_pkt;
-    uint32_t blocked_msg_cnt_pkt;
-    float interrupt_load;
-};
 
 } // namespace
 
@@ -73,7 +45,7 @@ bool PandaClient::connect(const std::string &serial)
     for (ssize_t i = 0; i < count; ++i) {
         libusb_device_descriptor desc {};
         if (libusb_get_device_descriptor(dev_list[i], &desc) != 0) continue;
-        if (desc.idVendor != kPandaVendorId || desc.idProduct != kPandaProductId) continue;
+        if (desc.idVendor != kPandaVendorId || desc.idProduct != kPandaAppProductId) continue;
 
         libusb_device_handle *handle = nullptr;
         if (libusb_open(dev_list[i], &handle) != 0 || !handle) continue;
@@ -117,13 +89,13 @@ bool PandaClient::connect(const std::string &serial)
     }
 
     uint8_t packet_versions[2] = {};
-    if (!control_read(0xdd, 0, 0, packet_versions, sizeof(packet_versions)) ||
-        packet_versions[0] != kExpectedHealthPacketVersion ||
-        packet_versions[1] != kExpectedCanPacketVersion) {
+    if (!control_read(kPandaRequestPacketVersions, 0, 0, packet_versions, sizeof(packet_versions)) ||
+        packet_versions[0] != kPandaHealthPacketVersion ||
+        packet_versions[1] != kPandaCanPacketVersion) {
         std::fprintf(stderr,
                      "panda: unsupported packet versions health=%u can=%u (expected %u/%u)\n",
                      packet_versions[0], packet_versions[1],
-                     kExpectedHealthPacketVersion, kExpectedCanPacketVersion);
+                     kPandaHealthPacketVersion, kPandaCanPacketVersion);
         close();
         return false;
     }
@@ -131,8 +103,15 @@ bool PandaClient::connect(const std::string &serial)
     can_packet_version_ = packet_versions[1];
 
     uint8_t hw_query = 0;
-    if (control_read(0xc1, 0, 0, &hw_query, sizeof(hw_query)))
+    if (control_read(kPandaRequestHwType, 0, 0, &hw_query, sizeof(hw_query)))
         hw_type_ = hw_query;
+    // 버전 문자열은 길이가 정해져 있지 않아(널 없이 올 수도 있다) 받은 만큼만 쓴다
+    char version[kPandaVersionMaxBytes] = {};
+    const int version_len = libusb_control_transfer(
+        dev_handle_, kUsbRequestIn, kPandaRequestVersion, 0, 0,
+        reinterpret_cast<unsigned char *>(version), sizeof(version), 1000);
+    if (version_len > 0)
+        firmware_version_.assign(version, strnlen(version, static_cast<size_t>(version_len)));
     comms_healthy_ = true;
     consecutive_malformed_rx_ = 0;
     return true;
@@ -150,6 +129,7 @@ void PandaClient::close()
         ctx_ = nullptr;
     }
     usb_serial_.clear();
+    firmware_version_.clear();
     hw_type_ = 0;
     health_packet_version_ = 0;
     can_packet_version_ = 0;
@@ -253,19 +233,19 @@ void PandaClient::mark_usb_error(int err, const char *where)
 
 bool PandaClient::set_safety_model(uint16_t safety_model, uint16_t safety_param)
 {
-    return control_write(0xdc, safety_model, safety_param);
+    return control_write(kPandaRequestSafetyModel, safety_model, safety_param);
 }
 
 bool PandaClient::send_heartbeat(bool engaged)
 {
-    return control_write(0xf3, engaged ? 1 : 0, 0, 100);
+    return control_write(kPandaRequestHeartbeat, engaged ? 1 : 0, 0, 100);
 }
 
 bool PandaClient::get_health(PandaHealth *health)
 {
     if (!health) return false;
     PandaHealthPacket packet {};
-    if (!control_read(0xd2, 0, 0, &packet, sizeof(packet), 100)) return false;
+    if (!control_read(kPandaRequestHealth, 0, 0, &packet, sizeof(packet), 100)) return false;
     health->uptime = packet.uptime_pkt;
     health->voltage = packet.voltage_pkt;
     health->current = packet.current_pkt;

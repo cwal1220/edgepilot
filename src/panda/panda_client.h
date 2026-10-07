@@ -2,6 +2,7 @@
 #define PANDA_CLIENT_H
 
 #include "panda/panda_can_codec.h"
+#include "panda/panda_protocol.h"
 
 #include <libusb.h>
 
@@ -9,13 +10,6 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-
-constexpr uint16_t kPandaSafetySilent = 0;
-constexpr uint16_t kPandaSafetyElm327 = 3;
-constexpr uint16_t kPandaSafetyHyundai = 8;
-constexpr uint16_t kPandaSafetyAllOutput = 17;
-constexpr uint16_t kPandaSafetyNoOutput = 19;
-constexpr uint16_t kPandaSafetyHyundaiCommunity = 24;
 
 struct PandaHealth {
     uint32_t uptime = 0;
@@ -52,6 +46,8 @@ public:
     bool connected() const { return dev_handle_ != nullptr; }
     bool comms_healthy() const { return comms_healthy_; }
     const std::string &usb_serial() const { return usb_serial_; }
+    // 접속할 때 읽은 펌웨어 버전 문자열(0xd6). 못 읽었으면 빈 문자열이다.
+    const std::string &firmware_version() const { return firmware_version_; }
     uint8_t hw_type() const { return hw_type_; }
     uint8_t health_packet_version() const { return health_packet_version_; }
     uint8_t can_packet_version() const { return can_packet_version_; }
@@ -78,6 +74,7 @@ private:
     libusb_context *ctx_ = nullptr;
     libusb_device_handle *dev_handle_ = nullptr;
     std::string usb_serial_;
+    std::string firmware_version_;
     uint8_t hw_type_ = 0;
     uint8_t health_packet_version_ = 0;
     uint8_t can_packet_version_ = 0;
