@@ -32,7 +32,8 @@ Libraries link downward only: `common` ← `car` ← `control_core` ←
 libraries because the planner and the learners sit between the controller
 (`control_core`) and the tick that drives them (`controls`). A few headers are
 read across that order for their enums, constants and default values only:
-the HUD reads `controls/departure_alert.h`, `controls/control_block.h`,
+`panda_firmware.cc` reads `car/can_frame.h`, the HUD reads
+`controls/departure_alert.h`, `controls/control_block.h`,
 `controls/control_params.h`, `car/can_frame.h`, `model/calibration_online.h`
 and `localization/lateral_lag.h`, and `controls_tick.cc` reads
 `localization/lateral_lag.h`. Those uses stay header-only; calling a function
@@ -389,11 +390,23 @@ Library `recording`, processes `recordd` and `replayd`.
 
 ## src/panda
 
-Library `panda`, process `pandad`.
+Library `panda`, process `pandad`, tool `panda_flash`.
 
 - `panda_client.*`, `panda_can_codec.*`, `pandad.cc`
   - optional panda USB bridge. It handles USB, health, heartbeat, receive CAN,
     and the final TX gate, but does not generate vehicle control messages.
+    `pandad` also flashes the Panda when the web console asks.
+- `panda_protocol.h`
+  - what `firmware/panda` speaks over USB: ids, request codes, packet versions,
+    the health packet and the application flash layout. `gtest_panda_firmware`
+    checks it against the firmware sources.
+- `panda_firmware.*`
+  - application image checks, the parked-car condition for flashing (it reads
+    `car/can_frame.h` for `kGearPark`), and the status JSON. No USB, so the host
+    tests build it.
+- `panda_flasher.*`, `panda_flash.cc`
+  - the bootstub flasher (board only) and the command-line tool that runs it
+    with the runtime stopped.
 
 ## firmware/panda
 

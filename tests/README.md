@@ -9,7 +9,7 @@
 ./scripts/run_host_tests.sh
 ```
 
-`build-host`를 구성하고 `host_tests` 타깃을 빌드한 뒤 `ctest`로 전부 돌린다(C++ 188개와
+`build-host`를 구성하고 `host_tests` 타깃을 빌드한 뒤 `ctest`로 전부 돌린다(C++ 196개와
 Python 2개). googletest v1.18.0은 첫 구성 때 받아 온다(SHA256 고정).
 
 하나만 돌릴 때:
@@ -49,6 +49,7 @@ build-host/bin/gtest_lateral_learners --gtest_filter='LateralLearners.Torque*'
 | `gtest_model_output` | 6 | supercombo raw 출력 레이아웃과 시간축 입력 규약(desire 펄스·풀링과 깜빡이로 끝나는 회전 desire, 특징 이력, 이미지 이력) |
 | `gtest_model_state_fill` | 2 | modeld가 채우고 overlayd가 되돌리는 `ModelState` 왕복(남는 값, t=0 lead만, road_transform 없음, 보정 칸)과 `compute_lane_t`(일정 속도면 거리/속도, 짧은 plan 끝 뒤 NaN, 뒤로 뛰는 knot에도 단조) |
 | `gtest_panda_can_codec` | 1 | panda USB CAN 패킹·언패킹 |
+| `gtest_panda_firmware` | 8 | 판다 펌웨어 이미지 검사(앱 영역, 길이 필드, VERS 꼬리, 버전 문자열), 주차 중에만 플래싱하는 조건, F413 보드만, 상태 JSON 이스케이프. pandad의 health 패킷·패킷 버전·USB ID·safety 번호·앱 시작 주소가 `firmware/panda` 소스와 같은지(`board/health.h`를 그대로 가져와 대조) |
 | `gtest_projection` | 4 | 화면 크기와 무관한 도로 점 투영, 설정된 카메라 내부 파라미터, 카메라 장착 오프셋 |
 | `gtest_recording` | 6 | 디스크의 route 구조: EDGELOG1 청크, EDGEIDX1 인덱스(v8 이하 녹화의 예전 매직도 읽기), 매니페스트, params 스냅샷, 스테이징 비우기. 이벤트 로그 리더(끊긴 꼬리에서 멈춤, 큰 파일 머리), 옛 버전 ModelState 해석, 기록한 CAN 페이로드 왕복(CAN-FD, 끊긴 꼬리, 256 프레임 상한), 상태 채널 기록(생산자가 생긴 뒤 붙기, 새 스냅샷만, IMU는 채운 샘플까지), replayd route 리더(세그먼트 경계, 키프레임마다 코덱 설정, 청크를 넘는 CAN·판다 이벤트 시각 순, 머리가 깨진 프레임 인덱스는 그 세그먼트만 건너뜀) |
 

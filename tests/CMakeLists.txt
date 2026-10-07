@@ -44,6 +44,7 @@ add_host_test(gtest_localization localization)
 add_host_test(gtest_model_output common)
 add_host_test(gtest_model_state_fill model hud_state)
 add_host_test(gtest_panda_can_codec panda)
+add_host_test(gtest_panda_firmware panda)
 add_host_test(gtest_projection hud_state)
 add_host_test(gtest_recording recording)
 

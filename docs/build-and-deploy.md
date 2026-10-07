@@ -90,5 +90,5 @@ scripts/run_host_tests.sh
 ```
 
 Builds `build-host/` with the runtime off and runs every test through `ctest`:
-188 googletest cases, `check_param_server.py` and `check_recording_reader.py`. It needs neither the board nor
+196 googletest cases, `check_param_server.py` and `check_recording_reader.py`. It needs neither the board nor
 `deps/`; googletest is downloaded on the first configure.
