@@ -6,6 +6,8 @@
 # 교차 빌드 의존성은 scripts/fetch_maixcam2_sdk.sh가 버전을 고정해 받는다.
 /deps/
 compile_commands.json
+# Panda 펌웨어 빌드 산출물 (make -C firmware/panda)
+/firmware/panda/obj/
 __pycache__/
 *.pyc
 *.raw

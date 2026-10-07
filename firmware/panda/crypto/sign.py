@@ -3,13 +3,15 @@ import os
 import sys
 import struct
 import hashlib
-from Crypto.PublicKey import RSA
 import binascii
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import rsakey  # noqa: E402
 
 # increment this to make new hardware not run old versions
 VERSION = 2
 
-rsa = RSA.importKey(open(sys.argv[3]).read())
+n, _, d = rsakey.load(sys.argv[3])
 
 with open(sys.argv[1], "rb") as f:
   dat = f.read()
@@ -30,7 +32,7 @@ with open(sys.argv[2], "wb") as f:
 
   print("hash:", str(binascii.hexlify(dd), "utf-8"))
   dd = b"\x00\x01" + b"\xff" * 0x69 + b"\x00" + dd
-  rsa_out = pow(int.from_bytes(dd, byteorder='big', signed=False), rsa.d, rsa.n)
+  rsa_out = pow(int.from_bytes(dd, byteorder='big', signed=False), d, n)
   sig = (hex(rsa_out)[2:].rjust(0x100, '0'))
   x += binascii.unhexlify(sig)
   f.write(x)
