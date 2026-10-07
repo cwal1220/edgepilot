@@ -33,14 +33,14 @@
 | 파일 | 사용 | 하는 일 |
 | --- | --- | --- |
 | `manager.py` | `python3 /root/edgepilot/manager.py [supercombo.axmodel]` | 런타임 감시자. 보드 UI 런처를 멈추고 프로세스를 순서대로 띄우며 죽으면 1초 뒤 다시 띄운다. 부팅 때는 `edgepilot.service`가 띄운다 |
-| `param_server.py` | `[--host 주소] [--port 포트]` | 파라미터 편집 웹 서버(FastAPI, 기본 `0.0.0.0:8080`). 매니저가 함께 띄운다. 기기 설정 탭의 판다 펌웨어 카드에서 판다를 플래싱한다(주차 중에만, 쓰는 것은 `pandad`) |
-| `web/` | (정적 파일) | 웹 콘솔 BEV 탭의 JS(`bev.js`, 자차 K7 모델 `bev_k7.js`, 앞차 모델 `bev_car.js`, `bev_data.js`)와 three.js 0.186.1(`three/`). 보드에는 `param_server.py` 옆 `web/`에 둔다. 아직 `upload_to_board.sh`가 올리지 않는다 |
-| `display_control.py` | (모듈) | LCD 백라이트 제어(PWM3 `pwmchip0/pwm3`, 10 kHz, duty = 밝기 x `/boot/board`의 `disp_max_backlight`). 파라미터 서버가 시작할 때와 `display.json`을 바꿀 때 적용한다 |
+| `web_console/` | `python3 -m web_console [--host 주소] [--port 포트]` | 웹 콘솔(FastAPI, 기본 `0.0.0.0:8080`). 매니저가 함께 띄운다. 파라미터 편집, 실시간 학습, BEV, 백라이트(`backlight.py`)를 맡고 페이지는 `static/`에 있다. 기기 설정 탭의 판다 펌웨어 카드에서 판다를 플래싱한다(주차 중에만, 쓰는 것은 `pandad`) |
+| `web_console/static/` | (정적 파일) | 웹 콘솔 BEV 탭의 JS(`bev.js`, 자차 K7 모델 `bev_k7.js`, 앞차 모델 `bev_car.js`, `bev_data.js`)와 three.js 0.186.1(`three/`) |
+| `web_console/backlight.py` | (모듈) | LCD 백라이트 제어(PWM3 `pwmchip0/pwm3`, 10 kHz, duty = 밝기 x `/boot/board`의 `disp_max_backlight`). 웹 콘솔이 시작할 때와 `display.json`을 바꿀 때 적용한다 |
 | `edgepilot.service` | `install_autostart.sh`가 설치 | 부팅 때 매니저를 띄우는 systemd 유닛(`Conflicts=launcher.service`, `Restart=always`). 자식 로그는 `/run/edgepilot/<이름>.log` |
 | `edgepilot-drivers.service` | `install_boot_tuning.sh`가 설치 | AX 미디어 드라이버를 부팅 초반에 올린다. 순정 이미지는 Wi-Fi 연결을 기다리는 `rc.local`에서 올린다 |
 | `camcal.service` | `systemctl start camcal` | 카메라 내부 파라미터 측정 캡처([camcal](../docs/camcal.md)). 런타임을 멈추고 돈다 |
 | `wifi-dhcp-renew.service`, `wifi-dhcp-renew.sh` | `install_autostart.sh`가 설치 | Wi-Fi가 다른 AP에 다시 붙을 때마다 wlan0 DHCP 임대를 새로 받는다 |
-| `requirements-param-server.txt` | `python3 -m pip install -r ...` | 파라미터 서버 의존성(fastapi, uvicorn) |
+| `requirements-web-console.txt` | `python3 -m pip install -r ...` | 웹 콘솔 의존성(fastapi, uvicorn) |
 
 어떤 프로세스를 띄울지와 환경 변수는 [분할 런타임](../docs/runtime.md)과
 [런타임 옵션](../docs/runtime-options.md)에 있다.

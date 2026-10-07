@@ -59,8 +59,8 @@ defined in one of those libraries means linking it.
 - Names something else fixes keep their form: files tools look for
   (`CMakeLists.txt`, `README.md`, `Dockerfile`), systemd units and the scripts
   installed under their names (`edgepilot-drivers.service`,
-  `wifi-dhcp-renew.sh`), `requirements-param-server.txt`, and vendored
-  third-party files (`scripts/web/three/`, the panda tree in `firmware/panda/`).
+  `wifi-dhcp-renew.sh`), `requirements-web-console.txt`, and vendored
+  third-party files (`scripts/web_console/static/three/`, the panda tree in `firmware/panda/`).
 
 ## src/common
 
@@ -462,18 +462,17 @@ only in the board build, against `deps/ax630` from
   - minimal supervisor and heartbeat publisher. It is intentionally not a full
     openpilot manager clone. It stops the stock launcher, switches USB-C to host
     for the Panda, and one table in start order decides which processes run
-    (`EDGEPILOT_ENABLE_CONTROL`, `EDGEPILOT_ENABLE_PANDA`, `EDGEPILOT_ENABLE_PARAM_SERVER`) and
+    (`EDGEPILOT_ENABLE_CONTROL`, `EDGEPILOT_ENABLE_PANDA`, `EDGEPILOT_ENABLE_WEB_CONSOLE`) and
     with what nice value.
-- `scripts/param_server.py`, `scripts/display_control.py`
-  - the FastAPI parameter editor (`EDGEPILOT_ENABLE_PARAM_SERVER`) and the
-    MaixCAM2 backlight helper it calls (PWM3).
-- `scripts/web/`
-  - the editor's BEV tab, drawn by the browser: `bev.js` (three.js view, ported
+- `scripts/web_console/`
+  - the web console (`EDGEPILOT_ENABLE_WEB_CONSOLE`, `python3 -m web_console`):
+    the FastAPI server, the MaixCAM2 backlight helper it calls (PWM3,
+    `backlight.py`), and its page in `static/`.
+- `scripts/web_console/static/`
+  - the console's BEV tab, drawn by the browser: `bev.js` (three.js view, ported
     from sv_recorder_bev), `bev_k7.js` (the ego car, a black 2017 K7 made in code),
     `bev_car.js` (the lead's car model), `bev_data.js` (reads the ModelState and
-    ControlState bytes the editor streams), and three.js 0.186.1 in `three/`. On
-    the board they go next to `param_server.py` as `web/`;
-    `scripts/upload_to_board.sh` does not upload them, so copy them by hand.
+    ControlState bytes the console streams), and three.js 0.186.1 in `three/`.
 
 ## Tools and tests
 
@@ -507,7 +506,7 @@ only in the board build, against `deps/ax630` from
 - `tests/`
   - host unit tests (`gtest_*.cc`, googletest + CTest), one self-contained file
     per target, each registered by one `add_host_test(<name> <libraries>)` line in
-    `tests/CMakeLists.txt`, and the Python checks `check_param_server.py` and
+    `tests/CMakeLists.txt`, and the Python checks `check_web_console.py` and
     `check_recording_reader.py`, registered beside them;
     `scripts/run_host_tests.sh` runs them all. See `tests/README.md`.
 - `diagnostics/`

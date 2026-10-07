@@ -148,13 +148,13 @@ struct ParsedLeadPrediction {
 };
 
 /* 모델 앞차를 앞차로 보는 최소 존재 확률. openpilot radard처럼 한 값으로 고정해 비전 크루즈, 출발 알림,
- * HUD와 웹 BEV(scripts/web/bev_data.js LEAD_PROBABILITY, check_param_server.py가 대조)가 같은 앞차를
+ * HUD와 웹 BEV(scripts/web_console/static/bev_data.js LEAD_PROBABILITY, check_web_console.py가 대조)가 같은 앞차를
  * 본다. */
 constexpr float kLeadProbabilityThreshold = 0.5f;
 
 /* 모델 앞차 거리(카메라 기준)를 레이더 기준으로 바꾸는 오프셋(openpilot RADAR_TO_CAMERA). 비전 크루즈와
  * 출발 알림(controls_tick.cc), HUD 거리 표시(hud_scene.cc), 웹 BEV(bev_data.js RADAR_TO_CAMERA,
- * check_param_server.py가 대조)가 같은 값을 쓴다. */
+ * check_web_console.py가 대조)가 같은 값을 쓴다. */
 constexpr float kRadarToCameraDistanceM = 1.52f;
 
 /* 시간 오프셋(0/2/4 s)마다 궤적 하나와 존재 확률 하나. */

@@ -3,8 +3,8 @@
 보내 다시 읽게 한다), /dev/shm 채널을 읽어 학습값·추이·온라인 보정 초기화와 BEV 탭을 낸다. 매니저가
 함께 띄운다.
 
-사용: python3 param_server.py [--host 주소] [--port 포트]   (기본 0.0.0.0:8080,
-EDGEPILOT_PARAM_HOST·EDGEPILOT_PARAM_PORT로도 바꿀 수 있다)
+사용: python3 -m web_console [--host 주소] [--port 포트]   (기본 0.0.0.0:8080,
+EDGEPILOT_WEB_CONSOLE_HOST·EDGEPILOT_WEB_CONSOLE_PORT로도 바꿀 수 있다)
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-# fastapi/uvicorn은 서버를 띄울 때만 import한다. tests/check_param_server.py가
+# fastapi/uvicorn은 서버를 띄울 때만 import한다. tests/check_web_console.py가
 # stdlib만으로 ParamStore와 PARAM_METADATA를 쓴다. 요청 모델만은 모듈 전역에
 # 있어야 한다: `from __future__ import annotations` 때문에 FastAPI가 라우트의
 # 문자열 애너테이션을 모듈 전역에서 해석하므로, 지역 클래스면 NameError로 죽는다.
@@ -44,10 +44,7 @@ class PandaFlashRequest(BaseModel):  # type: ignore[misc,valid-type]
     version: str
 
 
-if __package__:
-    from .display_control import DisplayBacklight
-else:
-    from display_control import DisplayBacklight
+from .backlight import DisplayBacklight
 
 
 CONTROLSD_NAME = "controlsd"
@@ -764,7 +761,7 @@ def flag_names(value: int, names: tuple) -> Dict[str, bool]:
 # ---------------------------------------------------------------- 학습 상태(paramsd·torqued)
 
 LEARNER_STATE_PATH = os.environ.get("EDGEPILOT_LEARNER_STATE_PATH", "/dev/shm/edgepilot_learner_state")
-# LearnerState(src/common/ipc_messages.h) 필드 순서. check_param_server.py가 C++ offsetof와 대조한다.
+# LearnerState(src/common/ipc_messages.h) 필드 순서. check_web_console.py가 C++ offsetof와 대조한다.
 LEARNER_FIELDS = (
     ("timestamp_ns", "Q"), ("flags", "I"),
     ("steer_ratio", "f"), ("stiffness_factor", "f"), ("roll_rad", "f"),
@@ -893,7 +890,7 @@ class LearnerMonitor:
 # ---------------------------------------------------------------- locationd(자세·조향 지연)
 
 LOCALIZATION_STATE_PATH = os.environ.get("EDGEPILOT_LOCALIZATION_STATE_PATH", "/dev/shm/edgepilot_localization")
-# LocalizationState(src/common/ipc_messages.h) 필드 순서. check_param_server.py가 C++ 크기와 대조한다.
+# LocalizationState(src/common/ipc_messages.h) 필드 순서. check_web_console.py가 C++ 크기와 대조한다.
 LOCALIZATION_FIELDS = (
     ("timestamp_ns", "Q"), ("flags", "I"), ("lag_status", "I"),
     ("orientation_calib", "3f"), ("orientation_std", "3f"),
@@ -939,7 +936,7 @@ CONTROL_STATE_PATH = os.environ.get("EDGEPILOT_CONTROL_STATE_PATH", "/dev/shm/ed
 # modeld의 CalibrationService가 1초마다 이 파일을 보고, 있으면 지우고 처음부터 다시 수렴한다.
 CALIBRATION_RESET_PATH = os.environ.get("EDGEPILOT_CALIBRATION_RESET_PATH",
                                         "/dev/shm/edgepilot_calibration_reset")
-# offsetof(ModelState, calibration). check_param_server.py가 ipc_messages.h와 대조한다.
+# offsetof(ModelState, calibration). check_web_console.py가 ipc_messages.h와 대조한다.
 MODEL_CALIBRATION_OFFSET = 3224
 CALIBRATION_STATE = struct.Struct("<Ii3f3f")  # CalibrationState: status, valid_blocks, rpy, spread
 CONTROL_STATE_HEAD = struct.Struct("<QII")  # ControlState: timestamp_ns, enabled, engaged
@@ -1015,7 +1012,7 @@ PANDA_SIGNATURE_BYTES = 128
 PANDA_APP_MAX_BYTES = 3 * 16 * 1024
 PANDA_FLASHABLE_HW = (3, 5, 6)
 PANDA_VERSION_PATTERN = re.compile(rb"(?<![0-9A-Za-z])[A-Z]{3,8}-[0-9A-Za-z]{8}-(?:DEBUG|RELEASE)(?![0-9A-Za-z])")
-# 플래싱 조건이 보는 ControlState 필드(ipc_messages.h). check_param_server.py가 대조한다.
+# 플래싱 조건이 보는 ControlState 필드(ipc_messages.h). check_web_console.py가 대조한다.
 PANDA_CONTROL_FIELDS = {"engaged": 12, "active": 16, "vehicle_fresh": 32, "gear": 52,
                         "cluster_speed_kph": 56, "ego_speed_kph": 232}
 GEAR_PARK = 0  # car/can_frame.h kGearPark
@@ -1170,7 +1167,7 @@ class PandaFirmware:
 
 # 웹 BEV 탭이 읽는 ModelState·ControlState 필드의 바이트 위치(src/common/ipc_messages.h). 보드는 두 페이로드를
 # 발행된 그대로 흘려보내기만 하고(해석·JSON 없음), 페이지(web/bev_data.js)가 /api/bev에서 이 위치를
-# 받아 직접 읽고 그린다. check_param_server.py가 EDGEPILOT_MODEL_STATE_AT·EDGEPILOT_CONTROL_STATE_AT과
+# 받아 직접 읽고 그린다. check_web_console.py가 EDGEPILOT_MODEL_STATE_AT·EDGEPILOT_CONTROL_STATE_AT과
 # 대조한다.
 MODEL_STATE_SIZE = 3576
 CONTROL_STATE_SIZE = 240
@@ -1244,7 +1241,7 @@ async def bev_frames(hz: float, model_path: str = MODEL_STATE_PATH, control_path
         await asyncio.sleep(min(max(wait, BEV_RETRY_S), sent_at + idle_s - now))
 
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
+WEB_DIR = Path(__file__).resolve().parent / "static"
 
 
 class WebAssets:
@@ -2769,9 +2766,9 @@ def main() -> None:
     import uvicorn
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default=os.environ.get("EDGEPILOT_PARAM_HOST", "0.0.0.0"))
+    parser.add_argument("--host", default=os.environ.get("EDGEPILOT_WEB_CONSOLE_HOST", "0.0.0.0"))
     parser.add_argument(
-        "--port", type=int, default=int(os.environ.get("EDGEPILOT_PARAM_PORT", "8080"))
+        "--port", type=int, default=int(os.environ.get("EDGEPILOT_WEB_CONSOLE_PORT", "8080"))
     )
     args = parser.parse_args()
     server: uvicorn.Server | None = None

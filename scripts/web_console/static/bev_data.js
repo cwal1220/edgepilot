@@ -1,6 +1,6 @@
 // What the board's model and controlsd publish, as the BEV (bev.js) draws it. The board only copies:
 // /api/bev says where the fields the BEV reads sit in ModelState and ControlState
-// (src/common/ipc_messages.h; check_param_server.py holds the two together), and /api/bev/stream sends both
+// (src/common/ipc_messages.h; check_web_console.py holds the two together), and /api/bev/stream sends both
 // payloads as they were published, a frame per new model frame. A frame is a 16-byte head, magic
 // "BEV1" (u32), ModelState and ControlState byte counts (u16 each) and the board's CLOCK_BOOTTIME ns
 // (u64), then the payloads. A payload is 0 bytes when the board has none or, for the model, nothing
@@ -16,8 +16,8 @@ const HEADER = 16;
 const TRAJECTORY = 33;
 // openpilot T_IDXS: when the car is at each plan point, s
 const T_IDXS = Array.from({length: TRAJECTORY}, (_, i) => 10 * (i / (TRAJECTORY - 1)) ** 2);
-const RADAR_TO_CAMERA = 1.52;           // model_output.h kRadarToCameraDistanceM (check_param_server.py)
-const LEAD_PROBABILITY = 0.5;           // model_output.h kLeadProbabilityThreshold (check_param_server.py)
+const RADAR_TO_CAMERA = 1.52;           // model_output.h kRadarToCameraDistanceM (check_web_console.py)
+const LEAD_PROBABILITY = 0.5;           // model_output.h kLeadProbabilityThreshold (check_web_console.py)
 const LANE_SURE = 0.5;                  // both ego lines at least this sure for the lane width
 const LANE_WIDTH_INDEX = 6;             // hud_scene.cc kLaneRulerIndex: 6.75 m from the camera
 // hud_scene.cc draw_scene: lines and the path reach as far as the plan does, 10 to 100 m
@@ -200,7 +200,7 @@ export class BevStream {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const layout = await response.json();
           const missing = Object.entries(NEEDS).flatMap(([part, keys]) => keys.filter((key) => !(key in (layout[part] || {}))));
-          if (missing.length) throw new Error(`서버와 페이지 버전이 다릅니다(${missing.join(", ")}): param_server.py와 web/을 함께 올리세요`);
+          if (missing.length) throw new Error(`서버와 페이지 버전이 다릅니다(${missing.join(", ")}): web_console/을 통째로 다시 올리세요`);
           this.layout = layout;
         }
         const response = await fetch(`/api/bev/stream?hz=${this.hz}`, {cache: "no-store", signal: abort.signal});

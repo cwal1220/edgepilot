@@ -82,7 +82,7 @@ Panda itself is flashed from the web console or with `panda_flash`.
   `deps/ax630/maix/libmaixcam_lib.so` (the 1.2.5 copy the build links against),
   the script installs that copy as `/usr/lib/libmaixcam_lib.so.1.2.5` and points
   `libmaixcam_lib.so` at it. A stock file is kept as `libmaixcam_lib.so.stock`.
-- It does not upload `replayd` ([rehearsal](rehearsal.md)) or `scripts/web/`
+- It does not upload `replayd` ([rehearsal](rehearsal.md)) or `scripts/web_console/`
   (the editor's BEV tab). Copy them into the install directory by hand, as
   `replayd` and `web/`.
 - `EDGEPILOT_BOARD_DIR` changes the install directory and `EDGEPILOT_BIN_DIR` the binary
@@ -95,5 +95,5 @@ scripts/run_host_tests.sh
 ```
 
 Builds `build-host/` with the runtime off and runs every test through `ctest`:
-196 googletest cases, `check_param_server.py` and `check_recording_reader.py`. It needs neither the board nor
+196 googletest cases, `check_web_console.py` and `check_recording_reader.py`. It needs neither the board nor
 `deps/`; googletest is downloaded on the first configure.

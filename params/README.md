@@ -17,7 +17,7 @@ PID 상태는 유지되며 engage 여부에 따른 적용 지연은 없다.
 - 허용 범위를 벗어난 숫자는 로더가 아래 표의 범위로 제한한다.
 - JSON은 주석을 지원하지 않으므로 설명은 이 문서에서 관리한다.
 - `mdps_speed_spoof_kph`, 토크 부호, 차량 제원은 다른 차량 값으로 임의 변경하지 않는다.
-- 웹 편집기는 `EDGEPILOT_ENABLE_PARAM_SERVER=1`일 때 기본 8080 포트에서 실행된다.
+- 웹 편집기는 `EDGEPILOT_ENABLE_WEB_CONSOLE=1`일 때 기본 8080 포트에서 실행된다.
   `실시간 학습` 탭은 paramsd·torqued 학습값을 수동값과 나란히, 최근 10분 추이와 함께 보여준다(읽기 전용, 사용 스위치만 켜고 끈다).
 
 ## recording.json

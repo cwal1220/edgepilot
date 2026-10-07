@@ -6,7 +6,7 @@ Description=openpilot runtime (manager) on MaixCAM2
 Conflicts=launcher.service camcal.service
 # AX 드라이버는 edgepilot-drivers.service가 부팅 초반에 올린다(rc-local은 Wi-Fi 연결을 기다려서 늦다).
 # usb-gadget.sh는 끝날 때 USB 역할을 device로 쓰므로, 매니저가 host로 바꾸는 건 그 뒤여야 한다.
-# 네트워크 연결은 기다리지 않는다(param_server는 0.0.0.0에 붙어 Wi-Fi가 나중에 붙어도 된다).
+# 네트워크 연결은 기다리지 않는다(웹 콘솔은 0.0.0.0에 붙어 Wi-Fi가 나중에 붙어도 된다).
 # wifi.service는 Type=simple이라 부팅 땐 기다림이 없고, 종료 때 edgepilot이 Wi-Fi 정리(wifi.sh stop)보다
 # 먼저 내려가게 한다. 이 순서를 빼면 재부팅이 systemd-shutdown 단계에서 멈췄다(2026-10-01, 두 번).
 Wants=edgepilot-drivers.service

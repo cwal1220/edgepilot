@@ -22,7 +22,7 @@ struct DeviceSettings {
     bool hud_debug = false;            // HUD 진단 카드(예전 패널의 수치)
 };
 
-/* 허용 범위(벗어나면 클램프). 웹 편집기의 min/max와 같아야 한다(check_param_server.py가 대조).
+/* 허용 범위(벗어나면 클램프). 웹 편집기의 min/max와 같아야 한다(check_web_console.py가 대조).
  * 카메라 오프셋 ±0.35 m는 sunnypilot과 같은 한계(넘으면 물체가 기운다). */
 inline constexpr JsonFloatField<DeviceSettings> kDeviceSettingsFloats[] = {
     {"alert_volume_percent", 0.0f, 100.0f, &DeviceSettings::alert_volume_percent},

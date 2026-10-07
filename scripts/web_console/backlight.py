@@ -1,6 +1,6 @@
 """MaixCAM2 LCD 백라이트 제어. 백라이트는 PWM3(pwmchip0/pwm3, 정극성) 하나이고, 밝기는
 duty = 주기 x 밝기% x 보드 최대치%(/boot/board disp_max_backlight)다. overlayd도
-시작할 때 같은 식으로 /boot/configs 값을 켜 두고, param_server가 display.json을
+시작할 때 같은 식으로 /boot/configs 값을 켜 두고, 웹 콘솔이 display.json을
 적용할 때 이 모듈을 쓴다."""
 from __future__ import annotations
 

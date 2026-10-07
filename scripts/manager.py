@@ -2,7 +2,7 @@
 """MaixCAM2(AX630C) 보드 런타임 감시자. 프로세스를 시작 순서대로 띄우고(camerad가 VI와
 AX 공용 풀을 연 뒤 overlayd) 죽으면 1초 뒤 다시 띄우며, 1초마다 managerState를 /dev/shm에
 낸다. 어떤 프로세스를 띄울지는 EDGEPILOT_ENABLE_CONTROL·EDGEPILOT_ENABLE_PANDA·
-EDGEPILOT_ENABLE_PARAM_SERVER가 정한다. EDGEPILOT_REPLAY_ROUTE(+ _START, _DURATION 초)를 주면 카메라와
+EDGEPILOT_ENABLE_WEB_CONSOLE이 정한다. EDGEPILOT_REPLAY_ROUTE(+ _START, _DURATION 초)를 주면 카메라와
 판다 대신 그 녹화 route를 재생하는 리허설 모드로 돈다(replayd가 camerad 자리를 맡는다).
 
 시작 전에 보드 UI 런처와 그 앱을 멈춘다(CPU 약 30%를 쓰고 카메라·화면과 겹친다,
@@ -125,6 +125,7 @@ class ProcSpec:
     name: str
     cmd: List[str]
     nice: int = 0
+    installed: str = ""  # 설치 여부를 볼 경로(기본은 cmd[0])
 
 
 def process_specs(model: str) -> List[ProcSpec]:
@@ -152,13 +153,10 @@ def process_specs(model: str) -> List[ProcSpec]:
         specs.append(ProcSpec("pandad", ["./pandad"], -10))
     if enable_control:
         specs.append(ProcSpec("controlsd", ["./controlsd"], -8))
-    if env_enabled("EDGEPILOT_ENABLE_PARAM_SERVER", enable_control):
-        server_script = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "param_server.py"
-        )
-        specs.append(ProcSpec("param_server", [sys.executable, server_script], 10))
-    missing = [spec.name for spec in specs
-               if not os.path.exists(spec.cmd[1] if spec.cmd[0] == sys.executable else spec.cmd[0])]
+    if env_enabled("EDGEPILOT_ENABLE_WEB_CONSOLE", enable_control):
+        specs.append(ProcSpec("web_console", [sys.executable, "-m", "web_console"], 10,
+                              installed="web_console/__main__.py"))
+    missing = [spec.name for spec in specs if not os.path.exists(spec.installed or spec.cmd[0])]
     if missing:
         print(f"manager: not installed, skipping {', '.join(missing)}", flush=True)
     return [spec for spec in specs if spec.name not in missing]

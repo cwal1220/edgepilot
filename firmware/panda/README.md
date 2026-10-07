@@ -67,7 +67,7 @@ directory (`EDGEPILOT_PANDA_FIRMWARE` overrides the path).
 From the web console, the device settings tab (기기 설정) has a Panda firmware
 card: the version the Panda runs, the installed image, and a flash button. The
 button works only with the car parked: a fresh control state, the vehicle state
-alive, steering and engagement off, in P and standing still. `param_server.py`
+alive, steering and engagement off, in P and standing still. the web console
 checks that and writes the image's version to `/dev/shm/edgepilot_panda_flash`;
 `pandad` checks it again, closes its own Panda connection and flashes, reporting
 progress through `/dev/shm/edgepilot_panda_status.json`. It takes about 10 s,

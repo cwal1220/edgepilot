@@ -49,8 +49,8 @@ add_host_test(gtest_projection hud_state)
 add_host_test(gtest_recording recording)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-add_test(NAME check_param_server.py
-         COMMAND ${Python3_EXECUTABLE} tests/check_param_server.py
+add_test(NAME check_web_console.py
+         COMMAND ${Python3_EXECUTABLE} tests/check_web_console.py
          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 add_test(NAME check_recording_reader.py
          COMMAND ${Python3_EXECUTABLE} tests/check_recording_reader.py

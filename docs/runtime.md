@@ -66,7 +66,7 @@ keeps the AX system open.
 - restarts a process 1 s after it exits
 - publishes `managerState` to `/dev/shm/edgepilot_manager_state` every second
 - nice levels: `camerad=0`, `overlayd=10`, `recordd=15`, `modeld=-15`,
-  `imud=10`, `locationd=5`, `pandad=-10`, `controlsd=-8`, `param_server=10`
+  `imud=10`, `locationd=5`, `pandad=-10`, `controlsd=-8`, `web_console=10`
 
 ### `camerad`
 

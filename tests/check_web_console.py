@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.display_control import duty_cycle_ns
-from scripts.param_server import (
+from scripts.web_console.backlight import duty_cycle_ns
+from scripts.web_console.console_server import (
     BEV_CONTROL_FIELDS,
     BEV_FRAME,
     BEV_FRAME_MAGIC,
@@ -212,7 +212,7 @@ class ParamStoreTest(unittest.TestCase):
             "steering": ("src/controls/control_params.cc", ("kSteeringInts", "kSteeringFloats")),
             "driving": ("src/controls/control_params.cc", ("kDrivingInts", "kDrivingFloats")),
             "adaptive_cruise": ("src/controls/adaptive_cruise.cc", ("kAdaptiveInts", "kAdaptiveFloats")),
-            # display는 백라이트(display_control.py) 항목도 있어 런타임이 읽는 키만 대조한다
+            # display는 백라이트(backlight.py) 항목도 있어 런타임이 읽는 키만 대조한다
             "display": ("src/common/device_settings.h", ("kDeviceSettingsFloats",)),
         }
         for group, (source, names) in tables.items():
@@ -662,9 +662,10 @@ class BevTest(unittest.TestCase):
 
 class ManagerIpcTest(unittest.TestCase):
     def test_manager_state_matches_cpp(self):
-        """manager.py가 쓰는 managerState 배치(overlayd가 읽는다)와 param_server.py가 읽는 채널 머리가
+        """manager.py가 쓰는 managerState 배치(overlayd가 읽는다)와 웹 콘솔이 읽는 채널 머리가
         ipc_messages.h와 같아야 한다."""
-        from scripts import manager, param_server
+        from scripts import manager
+        from scripts.web_console import console_server
 
         source = (Path(__file__).resolve().parents[1] / "src" / "common" / "ipc_messages.h").read_text(encoding="utf-8")
 
@@ -680,9 +681,9 @@ class ManagerIpcTest(unittest.TestCase):
         self.assertEqual(manager.HEADER_SIZE, size("IpcHeader"))
         self.assertEqual(manager.PROCESS.size, size("ProcessState"))
         self.assertEqual(manager.MANAGER_STATE_SIZE, size("ManagerState"))
-        self.assertEqual(param_server.IPC_MAGIC, constant("kIpcMagic"))
-        self.assertEqual(param_server.IPC_VERSION, constant("kIpcVersion"))
-        self.assertEqual(param_server.IPC_HEADER.size, size("IpcHeader"))
+        self.assertEqual(console_server.IPC_MAGIC, constant("kIpcMagic"))
+        self.assertEqual(console_server.IPC_VERSION, constant("kIpcVersion"))
+        self.assertEqual(console_server.IPC_HEADER.size, size("IpcHeader"))
 
 
 if __name__ == "__main__":

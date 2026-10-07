@@ -230,9 +230,9 @@ const char *CalibrationService::mode_name(const OnlineCalibrator::Snapshot &snap
         : "auto-pose-unvalid";
 }
 
-/* 웹 편집기(param_server)의 "캘리브레이션 초기화"는 요청 파일을 만들기만 한다. 마운트를
+/* 웹 콘솔의 "캘리브레이션 초기화"는 요청 파일을 만들기만 한다. 마운트를
  * 바꾼 뒤 SSH 없이 처음부터 다시 수렴시키려는 것이다. 모델 루프에서 1초에 한 번 tmpfs의
- * 파일 하나를 확인할 뿐이라 비용은 없다. 주행 중 초기화는 param_server가 해제 상태에서만
+ * 파일 하나를 확인할 뿐이라 비용은 없다. 주행 중 초기화는 웹 콘솔이 해제 상태에서만
  * 받는다(openpilot의 Reset Calibration처럼). */
 void CalibrationService::poll_reset_request()
 {

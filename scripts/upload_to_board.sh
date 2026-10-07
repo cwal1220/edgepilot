@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 교차 빌드한 런타임을 MaixCAM2에 올린다: 실행 파일, 보드용 Python, 파라미터 기본값,
-# 그리고 모델(models/supercombo.axmodel, 보드의 것과 체크섬이 다를 때만 보낸다).
+# 교차 빌드한 런타임을 MaixCAM2에 올린다: 실행 파일, 보드용 Python, 웹 콘솔(web_console/, 페이지 포함),
+# 파라미터 기본값, 그리고 모델(models/supercombo.axmodel, 보드의 것과 체크섬이 다를 때만 보낸다).
 # Panda 펌웨어 이미지(build.sh가 만든 build-ax630/panda/obj/panda.bin.signed)가 있으면
 # firmware/panda.bin.signed로 올린다. 판다에 쓰는 것은 웹 콘솔이나 panda_flash다.
 # 보드의 params/는 덮어쓰지 않고, 기본값은 params.defaults/에 두어 없는 파일만 채운다.
@@ -31,20 +31,21 @@ runtime_files=(
   "${BIN_DIR}/imud"
   "${BIN_DIR}/locationd"
   scripts/manager.py
-  scripts/param_server.py
-  scripts/display_control.py
-  scripts/requirements-param-server.txt
+  scripts/requirements-web-console.txt
 )
 [ -x "${BIN_DIR}/pandad" ] && runtime_files+=("${BIN_DIR}/pandad")
 [ -x "${BIN_DIR}/panda_flash" ] && runtime_files+=("${BIN_DIR}/panda_flash")
 param_files=(calibration.json adaptive_cruise.json steering.json driving.json recording.json display.json)
 
-for file in "${runtime_files[@]}" "$AXMODEL"; do
+for file in "${runtime_files[@]}" "$AXMODEL" scripts/web_console/__main__.py; do
   [ -f "$file" ] || { echo "Missing: $file" >&2; exit 1; }
 done
 
 "${SSH[@]}" "$BOARD" "rm -rf '$DEST/.upload' && mkdir -p '$DEST/.upload' '$DEST/models' '$DEST/params' '$DEST/params.defaults' '$DEST/firmware'"
 "${SCP[@]}" "${runtime_files[@]}" "$BOARD:$DEST/.upload/"
+# 웹 콘솔은 디렉터리째 보낸다(파이썬 캐시와 macOS 메타 파일은 빼고)
+COPYFILE_DISABLE=1 tar -C scripts --exclude=__pycache__ --exclude=.DS_Store -cf - web_console |
+  "${SSH[@]}" "$BOARD" "tar -C '$DEST/.upload' -xf -"
 model_sha="$(shasum -a 256 "$AXMODEL" | cut -d' ' -f1)"
 board_sha="$("${SSH[@]}" "$BOARD" "sha256sum '$DEST/models/supercombo.axmodel' 2>/dev/null | cut -d' ' -f1" || true)"
 model_note="model unchanged"
@@ -61,6 +62,7 @@ fi
 "${SSH[@]}" "$BOARD" "set -e; cd '$DEST'
   if [ -f .upload/supercombo.axmodel ]; then mv .upload/supercombo.axmodel models/; fi
   if [ -f .upload/panda.bin.signed ]; then mv .upload/panda.bin.signed firmware/; fi
+  rm -rf web_console && mv .upload/web_console .
   rm -f models/supercombo_npu1.axmodel  # 예전 AI-ISP용 별도 모델(이제 supercombo.axmodel 하나)
   for f in .upload/*; do [ -f \"\$f\" ] && mv \"\$f\" .; done
   for name in ${param_files[*]}; do [ -e params/\$name ] || cp params.defaults/\$name params/; done

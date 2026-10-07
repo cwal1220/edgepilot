@@ -49,9 +49,9 @@ the CPU warp in `src/model/model_input_transform.cc`.
 - `recording_reader.py`
   - the Python mirror of `src/recording/recording_format.h` and `src/common/ipc_messages.h` for
     the analysis tools, checked against the C++ asserts by
-    `tests/check_recording_reader.py` (`scripts/param_server.py` keeps its
+    `tests/check_recording_reader.py` (`scripts/web_console/` keeps its
     own standard-library copy of the layouts it shows, checked by
-    `tests/check_param_server.py`). ControlState's field at offset 56 is
+    `tests/check_web_console.py`). ControlState's field at offset 56 is
     `cluster_speed_kph`, the cluster's display speed; `ego_speed_kph` is the
     wheel speed the controller uses.
 - `make_replay.py`

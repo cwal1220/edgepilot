@@ -30,10 +30,10 @@ argument when the address differs.
 
 ## Parameter server packages
 
-`param_server.py` needs FastAPI and uvicorn:
+The web console needs FastAPI and uvicorn:
 
 ```sh
-python3 -m pip install -r /root/edgepilot/requirements-param-server.txt
+python3 -m pip install -r /root/edgepilot/requirements-web-console.txt
 ```
 
 `pandad` links `libusb-1.0`; install `libusb-1.0-0` on the board if it is

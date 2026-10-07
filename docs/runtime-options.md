@@ -146,13 +146,13 @@ toggles recording.
   - bypasses the SET/CANCEL engage latch for offline replay only. Default is `0`
     and must remain `0` in a vehicle.
 
-## Parameter server and display
+## Web console and display
 
-- `EDGEPILOT_ENABLE_PARAM_SERVER=0|1`
-  - starts the FastAPI parameter editor with the manager. It defaults to the
-    value of `EDGEPILOT_ENABLE_CONTROL`.
-- `EDGEPILOT_PARAM_HOST=address`, `EDGEPILOT_PARAM_PORT=port`
-  - select the parameter editor listen address and port. Defaults are
+- `EDGEPILOT_ENABLE_WEB_CONSOLE=0|1`
+  - starts the web console (FastAPI, `web_console/`) with the manager. It
+    defaults to the value of `EDGEPILOT_ENABLE_CONTROL`.
+- `EDGEPILOT_WEB_CONSOLE_HOST=address`, `EDGEPILOT_WEB_CONSOLE_PORT=port`
+  - select the web console's listen address and port. Defaults are
     `0.0.0.0:8080`.
 - `EDGEPILOT_PARAM_DEFAULTS_DIR=/path/to/params.defaults`
   - directory the editor reads factory defaults from. The default is
@@ -173,7 +173,7 @@ toggles recording.
 `overlayd` turns the backlight on at start (`pwmchip0/pwm3`, level from
 `maix_backlight_value` in `/boot/configs` and `disp_max_backlight` in
 `/boot/board`). The param server then applies `params/display.json` through
-`scripts/display_control.py` on the same PWM: duty = 100 µs period x
+`scripts/web_console/backlight.py` on the same PWM: duty = 100 µs period x
 brightness % x `disp_max_backlight` %, and `enabled: false` sets the duty to 0.
 
 ## Alerts
@@ -210,12 +210,13 @@ runtime replaces it atomically when a stable calibration is learned, while
 repository copy under `params.defaults/` as a fallback. After a mount change,
 let online calibration relearn it.
 
-## Live parameter editor
+## Web console
 
-Open the editor at `http://<board-ip>:8080`. It can also be started directly:
+Open the web console at `http://<board-ip>:8080`. It can also be started
+directly, from the install directory:
 
 ```sh
-python3 /root/edgepilot/param_server.py --host 0.0.0.0 --port 8080
+cd /root/edgepilot && python3 -m web_console --host 0.0.0.0 --port 8080
 ```
 
 > [!WARNING]
@@ -231,10 +232,9 @@ planned path and the lead, round the ego car, with the HUD's colours and limits
 sleeps until the next model frame is due, so a viewer costs about 3% of one
 core at nice 10, and nothing once the tab is closed or hidden. `/api/bev` says
 where the fields sit. `ipc_messages.h` pins those offsets, and
-`check_param_server.py` checks the two match. The page refuses to draw, and says
-so, when the server lists different fields. Deploy `param_server.py` and `web/`
-together. The page loads `web/bev.js` and three.js from `web/` next to
-`param_server.py`. The server gzips each file once in memory (about 250 kB in
+`check_web_console.py` checks the two match. The page refuses to draw, and says
+so, when the server lists different fields. The page loads `bev.js` and three.js
+from `web_console/static/`. The server gzips each file once in memory (about 250 kB in
 all) and then answers with 304 while it is unchanged.
 
 The ego car is our own black 2017 K7 (`web/bev_k7.js`). It is built in code from the
@@ -284,7 +284,7 @@ Beyond the HUD, the BEV shows the following:
   opening VI resets the AX pools.
 - Child process nice levels are fixed as `camerad=0`, `overlayd=10`,
   `recordd=15`, `modeld=-15`, `imud=10`, `locationd=5`, optional `pandad=-10`,
-  `controlsd=-8`, and `param_server=10`.
+  `controlsd=-8`, and `web_console=10`.
 - The front-vehicle marker is always enabled with probability threshold `0.5`.
 - Desired curvature is clamped to openpilot's `0.2 1/m`; it is intentionally not
   a runtime tuning option.

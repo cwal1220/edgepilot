@@ -26,7 +26,7 @@ volatile sig_atomic_t g_stop = 0;
 constexpr uint64_t kCanPublishIntervalNs = 10000000ULL;
 constexpr uint64_t kMaxSendCanAgeNs = 100000000ULL;
 constexpr uint64_t kFirmwareIntervalNs = 1000000000ULL;
-// 웹 콘솔(param_server.py)과 주고받는 파일. 요청 파일에는 쓸 이미지의 버전 문자열이 들어 있다.
+// 웹 콘솔(web_console)과 주고받는 파일. 요청 파일에는 쓸 이미지의 버전 문자열이 들어 있다.
 constexpr char kFirmwareStatusPath[] = "/dev/shm/edgepilot_panda_status.json";
 constexpr char kFlashRequestPath[] = "/dev/shm/edgepilot_panda_flash";
 constexpr char kDefaultFirmwarePath[] = "firmware/panda.bin.signed";

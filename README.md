@@ -70,7 +70,7 @@ openpilot's process boundaries without Cap'n Proto/cereal. Camera pixels never
 pass through the CPU: the frame ring lives in physically contiguous memory, the
 GDC warps it straight into both model views, and IVPS scales it onto the LCD and
 copies it for the recorder. `manager.py` starts and supervises the processes,
-`param_server.py` serves the tuning UI, and `recordd` logs every state next to
+the web console (`web_console/`) serves the tuning UI, and `recordd` logs every state next to
 the H.264 video. See [Split runtime](docs/runtime.md) for each process.
 `scripts/install_autostart.sh` installs a systemd unit that starts the runtime at
 boot in place of the stock launcher.
@@ -90,7 +90,7 @@ the steering angle and yaw rate) follows what the controller asks for closely:
 
 ### What it costs the board
 
-<p align="center"><img src="docs/images/cpu-load.svg" width="760" alt="CPU per process: overlayd 14.9%, camerad 11%, modeld 8.2%, locationd 2%, controlsd 1.6%, imud 1.3%, param_server 0.7%, recordd 0.5%, pandad 0.5%, manager 0.3% of one core; 41% of one core in total"></p>
+<p align="center"><img src="docs/images/cpu-load.svg" width="760" alt="CPU per process: overlayd 14.9%, camerad 11%, modeld 8.2%, locationd 2%, controlsd 1.6%, imud 1.3%, web_console 0.7%, recordd 0.5%, pandad 0.5%, manager 0.3% of one core; 41% of one core in total"></p>
 
 ## The HUD
 
