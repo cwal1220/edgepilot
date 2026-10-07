@@ -47,7 +47,10 @@ The script checks `deps/ax630`, builds the `edgepilot-ax630-build` image
 binaries run against the board's glibc and libstdc++), and configures and builds
 `build-ax630/` inside it with `AX_LIB_DIR=deps/ax630/lib` and an rpath of
 `/opt/lib`. On an Apple Silicon Mac, an arm64 Docker VM such as colima builds
-natively without emulation.
+natively without emulation. The same run builds the [Panda
+firmware](../firmware/panda/README.md) into `build-ax630/panda/obj/` with the
+image's `gcc-arm-none-eabi`, the 10.3 the board's apt has, so a build on the
+board gives the same bytes.
 
 CMake stops with a clear message if `libax_engine`/`libax_sys`, the MaixCDK
 headers, or the board OpenCV are missing.
@@ -64,7 +67,9 @@ scripts/upload_to_board.sh [root@192.168.219.117]
 The script copies the binaries from `build-ax630/bin`, the board-side Python, the
 parameter defaults and `models/supercombo.axmodel`
 ([how it is built](../tools/model/axmodel/README.md)) to `/root/edgepilot`. The
-33 MB model is sent only when its SHA-256 differs from the board's copy.
+33 MB model is sent only when its SHA-256 differs from the board's copy. The
+Panda firmware image, when built, goes to `firmware/panda.bin.signed`; the
+Panda itself is flashed from the web console or with `panda_flash`.
 
 - A running binary cannot be overwritten, so files go to `.upload/` first and
   are moved into place.

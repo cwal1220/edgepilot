@@ -1,6 +1,7 @@
 # STM32F413 보드(black panda, uno, dos)용 Panda 펌웨어와 bootstub.
 #   make          obj/panda.bin.signed(앱, debug 키 서명)와 obj/bootstub.panda.bin
 #   make clean
+#   make OBJ=<디렉터리>/obj   산출물을 다른 곳에(빌드 컨테이너는 build-ax630/panda/obj)
 # arm-none-eabi-gcc와 python3만 있으면 된다. newlib은 쓰지 않고(-ffreestanding)
 # 서명도 표준 라이브러리로 한다. debug 키로 서명하므로 debug 서명을 받는 bootstub이
 # 올라간 Panda에서만 돈다. 원래의 board/SConscript와 같은 명령을 같은 순서로 낸다.
@@ -10,7 +11,7 @@ PREFIX ?= arm-none-eabi-
 CC := $(PREFIX)gcc
 OBJCOPY := $(PREFIX)objcopy
 PYTHON ?= python3
-OBJ := obj
+OBJ ?= obj
 VERSION := $(shell $(PYTHON) panda_version.py)
 ifeq ($(VERSION),)
 $(error panda_version.py failed)
@@ -20,7 +21,8 @@ FLAGS := -Wall -Wextra -Wstrict-prototypes -Werror -mlittle-endian -mthumb -nost
          -T$(CURDIR)/board/stm32fx/stm32fx_flash.ld -std=gnu11 -ffreestanding \
          -mcpu=cortex-m4 -mhard-float -DSTM32F4 -DSTM32F413xx -mfpu=fpv4-sp-d16 \
          -fsingle-precision-constant -Os -g -DPANDA -DALLOW_DEBUG $(EXTRA_CFLAGS)
-INCLUDES := -Iboard/stm32fx/inc -I. -Iboard
+# 소스는 생성 헤더를 "obj/..."로 읽으므로 OBJ의 부모를 맨 앞에 둔다(기본이면 .)
+INCLUDES := -I$(OBJ)/.. -Iboard/stm32fx/inc -I. -Iboard
 APP_START := 0x8004000
 
 all: $(OBJ)/panda.bin.signed $(OBJ)/bootstub.panda.bin

@@ -41,6 +41,11 @@ including the board, that is `apt install gcc-arm-none-eabi`; on macOS,
 Homebrew's `arm-none-eabi-gcc`. Built with the same compiler, the output is
 byte-identical to openpilot_c2's SCons build of the same sources.
 
+`tools/docker_ax630/build.sh` builds it next to the runtime, into
+`build-ax630/panda/obj/` (`make OBJ=<dir>/obj` puts the output anywhere), with
+the build image's `gcc-arm-none-eabi` 10.3, the one the board's apt installs;
+`scripts/upload_to_board.sh` copies the image to the board.
+
 Builds are signed with the debug key in `certs/`, so they run only on a Panda
 whose bootstub accepts debug signatures. A Panda that already runs a debug
 build (its version ends in `-DEBUG`) has such a bootstub.
@@ -55,9 +60,9 @@ the board agree. openpilot_c2 built every version as `DEV-23456789-DEBUG`.
 
 ## Flashing
 
-The board flashes the Panda over the USB-C port it is already on. The image is
-`obj/panda.bin.signed`, installed on the board as `firmware/panda.bin.signed`
-in the install directory (`EDGEPILOT_PANDA_FIRMWARE` overrides the path).
+The board flashes the Panda over the USB-C port it is already on, with the image
+`upload_to_board.sh` installs as `firmware/panda.bin.signed` in the install
+directory (`EDGEPILOT_PANDA_FIRMWARE` overrides the path).
 
 From the web console, the device settings tab (기기 설정) has a Panda firmware
 card: the version the Panda runs, the installed image, and a flash button. The

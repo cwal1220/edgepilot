@@ -9,18 +9,19 @@
 | 스크립트 | 사용 | 하는 일 |
 | --- | --- | --- |
 | `fetch_maixcam2_sdk.sh` | `[root@보드]` | MaixCAM2 교차 빌드 의존성을 `deps/ax630/`에 받는다. MSP SDK `v3.0.0_20250319114413`(SHA256 고정)과 MaixCDK 헤더(커밋 `30f4b8b`)는 네트워크에서, 보드의 `/opt/lib`, `libmaixcam_lib.so.1.2.5`, `libsamplerate`, OpenCV 4.11은 보드에서 SSH로 그대로 복사한다 |
-| `upload_to_board.sh` | `[root@보드]` | `build-ax630/bin`의 런타임, 보드용 Python, 파라미터 기본값, 모델(`models/supercombo.axmodel`, 바뀌었을 때만)을 보드에 올린다. 보드의 `/usr/lib/libmaixcam_lib.so`가 빌드에 쓴 1.2.5와 다르면 1.2.5를 올리고 링크를 바꾼다(순정 파일은 `.stock`) |
+| `upload_to_board.sh` | `[root@보드]` | `build-ax630/bin`의 런타임, 보드용 Python, 파라미터 기본값, 모델(`models/supercombo.axmodel`, 바뀌었을 때만), Panda 펌웨어 이미지(빌드돼 있으면 `firmware/panda.bin.signed`로)를 보드에 올린다. 보드의 `/usr/lib/libmaixcam_lib.so`가 빌드에 쓴 1.2.5와 다르면 1.2.5를 올리고 링크를 바꾼다(순정 파일은 `.stock`) |
 | `install_autostart.sh` | `[--remove] [root@보드]` | `edgepilot.service`(부팅 때 매니저 실행, 순정 런처 대신), `camcal.service`, `wifi-dhcp-renew.service`를 설치하고 `/boot/configs`에 `maix_npu_ai_isp=1`을 넣는다 |
 | `install_boot_tuning.sh` | `[--remove] [root@보드]` | 부팅을 빠르게 한다: AX 드라이버를 부팅 초반에 올리는 `edgepilot-drivers.service`를 설치하고, 쓰지 않는 순정 서비스를 끄고, journal 크기를 묶는다. 다음 부팅부터 적용된다([부팅 시간](../docs/boot-time.md)) |
 | `run_host_tests.sh` | | 호스트 단위 테스트를 빌드하고 `ctest`로 전부 돌린다([tests/](../tests/README.md)). 보드도 `deps/`도 필요 없다 |
 
 빌드 자체는 `tools/docker_ax630/build.sh`가 arm64 Ubuntu 22.04 컨테이너에서 한다(결과는
-`build-ax630/bin`). 보드 기본 주소는 `root@192.168.219.117`이고 SSH 키 인증을 쓴다.
+`build-ax630/bin`, Panda 펌웨어는 `build-ax630/panda/obj`). 보드 기본 주소는 `root@192.168.219.117`이고 SSH 키 인증을 쓴다.
 
 환경 변수로 바꿀 수 있는 것:
 
 - `upload_to_board.sh`: `models/supercombo.axmodel`은 보드 것과 체크섬이 다를 때만 보낸다. `EDGEPILOT_BIN_DIR`
-  (기본 `build-ax630/bin`), `EDGEPILOT_BOARD_DIR`(기본 `/root/edgepilot`). 실행 중인 바이너리는
+  (기본 `build-ax630/bin`), `EDGEPILOT_BOARD_DIR`(기본 `/root/edgepilot`), `EDGEPILOT_PANDA_IMAGE`(기본
+  `build-ax630/panda/obj/panda.bin.signed`). 실행 중인 바이너리는
   덮어쓸 수 없으므로 `.upload/`에 올린 뒤 `mv`로 바꾼다. 매니저는 다시 띄우지 않는다. 보드의
   `params/`는 덮어쓰지 않고, 기본값은 `params.defaults/`에 두어 없는 파일만 채운다.
 - `run_host_tests.sh`: `EDGEPILOT_HOST_BUILD_DIR`(기본 `build-host`), `JOBS`.
