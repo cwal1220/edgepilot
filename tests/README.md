@@ -57,7 +57,8 @@ build-host/bin/gtest_lateral_learners --gtest_filter='LateralLearners.Torque*'
 `ctest`에 등록돼 함께 돈다. 뒤의 것은 `tools/model/recording_reader.py`의 배치와 기록 타입 번호,
 도구의 MaixCAM2 카메라 내부 파라미터를 C++ 헤더의 고정값과 대조한다(numpy가 필요하고, 없으면 건너뛴다).
 파라미터 저장소, 런타임 스키마 동기화, `params/*.json`의 UI 메타데이터, UI min/max와 C++
-`Json*Field` 클램프 표의 일치를 본다.
+`Json*Field` 클램프 표의 일치를 본다. 판다 펌웨어 카드가 설치된 이미지를 `panda_firmware.cc`와
+같은 규칙으로 보고, 주차 중일 때만 플래싱 요청 파일을 쓰는지도 본다.
 
 ## 인자를 주면 도는 모드
 

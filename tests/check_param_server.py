@@ -36,7 +36,14 @@ from scripts.param_server import (
     LocalizationReader,
     LOCALIZATION_FLAGS,
     LOCALIZATION_INPUT_FLAGS,
+    PANDA_APP_MAX_BYTES,
+    PANDA_CONTROL_FIELDS,
+    PANDA_FLASH_REQUEST_PATH,
+    PANDA_SIGNATURE_BYTES,
+    PANDA_STATUS_PATH,
+    GEAR_PARK,
     PARAM_METADATA,
+    PandaFirmware,
     ParamStore,
     WEB_DIR,
     WebAssets,
@@ -44,6 +51,7 @@ from scripts.param_server import (
     bev_layout,
     boottime_ns,
     fixed_lateral_values,
+    panda_image_info,
 )
 
 
@@ -371,6 +379,131 @@ class CalibrationControlTest(unittest.TestCase):
 
     def test_page_has_reset_button(self):
         self.assertIn("/api/calibration/reset", HTML)
+
+
+def panda_image(version="EDGE-f9907afb-DEBUG", body=1024):
+    """sign.py의 꼴: [본문 길이][... 버전 ...][VERS][2] 뒤에 서명 128바이트."""
+    data = bytearray(b"\x11" * body)
+    struct.pack_into("<I", data, 0, body)
+    data[63:64 + len(version) + 1] = b"\0" + version.encode() + b"\0"
+    data[body - 8:body] = b"VERS" + struct.pack("<I", 2)
+    return bytes(data) + b"\xab" * PANDA_SIGNATURE_BYTES
+
+
+class PandaFirmwareTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.status = root / "edgepilot_panda_status.json"
+        self.request = root / "edgepilot_panda_flash"
+        self.image = root / "panda.bin.signed"
+        self.control = root / "edgepilot_control_state"
+        self.panda = PandaFirmware(str(self.status), str(self.request), str(self.image), str(self.control))
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def publish_pandad(self, mode="app", version="DEV-23456789-DEBUG", hw_type=3, flash=None, stamp=None):
+        self.status.write_text(json.dumps({
+            "stamp_ns": boottime_ns() if stamp is None else stamp, "mode": mode, "serial": "abc",
+            "hw_type": hw_type, "hw_name": "black panda", "firmware_version": version,
+            "flash": flash or {"state": "idle", "step": "", "percent": 0, "error": "", "detail": "",
+                               "version": "", "stamp_ns": 0}}))
+
+    def publish_control(self, gear=GEAR_PARK, speed=0.0, vehicle_fresh=1, engaged=0, stamp=None):
+        payload = bytearray(CONTROL_STATE_SIZE)
+        for name, value in (("engaged", engaged), ("vehicle_fresh", vehicle_fresh)):
+            struct.pack_into("<I", payload, PANDA_CONTROL_FIELDS[name], value)
+        struct.pack_into("<i", payload, PANDA_CONTROL_FIELDS["gear"], gear)
+        struct.pack_into("<f", payload, PANDA_CONTROL_FIELDS["ego_speed_kph"], speed)
+        stamp = boottime_ns() if stamp is None else stamp
+        self.control.write_bytes(IPC_HEADER.pack(IPC_MAGIC, 1, len(payload), 0, 2, stamp, len(payload), 0)
+                                 + bytes(payload))
+
+    def test_constants_match_cpp(self):
+        root = Path(__file__).resolve().parents[1]
+        messages = (root / "src" / "common" / "ipc_messages.h").read_text(encoding="utf-8")
+        control = {name: int(at) for name, at in re.findall(r"EDGEPILOT_CONTROL_STATE_AT\((\w+), (\d+)\);", messages)}
+        for name, at in PANDA_CONTROL_FIELDS.items():
+            self.assertEqual(control.get(name), at, name)
+        can_frame = (root / "src" / "car" / "can_frame.h").read_text(encoding="utf-8")
+        self.assertEqual(int(re.search(r"kGearPark = (\d+);", can_frame).group(1)), GEAR_PARK)
+        protocol = (root / "src" / "panda" / "panda_protocol.h").read_text(encoding="utf-8")
+        self.assertIn(f"kPandaSignatureBytes = {PANDA_SIGNATURE_BYTES};", protocol)
+        self.assertIn("kPandaAppMaxBytes = 3 * 16 * 1024;", protocol)
+        self.assertEqual(PANDA_APP_MAX_BYTES, 3 * 16 * 1024)
+        pandad = (root / "src" / "panda" / "pandad.cc").read_text(encoding="utf-8")
+        self.assertIn(f'kFirmwareStatusPath[] = "{PANDA_STATUS_PATH}";', pandad)
+        self.assertIn(f'kFlashRequestPath[] = "{PANDA_FLASH_REQUEST_PATH}";', pandad)
+
+    def test_image_info_follows_panda_firmware_rules(self):
+        self.assertFalse(panda_image_info(str(self.image))["present"])
+        self.image.write_bytes(panda_image())
+        info = panda_image_info(str(self.image))
+        self.assertTrue(info["valid"], info["error"])
+        self.assertEqual((info["version"], info["size"]), ("EDGE-f9907afb-DEBUG", 1024 + PANDA_SIGNATURE_BYTES))
+        broken = bytearray(panda_image())
+        broken[0] ^= 4
+        self.image.write_bytes(bytes(broken))
+        self.assertFalse(panda_image_info(str(self.image))["valid"])
+        self.image.write_bytes(panda_image(body=PANDA_APP_MAX_BYTES))
+        self.assertFalse(panda_image_info(str(self.image))["valid"])
+
+    def test_flash_is_requested_only_when_parked(self):
+        self.image.write_bytes(panda_image())
+        self.publish_pandad()
+        self.publish_control(gear=5)
+        status = self.panda.status()
+        self.assertEqual(status["blocker"], "not_park")
+        self.assertFalse(status["up_to_date"])
+        with self.assertRaises(PermissionError):
+            self.panda.request_flash("EDGE-f9907afb-DEBUG")
+        self.assertFalse(self.request.exists())
+        for blocker, kwargs in (("moving", {"speed": 3.0}), ("engaged", {"engaged": 1}),
+                                ("vehicle_stale", {"vehicle_fresh": 0}),
+                                ("control_stale", {"stamp": boottime_ns() - 5_000_000_000})):
+            self.publish_control(**kwargs)
+            self.assertEqual(self.panda.status()["blocker"], blocker)
+
+        self.publish_control()
+        with self.assertRaises(PermissionError):
+            self.panda.request_flash("EDGE-00000000-DEBUG")  # 페이지가 본 이미지가 아니다
+        status = self.panda.request_flash("EDGE-f9907afb-DEBUG")
+        self.assertTrue(status["request_pending"])
+        self.assertEqual(self.request.read_text(), "EDGE-f9907afb-DEBUG\n")
+        with self.assertRaises(PermissionError):
+            self.panda.request_flash("EDGE-f9907afb-DEBUG")  # 이미 요청했다
+
+    def test_flash_needs_a_running_pandad_and_a_panda(self):
+        self.image.write_bytes(panda_image())
+        self.publish_control()
+        with self.assertRaises(PermissionError):
+            self.panda.request_flash("EDGE-f9907afb-DEBUG")
+        self.publish_pandad(stamp=boottime_ns() - 10_000_000_000)
+        self.assertFalse(self.panda.status()["available"])
+        self.publish_pandad(mode="none", version="")
+        with self.assertRaises(PermissionError):
+            self.panda.request_flash("EDGE-f9907afb-DEBUG")
+        self.publish_pandad(hw_type=7)
+        with self.assertRaises(PermissionError):
+            self.panda.request_flash("EDGE-f9907afb-DEBUG")
+        self.publish_pandad(mode="bootstub", version="", hw_type=0)  # 앱이 서지 않아도 다시 쓸 수 있다
+        self.assertTrue(self.panda.request_flash("EDGE-f9907afb-DEBUG")["request_pending"])
+
+    def test_status_reports_flash_progress(self):
+        self.publish_pandad(version="EDGE-f9907afb-DEBUG",
+                            flash={"state": "failed", "step": "write", "percent": 40, "error": "app_timeout",
+                                   "detail": "x", "version": "EDGE-f9907afb-DEBUG", "stamp_ns": 1})
+        self.image.write_bytes(panda_image())
+        status = self.panda.status()
+        self.assertTrue(status["up_to_date"])
+        self.assertEqual(status["flash"]["error"], "app_timeout")
+        self.assertIn("bootstub", status["flash_error_text"])
+        self.assertEqual(status["flash_step_text"], "쓰는 중")
+
+    def test_page_has_panda_card(self):
+        self.assertIn("/api/panda/flash", HTML)
+        self.assertIn("pandaSection()", HTML)
 
 
 class LocalizationStateTest(unittest.TestCase):
