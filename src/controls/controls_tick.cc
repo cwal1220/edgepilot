@@ -392,7 +392,7 @@ void EngageEvents::update(const LateralControlResult &result, const VehicleCanSt
 
 namespace {
 
-// 학습기·컨트롤러 상태를 HUD와 웹 편집기가 읽는 LearnerState로(timestamp_ns 제외).
+// 학습기·컨트롤러 상태를 HUD와 웹 콘솔이 읽는 LearnerState로(timestamp_ns 제외).
 LearnerState make_learner_state(const LateralLearners &learners,
                                 const SteeringParams &params, float road_bank_lat_accel,
                                 bool live_delay_in_use, float plan_delay_s) {

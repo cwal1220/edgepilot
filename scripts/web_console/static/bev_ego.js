@@ -1,8 +1,10 @@
-// The ego car for the BEV (bev.js): a 2017 Kia K7 (YG, "All New K7") in Aurora Black Pearl, built in
-// code from its published dimensions (4970 x 1870 x 1470 mm, wheelbase 2855, tracks 1602 / 1610,
-// 245/45R18) and from measurements of Kia's studio photographs of it from the side, the front and
-// the back (Kia Heritage, All-New K7), with owners' photographs for the details. Metres, x forward,
-// y left, z up, centred on x and y, standing on z = 0.
+// The ego car for the BEV (bev.js): EGO_SIZE and makeEgo(renderer) are all the BEV knows of it, so
+// another car takes another model behind the same two exports. This one is the car edgepilot drives
+// today, a 2017 Kia K7 (YG, "All New K7") in Aurora Black Pearl, built in code from its published
+// dimensions (4970 x 1870 x 1470 mm, wheelbase 2855, tracks 1602 / 1610, 245/45R18) and from
+// measurements of Kia's studio photographs of it from the side, the front and the back (Kia Heritage,
+// All-New K7), with owners' photographs for the details. Metres, x forward, y left, z up, centred on
+// x and y, standing on z = 0.
 //
 // What makes it a K7 rather than a sedan:
 //   - a high body under a slim glasshouse: the hood rises from 0.75 m at its nose to 1.04 m at the
@@ -24,8 +26,8 @@
 
 import * as THREE from "three";
 
-export const K7 = {length: 4.97, width: 1.87, height: 1.47};
-const X = K7.length / 2, W = K7.width / 2;
+export const EGO_SIZE = {length: 4.97, width: 1.87, height: 1.47};
+const X = EGO_SIZE.length / 2, W = EGO_SIZE.width / 2;
 const AXLES = [X - 0.975, X - 0.975 - 2.855];        // front overhang 975 mm (the rest of 4970 - 2855 behind)
 const TRACKS = [1.602 / 2, 1.610 / 2];
 const TYRE = {radius: 0.339, width: 0.245, rim: 0.2286};        // 245/45R18
@@ -690,10 +692,10 @@ function studio(renderer) {
   return studios.get(renderer);
 }
 
-// The K7 as a group of meshes, one per material, for the renderer that draws it. Its lamps switch
+// The car as a group of meshes, one per material, for the renderer that draws it. Its lamps switch
 // with group.setLamps({left, right, brake}): the turn signals' lit lenses show while they are on, and
 // braking brightens the tail lamps and lights the high brake light. It returns whether anything changed.
-export function makeK7(renderer) {
+export function makeEgo(renderer) {
   const parts = new Parts();
   body(parts);
   front(parts);
@@ -701,7 +703,7 @@ export function makeK7(renderer) {
   sides(parts);
   AXLES.forEach((x, a) => { for (const s of [1, -1]) wheel(parts, x, s * TRACKS[a]); });
   const lit = materials(studio(renderer)), group = parts.meshes(lit);
-  group.name = "K7";
+  group.name = "ego";
   const turns = ["turnLeft", "turnRight"].map((name) => group.getObjectByName(name));
   let now = null;
   group.setLamps = ({left = false, right = false, brake = false} = {}) => {

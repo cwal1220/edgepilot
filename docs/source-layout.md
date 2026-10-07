@@ -465,14 +465,25 @@ only in the board build, against `deps/ax630` from
     (`EDGEPILOT_ENABLE_CONTROL`, `EDGEPILOT_ENABLE_PANDA`, `EDGEPILOT_ENABLE_WEB_CONSOLE`) and
     with what nice value.
 - `scripts/web_console/`
-  - the web console (`EDGEPILOT_ENABLE_WEB_CONSOLE`, `python3 -m web_console`):
-    the FastAPI server, the MaixCAM2 backlight helper it calls (PWM3,
-    `backlight.py`), and its page in `static/`.
+  - the web console (`EDGEPILOT_ENABLE_WEB_CONSOLE`, `python3 -m web_console`).
+    `console_server.py` is the FastAPI app and its routes; each card or tab has
+    its own module behind it: `param_store.py` and `param_metadata.py` (the
+    parameter files, their labels, sections and ranges), `process_status.py`
+    (the manager's process table, and signalling a process to reload),
+    `learner_monitor.py` (learner and localization state), `calibration_reset.py`,
+    `panda_update.py` (the Panda firmware card), `bev_stream.py`,
+    `backlight.py` (the MaixCAM2 backlight, PWM3) and `static_assets.py`.
+    `shm_channel.py` reads the shared-memory channels and `state_layout.py` holds
+    the ModelState and ControlState offsets they share.
 - `scripts/web_console/static/`
-  - the console's BEV tab, drawn by the browser: `bev.js` (three.js view, ported
-    from sv_recorder_bev), `bev_k7.js` (the ego car, a black 2017 K7 made in code),
-    `bev_car.js` (the lead's car model), `bev_data.js` (reads the ModelState and
-    ControlState bytes the console streams), and three.js 0.186.1 in `three/`.
+  - the page, plain ES modules with no build step: `index.html`, `console.css`,
+    `console.js` (header, tabs, routing), `ui.js` (DOM helpers, cards, toasts,
+    API calls, polling), `param_state.js` and `param_view.js` (the parameter
+    tabs), `learner_view.js`, `panda_card.js`, and the BEV tab: `bev_view.js`,
+    `bev.js` (three.js view, ported from sv_recorder_bev), `bev_ego.js` (the
+    ego car; today a black 2017 K7 made in code), `bev_car.js` (the lead's car
+    model), `bev_data.js` (reads the ModelState and ControlState bytes the
+    console streams), and three.js 0.186.1 in `three/`.
 
 ## Tools and tests
 

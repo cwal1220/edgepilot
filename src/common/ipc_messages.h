@@ -163,11 +163,12 @@ static_assert(sizeof(ModelState) == 3576 && offsetof(ModelState, plan_yaw) == 32
                   offsetof(ModelState, camera_offset_m) == 3520 &&
                   offsetof(ModelState, gas_press_probs) == 3528,
               "ModelState layout is shared with the recording reader");
-// 웹 콘솔(web_console, MODEL_CALIBRATION_OFFSET)이 이 위치에서 보정 상태를 읽는다.
+// 웹 콘솔(web_console/state_layout.py MODEL_CALIBRATION_AT)이 이 위치에서 보정 상태를 읽는다.
 static_assert(offsetof(ModelState, calibration) == 3224 && sizeof(CalibrationState) == 32,
               "ModelState.calibration is read by the web console");
 /* 웹 BEV 탭(scripts/web_console/static/bev_data.js)이 위치로 읽는 필드. 서버는 페이로드를 그대로 보내고
- * 웹 콘솔의 BEV_MODEL_FIELDS가 페이지에 위치를 알려 준다(check_web_console.py가 대조). */
+ * 웹 콘솔(web_console/state_layout.py MODEL_STATE_AT)이 페이지에 위치를 알려 준다(check_web_console.py가
+ * 대조). */
 #define EDGEPILOT_MODEL_STATE_AT(field, expected) \
     static_assert(offsetof(ModelState, field) == (expected), \
                   "ModelState." #field " moved: web BEV")
@@ -392,7 +393,7 @@ struct LearnerState {
     float plan_delay_s = 0.0f;  // 실제 쓴 경로 지연(lagd 사용 중이면 추정값). 예전 기록은 0
 };
 /* recordd가 그대로 저장하고 tools/model/recording_reader.py LEARNER_STATE와
- * 웹 콘솔의 LEARNER_FIELDS가 위치로 읽는다(check_web_console.py가 대조). */
+ * 웹 콘솔(web_console/learner_monitor.py LEARNER_FIELDS)이 위치로 읽는다(check_web_console.py가 대조). */
 #define EDGEPILOT_LEARNER_STATE_AT(field, expected) \
     static_assert(offsetof(LearnerState, field) == (expected), \
                   "LearnerState." #field " moved")

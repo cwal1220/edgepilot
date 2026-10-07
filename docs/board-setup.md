@@ -28,7 +28,7 @@ ssh-copy-id root@192.168.219.117
 `fetch_maixcam2_sdk.sh` and `upload_to_board.sh` take the board as their first
 argument when the address differs.
 
-## Parameter server packages
+## Web console packages
 
 The web console needs FastAPI and uvicorn:
 

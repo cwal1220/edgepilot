@@ -10,7 +10,7 @@ python3 /root/edgepilot/manager.py [supercombo.axmodel]
 
 The manager changes to its own directory, so it can be started from anywhere.
 The no-argument command selects `models/supercombo.axmodel` (or `EDGEPILOT_MODEL`),
-K7 control enabled, Panda TX enabled, and the FastAPI parameter server enabled.
+K7 control enabled, Panda TX enabled, and the FastAPI web console enabled.
 `pandad` is off unless `EDGEPILOT_ENABLE_PANDA=1`. Every setting can be
 overridden with its environment variable; see
 [Runtime options](runtime-options.md).
@@ -59,7 +59,7 @@ keeps the AX system open.
   previous role on exit; `EDGEPILOT_USB_ROLE=host|device` instead fixes the
   role at start and leaves it (the boot service sets `host`)
 - starts, in this order: `camerad`, `modeld`, `imud` and `locationd` (not in
-  rehearsal mode), then `pandad`, `controlsd`, and the parameter server when
+  rehearsal mode), then `pandad`, `controlsd`, and the web console when
   enabled; `overlayd` and `recordd` start once `camerad` has run for 1.5 s
   (opening VI resets the AX pools); binaries that are not installed are
   skipped

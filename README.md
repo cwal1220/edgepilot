@@ -147,7 +147,7 @@ source.
 ## Getting started
 
 1. **Prepare the board.** See [Board setup](docs/board-setup.md) for SSH, the
-   parameter server packages, and the rootfs caveats.
+   web console packages, and the rootfs caveats.
 2. **Build.** Fetch the SDK and the board libraries once, then build in an
    arm64 Ubuntu 22.04 container
    ([details](docs/build-and-deploy.md)):

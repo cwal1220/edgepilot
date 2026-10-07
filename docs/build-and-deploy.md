@@ -65,6 +65,7 @@ scripts/upload_to_board.sh [root@192.168.219.117]
 ```
 
 The script copies the binaries from `build-ax630/bin`, the board-side Python, the
+web console (`web_console/`, the server and its page, replaced as a whole), the
 parameter defaults and `models/supercombo.axmodel`
 ([how it is built](../tools/model/axmodel/README.md)) to `/root/edgepilot`. The
 33 MB model is sent only when its SHA-256 differs from the board's copy. The
@@ -82,9 +83,8 @@ Panda itself is flashed from the web console or with `panda_flash`.
   `deps/ax630/maix/libmaixcam_lib.so` (the 1.2.5 copy the build links against),
   the script installs that copy as `/usr/lib/libmaixcam_lib.so.1.2.5` and points
   `libmaixcam_lib.so` at it. A stock file is kept as `libmaixcam_lib.so.stock`.
-- It does not upload `replayd` ([rehearsal](rehearsal.md)) or `scripts/web_console/`
-  (the editor's BEV tab). Copy them into the install directory by hand, as
-  `replayd` and `web/`.
+- It does not upload `replayd` ([rehearsal](rehearsal.md)). Copy it into the
+  install directory by hand.
 - `EDGEPILOT_BOARD_DIR` changes the install directory and `EDGEPILOT_BIN_DIR` the binary
   directory.
 

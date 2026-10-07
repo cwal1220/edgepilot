@@ -4,8 +4,9 @@
 //
 // Ported from sv_recorder_bev (static/bev.js): its renderer, ground, footprints, corridor and car
 // (bev_car.js, now the lead's); the scene is ours, in vehicle coordinates: metres, x forward from the
-// front bumper, y left, z up. The ego car is our own black K7 (bev_k7.js). It draws as the HUD does (hud_scene.cc draw_scene): the same reach, lane alpha,
-// road edge confidence, path colours, lead threshold and risk colour; lines also in laneless mode.
+// front bumper, y left, z up. The ego car is the car's own model (bev_ego.js). It draws as the HUD
+// does (hud_scene.cc draw_scene): the same reach, lane alpha, road edge confidence, path colours, lead
+// threshold and risk colour; lines also in laneless mode.
 // Beyond the HUD: the path is tinted amber to red where the model plans to slow down, with the
 // slowest speed (or STOP) where it is; arcs of the curvature controlsd asks for and the one it gets;
 // the lead's brake lights; and, standing, what the departure alert decides from.
@@ -20,11 +21,11 @@ import {OrbitControls} from "./three/OrbitControls.js";
 import {CSS2DRenderer, CSS2DObject} from "./three/CSS2DRenderer.js";
 import {carModel, fit, wheel} from "./bev_car.js";
 import {BevStream} from "./bev_data.js";
-import {K7, makeK7} from "./bev_k7.js";
+import {EGO_SIZE, makeEgo} from "./bev_ego.js";
 
 // The ground: 5 m and 20 m grid lines, GRID.ahead in front and GRID.side to each side.
 const GRID = {ahead: 160, behind: 8, side: 25, major: 20};
-const EGO = [K7.length, K7.width, K7.height];
+const EGO = [EGO_SIZE.length, EGO_SIZE.width, EGO_SIZE.height];
 const LEAD = [4.5, 1.8, 1.5];            // the model gives the lead no size: a typical car
 const LANE_WIDTH = 0.15;                 // a lane line as a band as wide as its paint
 const CURB = {width: 0.2, height: 0.12};
@@ -42,7 +43,7 @@ const SLOW = {floor: 3, tint: 0.1, label: 0.15, labelKph: 5, stop: 0.5};
 // the lead's brake lights: on at accel m/s² or below, off again above off (the model's lead accel
 // is cautious: below -1 in 2% of the 2026-10-04 lead frames, never below -2)
 const BRAKE = {on: -1.0, off: -0.6};
-// the ego car's turn signals flash as the K7's own lamps do (CGW1, 2026-10-04 drives: every 0.70 s)
+// the ego car's turn signals flash as the car's own lamps do (CGW1, 2026-10-04 drives: every 0.70 s)
 const BLINK = {period: 0.7, duty: 0.5};
 // curvature arcs: as far as the car goes in 2.5 s, from 3 m/s
 const ARC = {seconds: 2.5, min: 10, max: 70, width: 0.16, tick: 0.7, speed: 3};
@@ -557,7 +558,7 @@ export class BevView {
     // the ego car, its front bumper at x = 0; its turn signals and brake lights, and their glow on the
     // road, follow the car's own (drawEgo())
     const [l, w] = EGO, x = -l / 2;
-    this.ego = makeK7(this.renderer);
+    this.ego = makeEgo(this.renderer);
     this.ego.position.x = x;
     this.egoGlow = new Instances(new THREE.PlaneGeometry(1, 1), shader(...FOOTPRINT), {order: 4, extra: {iSize: 3, iStyle: 4}});
     const shadow = new Instances(new THREE.PlaneGeometry(1, 1), shader(...FOOTPRINT), {order: 4, extra: {iSize: 3, iStyle: 4}});

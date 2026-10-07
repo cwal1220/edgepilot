@@ -63,7 +63,9 @@ true.
 - `EDGEPILOT_PARAMS_DIR=/path/to/params`
   - overrides the shared runtime parameter directory, and is the only way to
     relocate parameter files; there are no per-file overrides. The default is
-    `params/` relative to the runtime working directory. Stable online
+    `params/` relative to the runtime working directory. The web console reads
+    the factory defaults from the directory beside it with `.defaults` added
+    (`params.defaults/`, filled by the upload script). Stable online
     calibration is stored atomically in `params/calibration.json` and restored
     before the first model frame. Manual `EDGEPILOT_CALIB_*` values take
     precedence and seed this file.
@@ -154,25 +156,15 @@ toggles recording.
 - `EDGEPILOT_WEB_CONSOLE_HOST=address`, `EDGEPILOT_WEB_CONSOLE_PORT=port`
   - select the web console's listen address and port. Defaults are
     `0.0.0.0:8080`.
-- `EDGEPILOT_PARAM_DEFAULTS_DIR=/path/to/params.defaults`
-  - directory the editor reads factory defaults from. The default is
-    `params.defaults/` under the runtime working directory; the upload script
-    fills it from the repository's `params/`.
-- `EDGEPILOT_LEARNER_STATE_PATH`, `EDGEPILOT_MODEL_STATE_PATH`,
-  `EDGEPILOT_CONTROL_STATE_PATH`, `EDGEPILOT_LOCALIZATION_STATE_PATH`
-  - shared-memory files the editor reads live state from (defaults
-    `/dev/shm/edgepilot_learner_state`, `edgepilot_model_state`,
-    `edgepilot_control_state`, `edgepilot_localization`). Tests point them at
-    temporary files.
 - `EDGEPILOT_CALIBRATION_RESET_PATH`
-  - the request file behind the editor's calibration reset (default
+  - the request file behind the web console's calibration reset (default
     `/dev/shm/edgepilot_calibration_reset`). `modeld` checks it every second;
     when it exists, `modeld` deletes it and restarts calibration from the
     beginning. Both sides read the same variable.
 
 `overlayd` turns the backlight on at start (`pwmchip0/pwm3`, level from
 `maix_backlight_value` in `/boot/configs` and `disp_max_backlight` in
-`/boot/board`). The param server then applies `params/display.json` through
+`/boot/board`). The web console then applies `params/display.json` through
 `scripts/web_console/backlight.py` on the same PWM: duty = 100 µs period x
 brightness % x `disp_max_backlight` %, and `enabled: false` sets the duty to 0.
 
@@ -219,8 +211,16 @@ directly, from the install directory:
 cd /root/edgepilot && python3 -m web_console --host 0.0.0.0 --port 8080
 ```
 
+The header shows the processes the manager runs (its `ManagerState`, a red or
+amber pill when one is down or the manager stopped publishing) and the
+backlight. There is one tab per parameter file, then 실시간 학습 (the learners,
+calibration and steering lag) and BEV. The address keeps the tab (`#steering`,
+`#bev`), so a reload stays on it, and only the tab on screen polls the board.
+Parameter tabs search, show only the changed items, mark each item's default
+and put it back with one press. A value is written as soon as it is changed.
+
 > [!WARNING]
-> The editor has no authentication and writes steering parameters that
+> The web console has no authentication and writes steering parameters that
 > `controlsd` hot-reloads while driving. Expose it only on a trusted vehicle
 > or development network.
 
@@ -233,15 +233,17 @@ sleeps until the next model frame is due, so a viewer costs about 3% of one
 core at nice 10, and nothing once the tab is closed or hidden. `/api/bev` says
 where the fields sit. `ipc_messages.h` pins those offsets, and
 `check_web_console.py` checks the two match. The page refuses to draw, and says
-so, when the server lists different fields. The page loads `bev.js` and three.js
+so, when the server does not list a field it reads. The page loads `bev.js` and three.js
 from `web_console/static/`. The server gzips each file once in memory (about 250 kB in
 all) and then answers with 304 while it is unchanged.
 
-The ego car is our own black 2017 K7 (`web/bev_k7.js`). It is built in code from the
-published dimensions and from measurements of Kia's studio photographs (side,
-front, back): its proportions, grille, lamps, chrome, plates and wheels. Its
-tail lamps are lit. It costs the browser 26k triangles in 22 meshes, and is
-made once when the tab opens. The lead is the generic car (`web/bev_car.js`).
+The ego car is the car's own model (`web_console/static/bev_ego.js`); the BEV knows
+only its size and the function that builds it, so another car brings its own. Today
+it is a black 2017 Kia K7, built in code from the published dimensions and from
+measurements of Kia's studio photographs (side, front, back): its proportions,
+grille, lamps, chrome, plates and wheels. Its tail lamps are lit. It costs the
+browser 26k triangles in 22 meshes, and is made once when the tab opens. The lead
+is the generic car (`web_console/static/bev_car.js`).
 
 Beyond the HUD, the BEV shows the following:
 

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#16191c">
+  <title>edgepilot</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2316191c'/%3E%3Cpath d='M9 25 14 7h4l5 18' fill='none' stroke='%2358a6e7' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/console.css">
+  <!-- BEV 탭(bev.js)이 처음 열릴 때 불러오는 three.js -->
+  <script type="importmap">{"imports": {"three": "/static/three/three.module.min.js"}}</script>
+  <script type="module" src="/static/console.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><h1>edgepilot</h1><span>웹 콘솔</span></div>
+    <details class="runtime" id="runtime" data-state="unknown">
+      <summary title="런타임 상태"><span class="dot"></span><span class="runtime-text">연결 확인 중</span></summary>
+      <div class="runtime-panel" id="runtime-panel"></div>
+    </details>
+    <button id="reload" class="icon-button" type="button" title="다시 불러오기" aria-label="다시 불러오기">↻</button>
+  </header>
+  <nav class="tabs" id="tabs" aria-label="탭"></nav>
+  <main id="main"><div class="empty">불러오는 중</div></main>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>

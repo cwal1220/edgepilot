@@ -54,11 +54,13 @@ build-host/bin/gtest_lateral_learners --gtest_filter='LateralLearners.Torque*'
 | `gtest_recording` | 6 | 디스크의 route 구조: EDGELOG1 청크, EDGEIDX1 인덱스(v8 이하 녹화의 예전 매직도 읽기), 매니페스트, params 스냅샷, 스테이징 비우기. 이벤트 로그 리더(끊긴 꼬리에서 멈춤, 큰 파일 머리), 옛 버전 ModelState 해석, 기록한 CAN 페이로드 왕복(CAN-FD, 끊긴 꼬리, 256 프레임 상한), 상태 채널 기록(생산자가 생긴 뒤 붙기, 새 스냅샷만, IMU는 채운 샘플까지), replayd route 리더(세그먼트 경계, 키프레임마다 코덱 설정, 청크를 넘는 CAN·판다 이벤트 시각 순, 머리가 깨진 프레임 인덱스는 그 세그먼트만 건너뜀) |
 
 `tests/check_web_console.py`와 `tests/check_recording_reader.py`(Python unittest)도
-`ctest`에 등록돼 함께 돈다. 뒤의 것은 `tools/model/recording_reader.py`의 배치와 기록 타입 번호,
-도구의 MaixCAM2 카메라 내부 파라미터를 C++ 헤더의 고정값과 대조한다(numpy가 필요하고, 없으면 건너뛴다).
-파라미터 저장소, 런타임 스키마 동기화, `params/*.json`의 UI 메타데이터, UI min/max와 C++
-`Json*Field` 클램프 표의 일치를 본다. 판다 펌웨어 카드가 설치된 이미지를 `panda_firmware.cc`와
-같은 규칙으로 보고, 주차 중일 때만 플래싱 요청 파일을 쓰는지도 본다.
+`ctest`에 등록돼 함께 돈다. 앞의 것은 fastapi 없이 stdlib만으로 웹 콘솔을 본다: 파라미터 저장소와
+기본값 동기화, `params/*.json`의 UI 메타데이터(섹션, 범위), UI min/max와 C++ `Json*Field` 클램프 표의
+일치, 공유 메모리 상태(학습, locationd, 매니저 프로세스 표, 카메라 보정, BEV)의 배치와 `ipc_messages.h`의
+일치, 판다 펌웨어 카드가 설치된 이미지를 `panda_firmware.cc`와 같은 규칙으로 보고 주차 중일 때만 플래싱
+요청 파일을 쓰는지, 페이지 모듈의 import와 페이지가 부르는 API가 서버에 다 있는지, 화면 문구에 차종
+이름이 없는지. 뒤의 것은 `tools/model/recording_reader.py`의 배치와 기록 타입 번호, 도구의 MaixCAM2
+카메라 내부 파라미터를 C++ 헤더의 고정값과 대조한다(numpy가 필요하고, 없으면 건너뛴다).
 
 ## 인자를 주면 도는 모드
 
