@@ -1,8 +1,11 @@
+#include "common/utils_file.h"
 #include "common/utils_process.h"
 #include "common/utils_time.h"
 #include "common/ipc_channels.h"
 #include "panda/panda_can_codec.h"
 #include "panda/panda_client.h"
+#include "panda/panda_firmware.h"
+#include "panda/panda_flasher.h"
 
 #include <signal.h>
 #include <unistd.h>
@@ -22,6 +25,11 @@ namespace {
 volatile sig_atomic_t g_stop = 0;
 constexpr uint64_t kCanPublishIntervalNs = 10000000ULL;
 constexpr uint64_t kMaxSendCanAgeNs = 100000000ULL;
+constexpr uint64_t kFirmwareIntervalNs = 1000000000ULL;
+// 웹 콘솔(param_server.py)과 주고받는 파일. 요청 파일에는 쓸 이미지의 버전 문자열이 들어 있다.
+constexpr char kFirmwareStatusPath[] = "/dev/shm/edgepilot_panda_status.json";
+constexpr char kFlashRequestPath[] = "/dev/shm/edgepilot_panda_flash";
+constexpr char kDefaultFirmwarePath[] = "firmware/panda.bin.signed";
 
 uint16_t parse_safety_model(const char *name, uint16_t *default_param)
 {
@@ -250,6 +258,92 @@ bool connect_and_configure(PandaClient &panda, uint16_t safety_model, uint16_t s
     return true;
 }
 
+/* 웹 콘솔의 판다 펌웨어 카드: 1초마다 연결·버전·플래싱 진행을 상태 파일에 쓰고, 요청 파일이 있으면
+ * 설치된 이미지와 차 상태를 확인한 뒤 판다에 펌웨어를 쓴다. 쓰는 동안(약 10초) CAN은 멈추고, 끝나면
+ * 루프가 판다에 다시 잇는다. */
+class FirmwareService {
+public:
+    explicit FirmwareService(std::string image_path) : image_path_(std::move(image_path)) {}
+
+    void write_status(const PandaClient &panda)
+    {
+        PandaLinkStatus link;
+        if (panda.connected()) {
+            link.mode = "app";
+            link.serial = panda.usb_serial();
+            link.hw_type = panda.hw_type();
+            link.firmware_version = panda.firmware_version();
+        } else if (flash_.state != PandaFlashState::Flashing && panda_usb_mode() == PandaUsbMode::Bootstub) {
+            link.mode = "bootstub";  // 앱이 서지 않았다: 다시 쓰면 된다
+        }
+        write_file_atomic(kFirmwareStatusPath, panda_status_json(link, flash_, monotonic_now_ns()));
+    }
+
+    // 요청이 있으면 처리한다. 펌웨어를 썼으면 true이고, 그때 판다 연결은 닫혀 있다.
+    bool service_request(PandaClient &panda)
+    {
+        if (access(kFlashRequestPath, F_OK) != 0) return false;
+        std::string requested = read_text_file(kFlashRequestPath);
+        std::remove(kFlashRequestPath);
+        requested.erase(std::min(requested.size(), requested.find_last_not_of(" \t\r\n") + 1));
+        flash_ = PandaFlashStatus{};
+        flash_.version = requested;
+        flash_.stamp_ns = monotonic_now_ns();
+
+        PandaImage image;
+        std::string detail;
+        if (!load_panda_image(image_path_, &image, &detail)) return refuse(panda, "image_invalid", detail);
+        if (image.version != requested)
+            return refuse(panda, "image_changed", "installed image is " + image.version);
+        control_.attach(kControlStateTopic);
+        control_.poll();
+        std::string reason;
+        if (!panda_flash_allowed(control_.latest(), monotonic_now_ns(), &reason))
+            return refuse(panda, reason, "car state does not allow flashing");
+        if (panda.connected() && !panda_hw_type_flashable(panda.hw_type()))
+            return refuse(panda, "hw_unsupported", panda_hw_type_name(panda.hw_type()));
+        if (!panda.connected() && panda_usb_mode() == PandaUsbMode::None)
+            return refuse(panda, "no_panda", "no panda on USB");
+
+        std::fprintf(stderr, "pandad: flashing panda firmware %s (%zu bytes) from %s\n",
+                     image.version.c_str(), image.bytes.size(), image_path_.c_str());
+        panda.close();
+        flash_.state = PandaFlashState::Flashing;
+        write_status(panda);
+        const PandaFlashResult result = flash_panda(image, [&](const char *step, int percent) {
+            flash_.step = step;
+            flash_.percent = percent;
+            write_status(panda);
+        });
+        flash_.state = result.ok ? PandaFlashState::Done : PandaFlashState::Failed;
+        flash_.error = result.error;
+        flash_.detail = result.detail;
+        flash_.stamp_ns = monotonic_now_ns();
+        if (result.ok) {
+            std::fprintf(stderr, "pandad: panda flash done, firmware %s\n", result.version.c_str());
+        } else {
+            std::fprintf(stderr, "pandad: panda flash failed: %s (%s)\n", result.error.c_str(), result.detail.c_str());
+        }
+        write_status(panda);
+        return true;
+    }
+
+private:
+    bool refuse(const PandaClient &panda, const std::string &error, const std::string &detail)
+    {
+        flash_.state = PandaFlashState::Failed;
+        flash_.error = error;
+        flash_.detail = detail;
+        std::fprintf(stderr, "pandad: panda flash refused: %s (%s)\n", error.c_str(), detail.c_str());
+        write_status(panda);
+        return false;
+    }
+
+    std::string image_path_;
+    PandaFlashStatus flash_;
+    Subscription<ControlState> control_;
+};
+
 enum class RxResult { Idle, Frames, Error };
 
 // USB 수신 한 번. Error면 호출자가 연결을 끊고 다시 잇는다.
@@ -359,13 +453,21 @@ int main()
         PandaClient panda;
         RxBatcher rx;
         BridgeStats stats;
+        FirmwareService firmware(env_string("EDGEPILOT_PANDA_FIRMWARE", kDefaultFirmwarePath));
         uint64_t last_health_ns = 0;
         uint64_t last_heartbeat_ns = 0;
         uint64_t last_log_ns = 0;
+        uint64_t last_firmware_ns = 0;
 
         while (!g_stop) {
             if (!panda.connected()) {
                 publish_disconnected(panda_state_pub, tx_enabled);
+                // 판다가 없거나 bootstub에 머물러도 웹 콘솔에서 펌웨어를 다시 쓸 수 있게 여기서도 본다
+                if (monotonic_now_ns() - last_firmware_ns >= kFirmwareIntervalNs) {
+                    firmware.service_request(panda);
+                    firmware.write_status(panda);
+                    last_firmware_ns = monotonic_now_ns();
+                }
                 if (!connect_and_configure(panda, safety_model, safety_param, &stats)) continue;
                 last_health_ns = 0;
                 last_heartbeat_ns = 0;
@@ -396,6 +498,14 @@ int main()
                 stats.log(panda, static_cast<unsigned long long>(sendcan_sub.depth()),
                           static_cast<unsigned long long>(can_pub.depth()));
                 last_log_ns = now;
+            }
+            if (now - last_firmware_ns >= kFirmwareIntervalNs) {
+                last_firmware_ns = now;
+                if (firmware.service_request(panda)) {
+                    rx.clear();
+                    continue;  // 펌웨어를 썼다: 다음 루프가 다시 잇는다
+                }
+                firmware.write_status(panda);
             }
             if (received == RxResult::Idle && !had_sendcan && idle_us > 0) {
                 usleep(idle_us);

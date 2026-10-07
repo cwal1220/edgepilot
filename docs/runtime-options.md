@@ -127,6 +127,10 @@ toggles recording.
 - `EDGEPILOT_PANDA_ENGAGED=1`
   - sends panda heartbeat as engaged, only meaningful with `EDGEPILOT_PANDA_TX=1`. Its
     standalone default is disengaged; the manager defaults to engaged.
+- `EDGEPILOT_PANDA_FIRMWARE=path`
+  - the Panda application image the web console flashes, relative to the
+    install directory. Default `firmware/panda.bin.signed` (built by
+    `make -C firmware/panda`).
 - `EDGEPILOT_PANDA_IDLE_US=5000`
   - sleep time used by `pandad` when panda returns no CAN frames and no
     pending `sendcan` batch exists. This keeps USB-only or parked shadow runs from

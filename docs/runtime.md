@@ -164,6 +164,13 @@ keeps the AX system open.
   ordered CAN receive batches, and can relay ordered `sendcan` batches
 - standalone default is shadow mode (`EDGEPILOT_PANDA_TX=0`); the manager's default
   enables TX
+- reads the Panda's firmware version when it connects and, once a second, writes
+  the link, that version and any flashing progress to
+  `/dev/shm/edgepilot_panda_status.json` for the web console
+- flashes the Panda when the web console asks: `/dev/shm/edgepilot_panda_flash`
+  holds the version to write, and `pandad` writes the installed image
+  (`EDGEPILOT_PANDA_FIRMWARE`) only if it is that version and the car is parked.
+  See [Panda firmware](../firmware/panda/README.md)
 
 ### `controlsd` (K7 controller)
 
