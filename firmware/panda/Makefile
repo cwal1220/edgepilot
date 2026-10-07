@@ -4,13 +4,17 @@
 # arm-none-eabi-gcc와 python3만 있으면 된다. newlib은 쓰지 않고(-ffreestanding)
 # 서명도 표준 라이브러리로 한다. debug 키로 서명하므로 debug 서명을 받는 bootstub이
 # 올라간 Panda에서만 돈다. 원래의 board/SConscript와 같은 명령을 같은 순서로 낸다.
+# 버전 문자열은 panda_version.py가 소스 내용으로 정한다(EDGE-<해시>-DEBUG).
 
 PREFIX ?= arm-none-eabi-
 CC := $(PREFIX)gcc
 OBJCOPY := $(PREFIX)objcopy
 PYTHON ?= python3
 OBJ := obj
-VERSION := DEV-23456789-DEBUG
+VERSION := $(shell $(PYTHON) panda_version.py)
+ifeq ($(VERSION),)
+$(error panda_version.py failed)
+endif
 
 FLAGS := -Wall -Wextra -Wstrict-prototypes -Werror -mlittle-endian -mthumb -nostdlib -fno-builtin \
          -T$(CURDIR)/board/stm32fx/stm32fx_flash.ld -std=gnu11 -ffreestanding \
@@ -24,10 +28,12 @@ all: $(OBJ)/panda.bin.signed $(OBJ)/bootstub.panda.bin
 $(OBJ):
 	mkdir -p $@
 
-# 소스가 #include "obj/..."로 읽는 생성 헤더
-$(OBJ)/gitversion.h: Makefile | $(OBJ)
+# 소스가 #include "obj/..."로 읽는 생성 헤더. obj/version은 버전이 바뀔 때만 다시 써서
+# 그에 기대는 것만 다시 빌드한다.
+$(shell mkdir -p $(OBJ); [ "$$(cat $(OBJ)/version 2>/dev/null)" = '$(VERSION)' ] || printf '%s' '$(VERSION)' > $(OBJ)/version)
+
+$(OBJ)/gitversion.h: $(OBJ)/version
 	printf 'const uint8_t gitversion[] = "%s";\n' '$(VERSION)' > $@
-	printf '%s' '$(VERSION)' > $(OBJ)/version
 
 $(OBJ)/cert.h: certs/debug.pub certs/release.pub crypto/cert_header.py crypto/rsakey.py | $(OBJ)
 	$(PYTHON) crypto/cert_header.py $@ certs
