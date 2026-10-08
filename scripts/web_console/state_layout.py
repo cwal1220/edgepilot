@@ -21,7 +21,7 @@ CONTROL_STATE_AT = {
     "desired_curvature": 72, "actual_curvature": 76, "normalized_output": 80,
     "departure_alert_type": 144, "green_light_alert_armed": 152, "hud_flags": 184, "ego_speed_kph": 232,
 }
-HUD_FLAG_BITS = {"Laneless": 0, "SteerPaused": 7, "BrakeLights": 11}  # ipc_messages.h kHudFlag<이름>의 비트
+HUD_FLAG_BITS = {"Laneless": 0, "SteerPaused": 7, "BrakeLights": 9}  # ipc_messages.h kHudFlag<이름>의 비트
 GEAR_PARK = 0  # car/can_frame.h kGearPark
 
 

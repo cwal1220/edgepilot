@@ -40,7 +40,6 @@ struct HudState {
     int lane_change_direction = 0; // -1 왼쪽, 1 오른쪽
     bool steer_paused = false;     // 85도 위에서 조향 요청을 끄고 쉰다
     bool steer_paused_by_driver = false;  // 넘겨받은 회전: 15도 아래에서 손을 떼야 다시 조향
-    int turn_direction = 0;        // 회전 desire: -1 왼쪽, 1 오른쪽
     bool services_healthy = false;
     bool network_connected = false;  // 와이파이가 AP에 붙고 주소가 있다
     unsigned panda_faults = 0;

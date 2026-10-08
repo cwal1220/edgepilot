@@ -9,7 +9,7 @@ their options, and how to build them are listed in
 
 ## HUD snapshots
 
-`hud_snapshot` renders the HUD renderer off-line for 28 scenarios (driving,
+`hud_snapshot` renders the HUD renderer off-line for 27 scenarios (driving,
 alerts, cards, warnings and the less common branches: soft disable, panda fault,
 radar-only lead, bar TPMS, engaged but blocked, ...) at the HUD's 640x480
 landscape size, writes each frame as an `EDGEARGB` file and prints draw timings.
@@ -176,20 +176,20 @@ Columns include the recorded and re-planned desired curvature, the MPC's own
 `laneless`/`mpc_valid` flags. Options go before the output file:
 
 - `--laneless` or `--lane` forces that mode, so the same route can be re-planned
-  both ways without touching `params/driving.json`.
-- `--steering`/`--driving` load parameter files, such as the route's
-  `params/` snapshot.
+  both ways without editing `params/steering.json`.
+- `--steering` loads a parameter file, such as the route's
+  `params/steering.json` snapshot.
 - `--vehicle` feeds the recorded blinkers, driver torque and blind spot (from
   the CAN, without the Panda's echoes, as controlsd does) and the recorded
   `active`. Without it the planner sees no blinker and no driver, so lane
-  changes and turn desire never run.
+  changes never run.
 - `--exact` writes every `LateralTarget` field and the lag-adjusted curvature
   as `%a` hex floats. Two builds that plan identically give byte-identical
   files, which is the check used for planner refactors:
 
 ```sh
 R=<route>; ./build-host/bin/replay_planner --exact --vehicle --lane \
-  --steering $R/params/steering.json --driving $R/params/driving.json out.csv $R/events/*.bin
+  --steering $R/params/steering.json out.csv $R/events/*.bin
 ```
 
 ## Control tick replay
@@ -204,8 +204,7 @@ also reports how often engaged/active/desire agree with the recorded
 
 ```sh
 R=<route>; ./build-host/bin/replay_controls --steering $R/params/steering.json \
-  --driving $R/params/driving.json --cruise $R/params/adaptive_cruise.json \
-  --dump out.txt $R/events/*.bin
+  --cruise $R/params/adaptive_cruise.json --dump out.txt $R/events/*.bin
 ```
 
 ## Related documents

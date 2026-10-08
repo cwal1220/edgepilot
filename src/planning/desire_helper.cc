@@ -86,23 +86,4 @@ void DesireHelper::update(const VehicleCanState &vehicle, float v_ego, bool acti
   previous_one_blinker_ = road_edge_blocked ? false : one_blinker;
   desire_ = changing && direction_ == -1 ? Desire::LaneChangeLeft
       : changing && direction_ == 1 ? Desire::LaneChangeRight : Desire::None;
-
-  /* 회전 desire(실험, DrivingParams::turn_desire): 차선 변경 속도 미만 + 깜빡이 하나 + 결합 중 +
-   * 차선 변경이 진행 중이 아님(상태 0). 빠를 때 켠 깜빡이도 그 속도 아래까지 켜져 있으면 회전으로
-   * 본다. 회전 차로로 차선을 바꾸거나 미리 깜빡이를 켜고 감속해 도는 순서가 흔하다(2026-10-03 실차:
-   * 회전 6번 중 3번이 30 km/h 위에서 켰다). 변경 대기(1)는 감속하면 0이 되고, 변경을 마친 뒤
-   * 깜빡이가 남으면 대기(1)로 돌아갔다가 감속하면 0이 된다. 진행 중인 변경(2, 3)이 먼저다.
-   * 차선 변경 뒤 깜빡이를 켠 채 정체로 감속해도 회전 의도가 들어간다는 뜻이라 운전자가 바로잡는다.
-   * 모델 desire 입력은 rising edge 펄스이고 5초(100틱) 뒤 빠지므로 2.5초마다 한 번 내렸다
-   * 다시 올린다(깜빡이를 끄면 modeld가 이력에서 지운다). */
-  turn_desire_active_ = params_.turn_desire_enabled && active && one_blinker && below_speed &&
-                        lane_change_state_ == LaneChangeState::Off;
-  turn_desire_direction_ = turn_desire_active_ ? (vehicle.left_blinker ? 1 : 2) : 0;
-  if (turn_desire_active_) {
-    const bool on = turn_desire_ticks_ % kTurnRepulseTicks < kTurnRepulseTicks / 2;
-    desire_ = on ? static_cast<Desire>(turn_desire_direction_) : Desire::None;
-    ++turn_desire_ticks_;
-  } else {
-    turn_desire_ticks_ = 0;
-  }
 }

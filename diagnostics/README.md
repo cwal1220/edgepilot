@@ -27,12 +27,12 @@ cmake --build build-host --target replay_closed_loop -j2
 | 도구 | 사용 | 하는 일 |
 | --- | --- | --- |
 | `replay_closed_loop` | `[옵션] <out.csv\|-> <events.bin...>` | 차 응답을 시뮬레이션해 횡제어 루프를 폐루프로 재생한다 |
-| `replay_planner` | `[--laneless\|--lane] [--exact] [--vehicle] [--steering s.json] [--driving d.json] <out.csv> <events.bin...>` | 녹화한 `ModelState`/`ControlState`로 `LateralPlanner`를 다시 돌려 요구 곡률을 CSV로 쓴다. `--vehicle`은 녹화한 깜빡이·운전자 토크·active를 주고, `--exact`는 모든 출력을 비트 그대로(`%a`) 써서 리팩토링 전후 비교에 쓴다 |
-| `replay_controls` | `[--steering s.json] [--driving d.json] [--cruise c.json] [--vehicle-json j] [--force-engaged] [--dump out.txt] <events.bin...>` | 녹화를 controlsd 한 틱의 로직(`ControlsTick`)에 10 ms 틱으로 다시 흘려, 보낼 CAN·`ControlState`·학습 출력의 다이제스트를 쓰고 녹화된 `ControlState`와 대조한다. 같은 코드면 출력이 비트 단위로 같아 controlsd 리팩토링 전후 비교에 쓴다 |
+| `replay_planner` | `[--laneless\|--lane] [--exact] [--vehicle] [--steering s.json] <out.csv> <events.bin...>` | 녹화한 `ModelState`/`ControlState`로 `LateralPlanner`를 다시 돌려 요구 곡률을 CSV로 쓴다. `--vehicle`은 녹화한 깜빡이·운전자 토크·active를 주고, `--exact`는 모든 출력을 비트 그대로(`%a`) 써서 리팩토링 전후 비교에 쓴다 |
+| `replay_controls` | `[--steering s.json] [--cruise c.json] [--vehicle-json j] [--force-engaged] [--dump out.txt] <events.bin...>` | 녹화를 controlsd 한 틱의 로직(`ControlsTick`)에 10 ms 틱으로 다시 흘려, 보낼 CAN·`ControlState`·학습 출력의 다이제스트를 쓰고 녹화된 `ControlState`와 대조한다. 같은 코드면 출력이 비트 단위로 같아 controlsd 리팩토링 전후 비교에 쓴다 |
 | `replay_lateral_learners` | `[옵션] <events.bin...>` | paramsd·torqued 학습기를 녹화에 돌려 학습값을 출력한다 |
 | `replay_localization` | `<out.csv> <events.bin...>` | 녹화를 보드 `locationd`와 같은 코드(자세 칼만 필터 + lagd)에 기록 순서대로 흘려 IMU 묶음마다 CSV 한 행을 쓰고, 끝에 CAN 대비 요레이트 비교와 lagd 결과를 출력한다. IMU 기록이 있는 녹화가 필요하다 |
 | `extract_lateral_dataset` | `<out.csv> <events.bin...>` | `ControlState`마다 CSV 한 행. CAN은 런타임과 같은 `vehicle_can`으로 푼다 |
-| `hud_snapshot` | `[--model m.bin] [--control c.bin] [--iterations N] [--out PREFIX] [--portrait [--flip-x] [--flip-y]]` | HUD 시나리오 28개(또는 녹화한 모델·제어 상태)를 `overlayd`와 같은 640x480으로 `EDGEARGB` 프레임에 그리고 그리기 시간을 출력한다. `--portrait`는 보드처럼 세로 480x640 버퍼에 transpose로 그린다. 시간은 보드에서 잰다 |
+| `hud_snapshot` | `[--model m.bin] [--control c.bin] [--iterations N] [--out PREFIX] [--portrait [--flip-x] [--flip-y]]` | HUD 시나리오 27개(또는 녹화한 모델·제어 상태)를 `overlayd`와 같은 640x480으로 `EDGEARGB` 프레임에 그리고 그리기 시간을 출력한다. `--portrait`는 보드처럼 세로 480x640 버퍼에 transpose로 그린다. 시간은 보드에서 잰다 |
 | `alert_sound_preview` | `[--out PREFIX]` | `overlayd` 알림음을 같은 합성 코드로 `PREFIX_<이름>.wav`(48 kHz 모노, 100% 크기)에 쓴다 |
 
 재생 도구의 입력은 `recordd` 녹화(`events/*.bin`)다.
@@ -47,7 +47,7 @@ cmake --build build-host --target replay_closed_loop -j2
 - 컨트롤러: `--sad`(steer_actuator_delay), `--kp`, `--ki`, `--laf`
 - 운전자 개입 히스테리시스: `--driver-high`, `--driver-low`, `--driver-release`
 - `--open-loop`: 자세 보정을 멈춰 플랜트가 녹화 주행을 얼마나 재현하는지만 본다
-- `--steering`·`--driving route/params/*.json`: 녹화 당시 튜닝과 주행 모드. 녹화의 LearnerState
+- `--steering route/params/steering.json`: 녹화 당시 튜닝(경로 모드 포함). 녹화의 LearnerState
   학습값(paramsd·torqued)은 controlsd처럼 컨트롤러에 넣고, 조향각 역모델도 같은 학습값을 쓴다.
 - `--camera-shift D`: 카메라 장착 오프셋을 녹화보다 D m 바꾼 것처럼 모델 출력을 옮긴다.
 - `--torque F,O,R`: torqued 값(배율·절편·마찰)을 바꿔 넣어 유효해진 뒤의 거동을 본다.

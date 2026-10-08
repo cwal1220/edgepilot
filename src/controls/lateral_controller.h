@@ -167,9 +167,9 @@ private:
   float requested_curvature(const LateralTarget &target, const VehicleCanState &vehicle_state, float speed_mps,
                             float plan_age_s, bool steering, bool steering_pressed, bool yaw_rate_valid,
                             const LiveLateralParams &live, float *plan_curvature);
-  void steer(const LateralTarget &target, const VehicleCanState &vehicle_state, float speed_mps, double now_s,
-             bool steering_pressed, bool yaw_rate_valid, bool curvature_limited, float plan_curvature,
-             const LiveLateralParams &live, LateralControlResult *result);
+  void steer(const VehicleCanState &vehicle_state, float speed_mps, double now_s, bool steering_pressed,
+             bool yaw_rate_valid, bool curvature_limited, float plan_curvature, const LiveLateralParams &live,
+             LateralControlResult *result);
   bool update_saturation(const LateralControlResult &result, float plan_curvature, float speed_mps, double now_s,
                          bool steering_pressed, bool curvature_limited);
   void copy_torque_state(LateralControlResult *result) const;

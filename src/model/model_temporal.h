@@ -52,17 +52,6 @@ public:
         }
     }
 
-    /* 회전 desire(1 turnLeft, 2 turnRight)는 그쪽 깜빡이를 끄면 이력에서 지운다. 펄스는 5초
-     * 남으므로 그대로 두면 깜빡이를 끈 뒤에도 모델이 회전 의도를 본다(lateral_planner 회전
-     * desire는 깜빡이를 켜 둔 동안 2.5초마다 다시 알린다). 차선 변경 desire는 상류처럼 둔다. */
-    void clear_turn_desire(bool left_blinker, bool right_blinker)
-    {
-        for (int t = 0; t < kDesireHistoryTicks; ++t) {
-            if (!left_blinker) desire_history_[t * kDesireLen + 1] = 0.0f;
-            if (!right_blinker) desire_history_[t * kDesireLen + 2] = 0.0f;
-        }
-    }
-
     // 오래된 틱을 앞으로 밀고 마지막 슬롯에 현재 펄스를 넣는다. 매 프레임 실행 직전.
     void push_desire_pulse()
     {

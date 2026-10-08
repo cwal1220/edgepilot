@@ -208,7 +208,7 @@ ElectGearValues decode_elect_gear(const std::array<uint8_t, 8> &data) {
 
 /* CGW1의 2비트 B-CAN 신호는 0·1이 꺼짐·켜짐(닫힘·열림, 미착용·착용)이고 3이 "B-CAN 신호
  * 타임아웃"이다(svrs_dl3_can_v6.dbc VAL_). 타임아웃은 모르는 값이라 안전한 쪽으로 읽는다:
- * 깜빡이·비상등은 꺼짐(켜짐으로 읽으면 차선 변경·회전 desire가 생긴다), 문은 열림, 안전벨트는
+ * 깜빡이·비상등은 꺼짐(켜짐으로 읽으면 차선 변경 desire가 생긴다), 문은 열림, 안전벨트는
  * 미착용(둘 다 결합을 막는다). 2026-10-02~04 녹화 6건에서 3은 한 번도 나오지 않았다. */
 Cgw1Values decode_cgw1(const std::array<uint8_t, 8> &data) {
   Cgw1Values values;

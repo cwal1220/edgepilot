@@ -5,21 +5,18 @@
 #include <memory>
 
 struct ModelState;
-struct DrivingParams;
 struct SteeringParams;
 struct VehicleCanState;
 
 class LateralPlanner {
 public:
-  LateralPlanner(const SteeringParams &params,
-                          const DrivingParams &driving);
+  explicit LateralPlanner(const SteeringParams &params);
   ~LateralPlanner();
 
   LateralPlanner(const LateralPlanner &) = delete;
   LateralPlanner &operator=(const LateralPlanner &) = delete;
 
-  void update_params(const SteeringParams &params,
-                     const DrivingParams &driving);
+  void update_params(const SteeringParams &params);
 
   LateralTarget update(const ModelState &model,
                        const VehicleCanState &vehicle, float v_ego,

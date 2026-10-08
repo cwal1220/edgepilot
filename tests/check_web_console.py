@@ -128,7 +128,6 @@ class ParamStoreTest(unittest.TestCase):
         self.paths = group_paths(self.root / "params")
         documents = {
             "steering": {"gain": 10, "enabled": True},
-            "driving": {"delay": 0.4},
             "adaptive_cruise": {"following_time_s": 1.8},
             "recording": {"enabled": False},
             "display": {"enabled": True, "brightness_percent": 100},
@@ -157,13 +156,13 @@ class ParamStoreTest(unittest.TestCase):
 
     def test_unknown_parameter_is_rejected(self):
         with self.assertRaises(KeyError):
-            self.store.update("driving", {"unknown": 1})
+            self.store.update("adaptive_cruise", {"unknown": 1})
         with self.assertRaises(KeyError):
-            self.store.update("nonexistent", {"delay": 1})
+            self.store.update("nonexistent", {"following_time_s": 1})
         with self.assertRaises(ValueError):
-            self.store.update("driving", {})
+            self.store.update("adaptive_cruise", {})
         self.assertEqual(self.notified, [])
-        self.assertEqual(self.store.read_group("driving"), {"delay": 0.4})
+        self.assertEqual(self.store.read_group("adaptive_cruise"), {"following_time_s": 1.8})
 
     def test_files_read_by_their_own_process_signal_nobody(self):
         """recordd·overlayd·modeld는 파일을 스스로 다시 읽는다."""
@@ -221,13 +220,14 @@ class ParamStoreTest(unittest.TestCase):
     def test_defaults_sit_next_to_the_params_directory(self):
         """EDGEPILOT_PARAMS_DIR(없으면 params/)와 그 옆의 <이름>.defaults/(업로드 스크립트가 채운다)."""
         defaults = group_paths(self.root / "params.defaults")
-        defaults["driving"].parent.mkdir()
-        defaults["driving"].write_text(json.dumps({"delay": 0.3, "added": True}), encoding="utf-8")
+        defaults["adaptive_cruise"].parent.mkdir()
+        defaults["adaptive_cruise"].write_text(json.dumps({"following_time_s": 1.5, "added": True}), encoding="utf-8")
         with mock.patch.dict(os.environ, {"EDGEPILOT_PARAMS_DIR": str(self.root / "params")}):
             store = ParamStore(notify=self.notify)
         self.assertEqual(store.paths, self.paths)
-        self.assertEqual(store.read_group("driving"), {"delay": 0.4, "added": True})
-        self.assertEqual(store.snapshot()["defaults"], {"driving": {"delay": 0.3, "added": True}})
+        self.assertEqual(store.read_group("adaptive_cruise"), {"following_time_s": 1.8, "added": True})
+        self.assertEqual(store.snapshot()["defaults"],
+                         {"adaptive_cruise": {"following_time_s": 1.5, "added": True}})
 
     def test_snapshot_has_what_the_page_reads(self):
         snapshot = self.store.snapshot()
@@ -293,7 +293,6 @@ class ParamMetadataTest(unittest.TestCase):
         row = re.compile(r'\{"(\w+)",\s*(-?[\d.]+)f?,\s*(-?[\d.]+)f?,\s*&\w+::\w+\}')
         tables = {
             "steering": ("src/controls/control_params.cc", ("kSteeringInts", "kSteeringFloats")),
-            "driving": ("src/controls/control_params.cc", ("kDrivingFloats",)),
             "adaptive_cruise": ("src/controls/adaptive_cruise.cc", ("kAdaptiveFloats",)),
             # display는 백라이트(backlight.py) 항목도 있어 런타임이 읽는 키만 대조한다
             "display": ("src/common/device_settings.h", ("kDeviceSettingsFloats",)),

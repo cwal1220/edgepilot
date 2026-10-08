@@ -198,8 +198,7 @@ Library `planning`.
 - `desire_helper.*`
   - the openpilot desire_helper port the planner runs each model frame: lane
     change states (`LaneChangeState`), the blinker/torque/blind-spot/road-edge
-    gates, the lane-line fade and the experimental turn desire pulses, and the
-    `Desire` the model gets.
+    gates, the lane-line fade, and the `Desire` the model gets.
 - `lateral_mpc.*`
   - the lateral MPC itself: one Gauss-Newton SQP iteration per call over the
     openpilot 0.8.16 OCP, solved by a backward Riccati recursion. No external
@@ -301,7 +300,7 @@ Libraries `hud_state`, `hud` and `alert_tones`, and on the board
     coordinates; `HudOrientation` maps them onto the portrait panel buffer):
     state border, speed with yellow turn-signal/hazard chevrons, set speed
     (with the vision cruise `SET` speed) and gear cards, steering mode and the
-    manoeuvre in progress (turn desire, lane change), an `AUTO HOLD` badge
+    lane change in progress, an `AUTO HOLD` badge
     under the speed, plan/lane/road-edge ribbons faded with distance, the
     car's position in its lane marked on the road, lead chevron, torque bar
     with the driver's torque, alerts (including the lane-change nudge and the

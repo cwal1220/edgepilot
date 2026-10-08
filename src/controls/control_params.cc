@@ -16,6 +16,7 @@ constexpr JsonBoolField<SteeringParams> kSteeringBools[] = {
     {"use_live_torque_params", &SteeringParams::use_live_torque_params},
     {"use_live_delay", &SteeringParams::use_live_delay},
     {"use_locationd_learner_inputs", &SteeringParams::use_locationd_learner_inputs},
+    {"laneless_mode", &SteeringParams::laneless_mode},
 };
 constexpr JsonIntField<SteeringParams> kSteeringInts[] = {
     {"steering_pressed_threshold", 0, 500, &SteeringParams::steering_pressed_threshold},
@@ -37,14 +38,7 @@ constexpr JsonFloatField<SteeringParams> kSteeringFloats[] = {
     {"path_offset_m", -1.0f, 1.0f, &SteeringParams::path_offset_m},
     {"lane_path_weight", 0.5f, 10.0f, &SteeringParams::lane_path_weight},
     {"min_steer_speed_mps", 0.0f, 5.0f, &SteeringParams::min_steer_speed_mps},
-};
-
-constexpr JsonBoolField<DrivingParams> kDrivingBools[] = {
-    {"laneless_mode", &DrivingParams::laneless_mode},
-    {"turn_desire", &DrivingParams::turn_desire},
-};
-constexpr JsonFloatField<DrivingParams> kDrivingFloats[] = {
-    {"lane_change_min_speed_kph", 0.0f, 80.0f, &DrivingParams::lane_change_min_speed_kph},
+    {"lane_change_min_speed_kph", 0.0f, 80.0f, &SteeringParams::lane_change_min_speed_kph},
 };
 
 }  // namespace
@@ -64,15 +58,5 @@ bool load_steering_params_json(const std::string &path,
     parse_json_fields(text, kSteeringBools, params);
     parse_json_fields(text, kSteeringInts, params);
     parse_json_fields(text, kSteeringFloats, params);
-  }, error);
-}
-
-bool load_driving_params_json(const std::string &path,
-                              DrivingParams *params,
-                              std::string *error) {
-  if (!params) return false;
-  return load_json_param_file(path, [params](const std::string &text) {
-    parse_json_fields(text, kDrivingBools, params);
-    parse_json_fields(text, kDrivingFloats, params);
   }, error);
 }

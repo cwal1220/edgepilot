@@ -156,14 +156,12 @@ int main() {
     sendcan_pub.reset();
 
     const bool force_engaged = env_flag("EDGEPILOT_FORCE_ENGAGED", false);
-    const ControlParamPaths param_paths{param_path("steering.json"), param_path("driving.json"),
-                                        param_path("adaptive_cruise.json")};
+    const ControlParamPaths param_paths{param_path("steering.json"), param_path("adaptive_cruise.json")};
     ControlParams params;
     std::string error;
     if (!load_control_params(param_paths, &params, &error)) throw std::runtime_error(error);
-    std::fprintf(stderr, "controlsd: params steering=%s driving=%s adaptive=%s %s\n",
-                 param_paths.steering.c_str(), param_paths.driving.c_str(), param_paths.cruise.c_str(),
-                 control_params_summary(params).c_str());
+    std::fprintf(stderr, "controlsd: params steering=%s adaptive=%s %s\n", param_paths.steering.c_str(),
+                 param_paths.cruise.c_str(), control_params_summary(params).c_str());
     /* paramsd·torqued. 사전값은 시작 때 파라미터로 고정한다. 복원이 거부된 저장은 상류처럼
      * 지운다(torqued는 깨진 캐시만, 튜닝이 바뀐 캐시는 둔다). */
     BackgroundWriter learner_store("controlsd: learner write");
@@ -171,7 +169,7 @@ int main() {
     const std::string torque_learn_path = param_path("live_torque_parameters.bin");
     const std::string vehicle_learn_json = read_text_file(vehicle_learn_path);
     const std::string torque_learn_cache = read_text_file(torque_learn_path);
-    LateralPlannerWorker lateral_planner(params.steering, params.driving);
+    LateralPlannerWorker lateral_planner(params.steering);
     ControlsTick tick(params, force_engaged, lateral_planner, vehicle_learn_json, torque_learn_cache,
                       static_cast<uint64_t>(monotonic_now_ns()));
     const LateralLearners &learners = tick.learners();

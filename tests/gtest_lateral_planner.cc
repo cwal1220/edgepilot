@@ -1,6 +1,6 @@
 /* 횡 플래너(LateralPlanner): laneless는 openpilot 메인의 get_curvature_from_plan과, 차선 변경은
- * 상류 desire_helper와 대조한다. 실험용 회전 desire와 path_offset_m의 적용 범위도 본다. MPC 자체의
- * 최적성은 gtest_lateral_mpc가 본다. */
+ * 상류 desire_helper와 대조한다. path_offset_m의 적용 범위도 본다. MPC 자체의 최적성은
+ * gtest_lateral_mpc가 본다. */
 #include "controls/control_params.h"
 #include "common/ipc_messages.h"
 #include "controls/lateral_controller.h"
@@ -20,9 +20,8 @@ namespace {
 TEST(LateralPlanner, LanelessUsesPlanYawLikeUpstream) {
   SteeringParams steering;
   steering.path_offset_m = -0.3f;
-  DrivingParams driving;
-  driving.laneless_mode = true;
-  LateralPlanner planner(steering, driving);
+  steering.laneless_mode = true;
+  LateralPlanner planner(steering);
   const float v = 20.0f;
   auto model_for = [&](float kappa, float lateral_offset) {
     ModelState ms{};
@@ -54,8 +53,7 @@ TEST(LateralPlanner, LanelessUsesPlanYawLikeUpstream) {
  * 끝났다고 할 때(lane_change_prob < 0.02)나 10초·비활성으로만 끝난다. 차선선은 0.5초에 뺀다. */
 TEST(LateralPlanner, LaneChangeFollowsUpstreamDesireHelper) {
   SteeringParams steering;
-  DrivingParams driving;
-  LateralPlanner planner(steering, driving);
+  LateralPlanner planner(steering);
   const float v = 20.0f;
   ModelState ms{};
   ms.valid = 1;
@@ -96,13 +94,11 @@ TEST(LateralPlanner, LaneChangeFollowsUpstreamDesireHelper) {
   EXPECT_EQ(r.lane_change_state, 0);
 }
 
-/* 회전 desire(실험): 저속 + 깜빡이 + 결합 중이면 turnLeft/turnRight를 2.5초마다 다시 올리고,
- * 그동안 차선 모드라도 모델 경로를 따른다. 스위치·깜빡이·속도·비활성 어느 것이든 풀리면 끝. */
-TEST(LateralPlanner, TurnDesireRepulsesAtLowSpeedWithBlinker) {
+/* 차선 변경 속도 아래에서 켠 깜빡이는 desire를 주지 않는다(상류 desire_helper). 빠를 때 시작한 차선 변경은
+ * 그 속도 아래로 감속해도 이어진다. */
+TEST(LateralPlanner, SlowBlinkerGivesNoDesire) {
   SteeringParams steering;
-  DrivingParams driving;
-  driving.turn_desire = true;
-  LateralPlanner planner(steering, driving);
+  LateralPlanner planner(steering);
   ModelState ms{};
   ms.valid = 1;
   const float v = 5.0f;  // 18 km/h < 30
@@ -112,50 +108,17 @@ TEST(LateralPlanner, TurnDesireRepulsesAtLowSpeedWithBlinker) {
     ms.lane_t[i] = t;
     ms.plan[i] = {v * t, 0.0f, 0.0f};
   }
-  for (int l = 0; l < 4; ++l) ms.lane_probabilities[l] = 0.9f;  // 차선이 뚜렷해도
+  for (int l = 0; l < 4; ++l) ms.lane_probabilities[l] = 0.9f;
   ms.desire_state[0] = 1.0f;
   VehicleCanState vehicle{};
   vehicle.left_blinker = true;
-  std::vector<int> seq;
-  bool model_path = true, held = true;
-  for (int i = 0; i < 120; ++i) {  // 6초
+  for (int i = 0; i < 60; ++i) {  // 3초
     const LateralTarget r = planner.update(ms, vehicle, v, 0.0f, true);
-    seq.push_back(r.desire);
-    model_path = model_path && r.laneless_mode;
-    held = held && r.turn_desire == 1;
+    ASSERT_EQ(r.desire, 0) << i;
+    ASSERT_EQ(r.lane_change_state, 0) << i;
   }
-  EXPECT_EQ(seq[0], 1) << "깜빡이를 켜자마자 turnLeft";
-  EXPECT_EQ(seq[24], 1);
-  EXPECT_EQ(seq[25], 0) << "1.25초 뒤 내려 다음 rising edge를 만든다";
-  EXPECT_EQ(seq[50], 1) << "2.5초마다 다시 올린다";
-  EXPECT_EQ(seq[100], 1);
-  EXPECT_TRUE(model_path) << "회전 desire 동안은 모델 경로";
-  EXPECT_TRUE(held) << "펄스가 내려가는 동안에도 컨트롤러용 turn_desire는 유지한다";
 
-  vehicle.left_blinker = false;
-  vehicle.right_blinker = true;
-  EXPECT_EQ(planner.update(ms, vehicle, v, 0.0f, true).desire, 2) << "오른쪽은 turnRight";
-  EXPECT_EQ(planner.update(ms, vehicle, 12.0f, 0.0f, true).desire, 0) << "차선 변경 속도 이상이면 아님";
-  EXPECT_EQ(planner.update(ms, vehicle, v, 0.0f, false).desire, 0) << "비활성이면 아님";
-  vehicle.right_blinker = false;
-  const LateralTarget blinker_off = planner.update(ms, vehicle, v, 0.0f, true);
-  EXPECT_EQ(blinker_off.desire, 0) << "깜빡이를 끄면 끝";
-  EXPECT_EQ(blinker_off.turn_desire, 0);
-
-  DrivingParams off;
-  LateralPlanner plain(steering, off);
-  vehicle.left_blinker = true;
-  EXPECT_EQ(plain.update(ms, vehicle, v, 0.0f, true).desire, 0) << "스위치가 꺼져 있으면 openpilot과 같다";
-
-  /* 빠를 때(35 km/h) 켠 깜빡이도 켜진 채 차선 변경 속도 아래로 내려오면 회전이다(회전 차로로 들어가
-   * 감속해 도는 순서). 진행 중인 차선 변경은 감속해도 그 변경이 먼저다. */
-  LateralPlanner slowing(steering, driving);
-  vehicle = VehicleCanState{};
-  vehicle.left_blinker = true;
-  EXPECT_EQ(slowing.update(ms, vehicle, 35.0f / 3.6f, 0.0f, true).desire, 0) << "차선 변경 대기(넛지 전)";
-  EXPECT_EQ(slowing.update(ms, vehicle, 25.0f / 3.6f, 0.0f, true).desire, 1) << "켜 둔 채 감속하면 회전";
-
-  LateralPlanner changing(steering, driving);
+  LateralPlanner changing(steering);
   vehicle = VehicleCanState{};
   vehicle.left_blinker = true;
   changing.update(ms, vehicle, 35.0f / 3.6f, 0.0f, true);
@@ -163,7 +126,7 @@ TEST(LateralPlanner, TurnDesireRepulsesAtLowSpeedWithBlinker) {
   EXPECT_EQ(changing.update(ms, vehicle, 35.0f / 3.6f, 0.0f, true).desire, 3) << "차선 변경 시작";
   vehicle.driver_torque = 0;
   EXPECT_EQ(changing.update(ms, vehicle, 25.0f / 3.6f, 0.0f, true).desire, 3)
-      << "변경 중에는 감속해도 회전이 아니다";
+      << "시작한 변경은 감속해도 이어진다";
 }
 
 /* path_offset_m은 차선 중심에만 적용된다. 차선이 없어 모델 경로로 넘어가면(교차로) 적용하지
@@ -171,8 +134,7 @@ TEST(LateralPlanner, TurnDesireRepulsesAtLowSpeedWithBlinker) {
 TEST(LateralPlanner, PathOffsetOnlyShiftsLanePath) {
   SteeringParams steering;
   steering.path_offset_m = -0.3f;
-  DrivingParams driving;
-  LateralPlanner planner(steering, driving);
+  LateralPlanner planner(steering);
   const float v = 15.0f;
   auto model_for = [&](float lane_prob) {
     ModelState ms{};
@@ -225,10 +187,9 @@ TEST(LateralPlanner, LaneModeFallbackMatchesLaneless) {
     return ms;
   };
   SteeringParams steering;
-  DrivingParams driving;
-  LateralPlanner lane_mode(steering, driving);
-  driving.laneless_mode = true;
-  LateralPlanner laneless(steering, driving);
+  LateralPlanner lane_mode(steering);
+  steering.laneless_mode = true;
+  LateralPlanner laneless(steering);
   VehicleCanState vehicle{};
   LateralTarget r;
   for (int i = 0; i < 60; ++i) r = lane_mode.update(model_for(0.99f), vehicle, v, 0.0f, true);
@@ -275,8 +236,7 @@ TEST(LateralPlanner, LanePathWeightStrengthensCentering) {
   auto desired = [&](float weight) {
     SteeringParams steering;
     steering.lane_path_weight = weight;
-    DrivingParams driving;
-    LateralPlanner planner(steering, driving);
+    LateralPlanner planner(steering);
     VehicleCanState vehicle{};
     LateralTarget r;
     for (int i = 0; i < 40; ++i) r = planner.update(model_for(), vehicle, v, 0.0f, true);

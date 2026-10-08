@@ -2,7 +2,7 @@
  * 모델·Panda·locationd 상태를 넣고 step/update_learners를 돌려, 보낼 CAN과 ControlState를 쓴다.
  * 플래너는 그 자리에서 계산하고(SyncPlanner) 시계는 틱 시각이라, 같은 입력이면 출력이 비트 단위로
  * 같다. controlsd 리팩토링 전후 비교와, 녹화된 실제 출력과의 대조에 쓴다.
- * 사용: replay_controls [--steering s.json] [--driving d.json] [--cruise c.json] [--vehicle-json j]
+ * 사용: replay_controls [--steering s.json] [--cruise c.json] [--vehicle-json j]
  *                       [--force-engaged] [--dump out.txt] <events.bin...>
  *   --force-engaged는 EDGEPILOT_FORCE_ENGAGED처럼 버튼 없이 결합한다(녹화 전에 결합해 둔 route용).
  *   마지막 줄에 출력 전체의 FNV-1a 다이제스트와, 녹화된 ControlState와의 일치율을 쓴다. */
@@ -48,14 +48,13 @@ struct Digest {
 }  // namespace
 
 int main(int argc, char **argv) {
-  std::string steering_path, driving_path, cruise_path, vehicle_json_path, dump_path;
+  std::string steering_path, cruise_path, vehicle_json_path, dump_path;
   bool force_engaged = false;
   std::vector<std::string> events;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : std::string(); };
     if (arg == "--steering") steering_path = next();
-    else if (arg == "--driving") driving_path = next();
     else if (arg == "--cruise") cruise_path = next();
     else if (arg == "--vehicle-json") vehicle_json_path = next();
     else if (arg == "--dump") dump_path = next();
@@ -64,7 +63,7 @@ int main(int argc, char **argv) {
     else events.push_back(arg);
   }
   if (events.empty()) {
-    std::fprintf(stderr, "usage: %s [--steering s.json] [--driving d.json] [--cruise c.json] "
+    std::fprintf(stderr, "usage: %s [--steering s.json] [--cruise c.json] "
                          "[--vehicle-json live_parameters.json] [--force-engaged] [--dump out.txt] <events.bin...>\n", argv[0]);
     return 2;
   }
@@ -72,7 +71,6 @@ int main(int argc, char **argv) {
   ControlParams params;
   std::string error;
   if ((!steering_path.empty() && !load_steering_params_json(steering_path, &params.steering, &error)) ||
-      (!driving_path.empty() && !load_driving_params_json(driving_path, &params.driving, &error)) ||
       (!cruise_path.empty() && !load_adaptive_cruise_params_json(cruise_path, &params.cruise, &error))) {
     std::fprintf(stderr, "params: %s\n", error.c_str());
     return 1;
@@ -103,7 +101,7 @@ int main(int argc, char **argv) {
   std::stable_sort(records.begin(), records.end(),
                    [](const Record &a, const Record &b) { return a.timestamp_ns < b.timestamp_ns; });
 
-  SyncPlanner planner(params.steering, params.driving);
+  SyncPlanner planner(params.steering);
   ControlsTick tick(params, force_engaged, planner, vehicle_json, std::string(), 1);
   uint64_t tick_ns = first_record_ns;
   tick.controller().set_clock([&tick_ns] { return tick_ns; });

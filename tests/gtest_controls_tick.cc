@@ -103,14 +103,14 @@ PandaState panda_state(uint64_t now_ns, bool controls_allowed) {
 class Drive {
 public:
   explicit Drive(const ControlParams &params = laneless_params())
-      : planner_(params.steering, params.driving),
+      : planner_(params.steering),
         tick_(params, false, planner_, std::string(), std::string(), 1) {
     tick_.controller().set_clock([this] { return now_ns_; });
   }
 
   static ControlParams laneless_params() {
     ControlParams params;
-    params.driving.laneless_mode = true;
+    params.steering.laneless_mode = true;
     return params;
   }
 

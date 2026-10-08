@@ -1,7 +1,6 @@
-/* 차선 변경·회전 desire 상태 머신(DesireHelper, openpilot desire_helper 이식): 깜빡이 다음 운전자가
- * 깜빡이 쪽으로 핸들을 밀어야 변경이 시작되고, 차선선을 0.5초에 빼고 되돌린다. 사각지대면
- * 기다리고, 10초가 넘으면 끈다. 도로 경계 쪽으로는 시작하지 않다가 경계가 사라지면 시작한다.
- * 회전 desire는 차선 변경 속도 아래에서 2.5초마다 펄스를 다시 낸다. 모델 프레임(20 Hz)마다 부른다. */
+/* 차선 변경 상태 머신(DesireHelper, openpilot desire_helper 이식): 깜빡이 다음 운전자가 깜빡이 쪽으로
+ * 핸들을 밀어야 변경이 시작되고, 차선선을 0.5초에 빼고 되돌린다. 사각지대면 기다리고, 10초가 넘으면 끈다.
+ * 도로 경계 쪽으로는 시작하지 않다가 경계가 사라지면 시작한다. 모델 프레임(20 Hz)마다 부른다. */
 #include "planning/desire_helper.h"
 #include "car/vehicle_can.h"
 
@@ -101,29 +100,6 @@ TEST(DesireHelper, RoadEdgeBlocksUntilItClears) {
   run(&cleared, 1, with_blinker(1), open_road());
   ASSERT_EQ(cleared.lane_change_state(), LaneChangeState::PreLaneChange)
       << "경계가 사라지면 깜빡이를 다시 켜지 않아도 시작한다";
-}
-
-TEST(DesireHelper, TurnDesirePulsesBelowLaneChangeSpeed) {
-  DesireHelper helper;
-  DesireHelperParams params;
-  params.turn_desire_enabled = true;
-  helper.update_params(params);
-  const float slow = 5.0f;
-  int on = 0;
-  for (int frame = 0; frame < 50; ++frame) {
-    helper.update(with_blinker(-1), slow, true, open_road());
-    ASSERT_TRUE(helper.turn_desire_active());
-    ASSERT_EQ(helper.turn_desire_direction(), 1);
-    ASSERT_EQ(helper.lane_change_state(), LaneChangeState::Off) << "느릴 때 깜빡이는 차선 변경이 아니다";
-    if (helper.desire() == Desire::TurnLeft) ++on;
-    else ASSERT_EQ(helper.desire(), Desire::None);
-    if (frame == 24) ASSERT_EQ(helper.desire(), Desire::TurnLeft);
-    if (frame == 25) ASSERT_EQ(helper.desire(), Desire::None) << "1.25초 뒤 내렸다가 2.5초마다 다시 올린다";
-  }
-  ASSERT_EQ(on, 25);
-  helper.update(with_blinker(0), slow, true, open_road());
-  ASSERT_FALSE(helper.turn_desire_active());
-  ASSERT_EQ(helper.desire(), Desire::None);
 }
 
 }  // namespace

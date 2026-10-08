@@ -145,10 +145,9 @@ void SupercomboModel::wide_worker()
     }
 }
 
-void SupercomboModel::set_desire(int desire, bool left_blinker, bool right_blinker)
+void SupercomboModel::set_desire(int desire)
 {
     temporal_.set_desire(desire);
-    temporal_.clear_turn_desire(left_blinker, right_blinker);
 }
 
 void SupercomboModel::set_chroma_vu(bool vu)

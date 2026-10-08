@@ -12,7 +12,6 @@
  *   --driver-high/--driver-low T, --driver-release N  운전자 개입 히스테리시스
  *   --steering route/params/steering.json  녹화 당시 튜닝(없으면 코드 기본값). 녹화의 LearnerState
  *                              학습값(paramsd·torqued)은 controlsd처럼 매번 컨트롤러에 넣는다.
- *   --driving route/params/driving.json  녹화 당시 주행 파라미터(laneless 모드 등)
  *   --torque F,O,R             torqued 학습값(배율·절편·마찰)을 이 값으로 바꿔 쓴다(유효해진 뒤를 본다)
  *   --camera-shift D           카메라 장착 오프셋을 녹화보다 D m 바꾼 것처럼 모델 출력을 옮긴다
  *                              (예: 0.08로 달린 녹화로 0을 보려면 -0.08). */
@@ -51,7 +50,6 @@ struct Options {
   std::optional<float> sad, kp, ki, laf, gain;
   const char *gain_pts = nullptr;
   const char *steering_path = nullptr;
-  const char *driving_path = nullptr;
   const char *torque = nullptr;
   float camera_shift = 0.0f;
   float wn = 10.0f, zeta = 4.0f;
@@ -63,7 +61,7 @@ struct Options {
   std::fprintf(stderr,
                "usage: %s [--open-loop] [--wn W] [--zeta Z] [--delay N] [--gain G | --gain-pts a,b,c,d]\n"
                "       [--sad S] [--kp KP] [--ki KI] [--laf LAF] [--driver-high T] [--driver-low T]\n"
-               "       [--driver-release N] [--steering steering.json] [--driving driving.json] [--camera-shift D]\n"
+               "       [--driver-release N] [--steering steering.json] [--camera-shift D]\n"
                "       [--torque factor,offset,friction]\n"
                "       <out.csv|-> <events.bin...>\n",
                argv0);
@@ -92,7 +90,6 @@ Options parse_options(int argc, char **argv) {
     else if (arg == "--driver-low") o.driver_low = std::atoi(value());
     else if (arg == "--driver-release") o.driver_release = std::atoi(value());
     else if (arg == "--steering") o.steering_path = value();
-    else if (arg == "--driving") o.driving_path = value();
     else if (arg == "--torque") o.torque = value();
     else if (arg == "--camera-shift") o.camera_shift = static_cast<float>(std::atof(value()));
     else if (arg.rfind("--", 0) == 0) usage(argv[0]);
@@ -193,18 +190,10 @@ int main(int argc, char **argv) {
   const bool open_loop = opt.open_loop;
 
   SteeringParams steering;
-  DrivingParams driving;
   if (opt.steering_path != nullptr) {
     std::string error;
     if (!load_steering_params_json(opt.steering_path, &steering, &error)) {
       std::fprintf(stderr, "%s: %s\n", opt.steering_path, error.c_str());
-      return 1;
-    }
-  }
-  if (opt.driving_path != nullptr) {
-    std::string error;
-    if (!load_driving_params_json(opt.driving_path, &driving, &error)) {
-      std::fprintf(stderr, "%s: %s\n", opt.driving_path, error.c_str());
       return 1;
     }
   }
@@ -229,11 +218,10 @@ int main(int argc, char **argv) {
   }
   Plant plant(opt.wn, opt.zeta, gain_curve, opt.delay);
 
-  LateralPlanner planner(steering, driving);
+  LateralPlanner planner(steering);
   LateralControllerConfig cfg;
   cfg.force_engaged = true;
   cfg.steering_params = steering;
-  cfg.driving_params = driving;
   LateralController controller(cfg);
   constexpr uint64_t kControllerNowNs = 1'000'000'000'000ULL;  // plan 나이를 재는 컨트롤러 시계(고정)
   controller.set_clock([] { return kControllerNowNs; });

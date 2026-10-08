@@ -192,7 +192,7 @@ is described in [Departure alerts](departure-alerts.md).
 ## Parameter files
 
 The tracked JSON files in `params/` are the source of truth for K7 steering,
-driving, vision-cruise, recording, and display configuration. Changes are written
+vision-cruise, recording, and display configuration. Changes are written
 atomically. Control changes are signaled to `controlsd` and also detected by
 its 100 ms fallback poll.
 

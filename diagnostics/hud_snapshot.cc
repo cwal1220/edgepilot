@@ -257,14 +257,6 @@ int main(int argc, char **argv)
     lane_change.lane_change = 1;
     lane_change.lane_change_direction = -1;
 
-    HudState turn = drive;  // 교차로 우회전 desire, 운전자가 반대로 잡는 중
-    turn.right_blinker = true;
-    turn.turn_signal_step = 12;
-    turn.turn_direction = 1;
-    turn.cluster_speed_kph = 18.0f;
-    turn.steer_torque_fraction = -0.42f;
-    turn.driver_torque_fraction = 0.35f;
-
     HudState paused = drive;  // 85도 위에서 운전자가 넘겨받은 회전
     paused.steer_paused = true;
     paused.steer_paused_by_driver = true;
@@ -375,7 +367,6 @@ int main(int argc, char **argv)
         {"offline", &output, offline},
         {"warnings", &output, warnings},
         {"lane_change", &output, lane_change},
-        {"turn", &output, turn},
         {"paused", &output, paused},
         {"soft_disable", &output, soft_disable},
         {"panda_fault", &output, panda_fault},

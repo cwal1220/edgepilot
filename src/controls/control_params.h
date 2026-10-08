@@ -2,11 +2,11 @@
 
 #include <string>
 
-/* controlsd가 함께 읽는 런타임 파라미터. params/steering.json과
- * params/driving.json이 각각의 출처다. 다만 상류(opendbc CarControllerParams, 모듈 상수)에서도
- * 코드에 박힌 차량·통신 상수는 여기 필드로만 두고 파일에서 읽지 않는다(필드마다 적었다). 테스트와
- * 리플레이 도구는 이 필드를 바꿔 쓴다. CAN 계층(car/)은 이 헤더를 보지 않는다 —
- * 토크 제한은 lateral_controller.cc가 HyundaiSteeringLimits로 바꿔 넘긴다. */
+/* controlsd가 읽는 조향 런타임 파라미터. params/steering.json이 출처다. 다만 상류(opendbc
+ * CarControllerParams, 모듈 상수)에서도 코드에 박힌 차량·통신 상수는 여기 필드로만 두고 파일에서 읽지
+ * 않는다(필드마다 적었다. DrivingParams는 전부 그렇다). 테스트와 리플레이 도구는 이 필드를 바꿔 쓴다.
+ * CAN 계층(car/)은 이 헤더를 보지 않는다 — 토크 제한은 lateral_controller.cc가 HyundaiSteeringLimits로
+ * 바꿔 넘긴다. */
 
 /* 기본값은 params/steering.json(K7 YG HEV 실차 검증값)과 일치시킨다. 로드 실패는
  * controlsd가 throw하므로 이 값은 파일 폴백이 아니라, JSON에 키가 빠졌을 때와
@@ -78,13 +78,19 @@ struct SteeringParams {
    * laneless 모드에는 쓰지 않는다. */
   float lane_path_weight = 3.0f;
   float min_steer_speed_mps = 1.0f;
+  /* 경로 모드. false면 Lane 모드로 차선 확률이 높으면 차선 중심 경로를 섞고 낮으면 모델 경로만 쓴다. true면
+   * Laneless 모드로 openpilot 메인처럼 모델 경로만 쓴다(get_curvature_from_plan). */
+  bool laneless_mode = false;
+  // 이 속도 미만에서는 깜빡이를 켜도 차선 변경을 시작하지 않는다(상류 LANE_CHANGE_SPEED_MIN은 20 mph).
+  float lane_change_min_speed_kph = 30.0f;
 
   float center_to_front_m() const;
 };
 
+// 주행 타이밍과 CAN 상수. 전부 파일에서 읽지 않는 고정값이다.
 struct DrivingParams {
-  /* 파일에서 읽지 않는 고정값. 낡음 판정은 상류도 고정 규칙이다(메시지 주기의 10배, CAN 버스는
-   * 0.5초). 모델 경로는 그보다 엄격하게 250 ms, 차량 CAN 상태는 버스와 같은 500 ms를 쓴다. */
+  /* 낡음 판정은 상류도 고정 규칙이다(메시지 주기의 10배, CAN 버스는 0.5초). 모델 경로는 그보다 엄격하게
+   * 250 ms, 차량 CAN 상태는 버스와 같은 500 ms를 쓴다. */
   int model_timeout_ms = 250;
   int vehicle_state_timeout_ms = 500;
   /* 해제 뒤 순정 LKAS로 넘기기 전에 0 토크 프레임을 이어 보내는 시간(openpilot_c2의 기본 인계 시간과
@@ -93,14 +99,6 @@ struct DrivingParams {
   /* 저속에서도 MDPS가 LKAS 토크를 받도록 MDPS 버스 CLU11에 쓰는 속도. 상류에는 없는 기능이고,
    * 커뮤니티 포크(openpilot_c2)도 60 km/h(38 mph)를 코드에 박아 둔다. */
   float mdps_speed_spoof_kph = 60.0f;
-
-  float lane_change_min_speed_kph = 30.0f;
-  bool laneless_mode = false;
-  /* 실험(상류 없음): 결합 중 차선 변경 최소 속도 미만에서 깜빡이를 켜면 모델에 좌·우회전
-   * desire를 준다. desire는 켜지는 순간의 펄스라 5초면 모델 입력에서 빠지므로 2.5초마다 다시 준다.
-   * 그동안은 차선 모드라도 모델 경로를 따른다. 2026-10-02 교차로 좌회전 재생(master 모델)에서
-   * 회전 초입의 오른쪽 뒤집힘이 사라졌다(개방 루프). */
-  bool turn_desire = false;
 };
 
 // params/steering.json을 읽어 SteeringParams에 반영한다.
@@ -108,7 +106,3 @@ bool load_steering_params_json(const std::string &path,
                                SteeringParams *params,
                                std::string *error);
 
-// params/driving.json을 읽어 DrivingParams에 반영한다.
-bool load_driving_params_json(const std::string &path,
-                              DrivingParams *params,
-                              std::string *error);

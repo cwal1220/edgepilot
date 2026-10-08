@@ -106,24 +106,6 @@ TEST(ModelTemporal, Desire)
     ASSERT_EQ(state.traffic_convention(), (std::vector<float>{1.0f, 0.0f}));
 }
 
-/* 회전 desire는 그쪽 깜빡이를 끄면 이력에서 지운다(차선 변경 desire는 상류처럼 남긴다). */
-TEST(ModelTemporal, TurnDesireClearsWithBlinker)
-{
-    SupercomboTemporalState state;
-    const auto &desire = state.desire_history();
-    const size_t last = (SupercomboTemporalState::kDesireHistoryTicks - 1) * kDesireLen;
-    state.set_desire(1);
-    state.push_desire_pulse();
-    state.set_desire(3);
-    state.push_desire_pulse();
-    state.clear_turn_desire(true, false);
-    ASSERT_EQ(desire[last - kDesireLen + 1], 1.0f) << "왼쪽 깜빡이가 켜져 있으면 turnLeft는 남는다";
-    state.clear_turn_desire(false, false);
-    for (int t = 0; t < SupercomboTemporalState::kDesireHistoryTicks; ++t)
-        ASSERT_EQ(desire[t * kDesireLen + 1], 0.0f) << t;
-    ASSERT_EQ(desire[last + 3], 1.0f) << "차선 변경 펄스는 그대로";
-}
-
 /* 특징: hidden_state 512개가 마지막 슬롯에 들어가고, 모델 입력은 0,4,...,92번
  * 슬롯이라 이번 출력은 3프레임을 더 밀어야 입력 마지막 행에 나타난다. */
 TEST(ModelTemporal, Features)

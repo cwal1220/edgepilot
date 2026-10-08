@@ -30,8 +30,8 @@
 #include <string>
 #include <thread>
 
-/* controlsd의 런타임 파라미터 세 파일(steering/driving/adaptive_cruise.json). 한꺼번에 읽고 한꺼번에
- * 바꾼다. */
+/* controlsd의 런타임 파라미터 두 파일(steering/adaptive_cruise.json)과 코드 고정값(driving). 파일은 한꺼번에
+ * 읽고 한꺼번에 바꾼다. */
 struct ControlParams {
   SteeringParams steering;
   DrivingParams driving;
@@ -40,16 +40,15 @@ struct ControlParams {
 
 struct ControlParamPaths {
   std::string steering;
-  std::string driving;
   std::string cruise;
 };
 
-// 셋을 다 읽어야 true. 하나라도 거부되면 params는 그대로이고 error에 사유를 쓴다.
+// 둘 다 읽어야 true. 하나라도 거부되면 params는 그대로이고 error에 사유를 쓴다.
 bool load_control_params(const ControlParamPaths &paths, ControlParams *params, std::string *error);
 // 시작·재적용 로그의 꼬리: MDPS 속도 바꿔치기와 비전 크루즈 설정.
 std::string control_params_summary(const ControlParams &params);
 
-/* 세 파일을 stat으로 감시하고, 바뀌었거나 SIGHUP이 오면 셋을 다시 읽는다. 하나라도 거부되면 셋 다
+/* 두 파일을 stat으로 감시하고, 바뀌었거나 SIGHUP이 오면 둘을 다시 읽는다. 하나라도 거부되면 둘 다
  * 이전 값을 유지한다. */
 class ControlParamsWatcher {
 public:
@@ -65,7 +64,6 @@ private:
 
   ControlParamPaths paths_;
   FileStamp steering_stamp_;
-  FileStamp driving_stamp_;
   FileStamp cruise_stamp_;
   std::chrono::steady_clock::time_point next_check_;
   unsigned generation_ = 1;
@@ -78,19 +76,19 @@ public:
   virtual ~PlannerPort() = default;
   virtual void submit(const ModelState &model, const VehicleCanState &vehicle, float v_ego,
                       float measured_curvature, bool active) = 0;
-  virtual void update_params(const SteeringParams &params, const DrivingParams &driving) = 0;
+  virtual void update_params(const SteeringParams &params) = 0;
   virtual LateralTarget latest() const = 0;
 };
 
 // 20 Hz 플래너를 100 Hz 제어 루프와 떼어 놓는 작업 스레드. latest()는 마지막으로 끝난 결과다.
 class LateralPlannerWorker : public PlannerPort {
 public:
-  LateralPlannerWorker(const SteeringParams &params, const DrivingParams &driving);
+  explicit LateralPlannerWorker(const SteeringParams &params);
   ~LateralPlannerWorker() override;
 
   void submit(const ModelState &model, const VehicleCanState &vehicle, float v_ego, float measured_curvature,
               bool active) override;
-  void update_params(const SteeringParams &params, const DrivingParams &driving) override;
+  void update_params(const SteeringParams &params) override;
   LateralTarget latest() const override;
 
 private:
@@ -109,7 +107,6 @@ private:
   std::condition_variable condition_;
   Request request_;
   SteeringParams pending_steering_;
-  DrivingParams pending_driving_;
   LateralTarget latest_;
   bool pending_ = false;
   bool params_pending_ = false;
@@ -120,14 +117,12 @@ private:
 // 넘겨받은 자리에서 바로 계산하는 플래너(검사·재생 도구).
 class SyncPlanner : public PlannerPort {
 public:
-  SyncPlanner(const SteeringParams &params, const DrivingParams &driving) : planner_(params, driving) {}
+  explicit SyncPlanner(const SteeringParams &params) : planner_(params) {}
   void submit(const ModelState &model, const VehicleCanState &vehicle, float v_ego, float measured_curvature,
               bool active) override {
     latest_ = planner_.update(model, vehicle, v_ego, measured_curvature, active);
   }
-  void update_params(const SteeringParams &params, const DrivingParams &driving) override {
-    planner_.update_params(params, driving);
-  }
+  void update_params(const SteeringParams &params) override { planner_.update_params(params); }
   LateralTarget latest() const override { return latest_; }
 
 private:

@@ -74,7 +74,6 @@ void hud_apply_control_state(const ControlState &c, bool fresh, HudState *hud)
     hud->lane_change_direction = flags & kHudFlagLaneChangeRight ? 1 : -1;
     hud->steer_paused = (flags & kHudFlagSteerPaused) != 0;
     hud->steer_paused_by_driver = (flags & kHudFlagSteerPausedByDriver) != 0;
-    hud->turn_direction = flags & kHudFlagTurnLeft ? -1 : flags & kHudFlagTurnRight ? 1 : 0;
     hud->gear = fresh ? c.gear : 0;
     hud->cluster_speed_kph = fresh ? c.cluster_speed_kph : 0.0f;
     hud->ego_speed_kph = fresh ? c.ego_speed_kph : 0.0f;

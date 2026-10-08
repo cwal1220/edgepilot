@@ -138,8 +138,6 @@ ControlState make_control_state(const LateralControllerConfig &config,
       (target.lane_change_direction > 0 ? kHudFlagLaneChangeRight : 0U) |
       (result.large_angle_hold ? kHudFlagSteerPaused : 0U) |
       (result.large_angle_hold_by_driver ? kHudFlagSteerPausedByDriver : 0U) |
-      (target.turn_desire == 1 ? kHudFlagTurnLeft : 0U) |
-      (target.turn_desire == 2 ? kHudFlagTurnRight : 0U) |
       (result.vehicle_fresh && brake_lights_on(vehicle, now_s) ? kHudFlagBrakeLights : 0U);
   state.seeds_ready = result.seeds_ready ? 1U : 0U;
   state.vehicle_fresh = result.vehicle_fresh ? 1U : 0U;
@@ -196,10 +194,6 @@ bool load_control_params(const ControlParamPaths &paths, ControlParams *params, 
     if (error) *error = "steering " + paths.steering + ": " + load_error;
     return false;
   }
-  if (!load_driving_params_json(paths.driving, &candidate.driving, &load_error)) {
-    if (error) *error = "driving " + paths.driving + ": " + load_error;
-    return false;
-  }
   if (!load_adaptive_cruise_params_json(paths.cruise, &candidate.cruise, &load_error)) {
     if (error) *error = "adaptive cruise " + paths.cruise + ": " + load_error;
     return false;
@@ -227,12 +221,10 @@ std::optional<ControlParams> ControlParamsWatcher::poll(std::chrono::steady_cloc
   if (!reload_requested && now < next_check_) return std::nullopt;
   next_check_ = now + std::chrono::milliseconds(kParamPollIntervalMs);
   const FileStamp steering = file_stamp(paths_.steering);
-  const FileStamp driving = file_stamp(paths_.driving);
   const FileStamp cruise = file_stamp(paths_.cruise);
-  const bool changed = steering != steering_stamp_ || driving != driving_stamp_ || cruise != cruise_stamp_;
+  const bool changed = steering != steering_stamp_ || cruise != cruise_stamp_;
   if (!reload_requested && !changed) return std::nullopt;
   steering_stamp_ = steering;
-  driving_stamp_ = driving;
   cruise_stamp_ = cruise;
   ControlParams candidate = current;
   std::string error;
@@ -248,15 +240,11 @@ std::optional<ControlParams> ControlParamsWatcher::poll(std::chrono::steady_cloc
 
 void ControlParamsWatcher::stamp() {
   steering_stamp_ = file_stamp(paths_.steering);
-  driving_stamp_ = file_stamp(paths_.driving);
   cruise_stamp_ = file_stamp(paths_.cruise);
 }
 
-LateralPlannerWorker::LateralPlannerWorker(const SteeringParams &params,
-                                           const DrivingParams &driving)
-    : planner_(params, driving), pending_steering_(params),
-      pending_driving_(driving),
-      thread_(&LateralPlannerWorker::run, this) {}
+LateralPlannerWorker::LateralPlannerWorker(const SteeringParams &params)
+    : planner_(params), pending_steering_(params), thread_(&LateralPlannerWorker::run, this) {}
 
 LateralPlannerWorker::~LateralPlannerWorker() {
   {
@@ -281,12 +269,10 @@ void LateralPlannerWorker::submit(const ModelState &model, const VehicleCanState
   condition_.notify_one();
 }
 
-void LateralPlannerWorker::update_params(const SteeringParams &params,
-                                         const DrivingParams &driving) {
+void LateralPlannerWorker::update_params(const SteeringParams &params) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     pending_steering_ = params;
-    pending_driving_ = driving;
     params_pending_ = true;
   }
   condition_.notify_one();
@@ -301,7 +287,6 @@ void LateralPlannerWorker::run() {
   while (true) {
     Request request;
     SteeringParams steering;
-    DrivingParams driving;
     bool has_request = false;
     bool apply_params = false;
     {
@@ -312,7 +297,6 @@ void LateralPlannerWorker::run() {
       if (stop_) return;
       if (params_pending_) {
         steering = pending_steering_;
-        driving = pending_driving_;
         params_pending_ = false;
         apply_params = true;
       }
@@ -322,7 +306,7 @@ void LateralPlannerWorker::run() {
         has_request = true;
       }
     }
-    if (apply_params) planner_.update_params(steering, driving);
+    if (apply_params) planner_.update_params(steering);
     if (!has_request) continue;
     const LateralTarget result = planner_.update(
         request.model, request.vehicle, request.v_ego,
@@ -472,7 +456,7 @@ void ControlsTick::apply_params(const ControlParams &params) {
   config_.steering_params = params.steering;
   config_.driving_params = params.driving;
   controller_.update_params(config_.steering_params, config_.driving_params);
-  planner_.update_params(config_.steering_params, config_.driving_params);
+  planner_.update_params(config_.steering_params);
   adaptive_cruise_controller_.update_config(cruise_);
 }
 

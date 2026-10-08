@@ -11,8 +11,6 @@ import {createVehicleView} from "./vehicle_view.js";
 const STATUS_INTERVAL_MS = 2000;
 // 파라미터 탭 아래에 붙는 카드
 const PARAM_EXTRAS = {display: () => [createPandaCard()]};
-// 예전 주소(#learners: 실시간 학습 탭)
-const ALIASES = {learners: "vehicle"};
 
 const main = document.getElementById("main");
 const nav = document.getElementById("tabs");
@@ -55,7 +53,7 @@ function show(id) {
 
 function route() {
   const id = decodeURIComponent(window.location.hash.slice(1));
-  show(ALIASES[id] || id);
+  show(id);
 }
 
 /* 파라미터를 (다시) 읽고 탭을 만든다. 다시 읽을 때는 파라미터를 쓰는 화면을 버리고 새로 만든다. */

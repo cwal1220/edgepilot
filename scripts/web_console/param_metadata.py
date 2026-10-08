@@ -34,11 +34,7 @@ def toggle(label: str, section: str, description: str, on: str, off: str, *, tab
 PARAM_GROUPS: Dict[str, Dict[str, Any]] = {
     "steering": {
         "label": "조향", "file": "steering.json", "notify": "controlsd", "note": "",
-        "sections": ["기본 토크 제한", "토크 컨트롤러", "차량 중심 보정", "운전자 개입", "LKAS fault 보호"],
-    },
-    "driving": {
-        "label": "주행 제한", "file": "driving.json", "notify": "controlsd", "note": "",
-        "sections": ["경로 모드", "운전자 개입"],
+        "sections": ["기본 토크 제한", "토크 컨트롤러", "경로 모드", "차량 중심 보정", "운전자 개입", "LKAS fault 보호"],
     },
     "adaptive_cruise": {
         "label": "비전 크루즈", "file": "adaptive_cruise.json", "notify": "controlsd",
@@ -251,26 +247,12 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "자동 조향이 시작되는 최소 속도가 높아집니다.",
             "더 낮은 속도에서도 자동 조향을 허용합니다.",
         ),
-    },
-    "driving": {
         "laneless_mode": toggle(
             "Laneless 모드", "경로 모드",
             "차선 융합을 끄고 모델이 낸 주행 경로만 따라갑니다. 끄면 차선이 뚜렷할 때 차선 중심으로 붙는 Lane "
             "모드입니다.",
             "켜면 차선이 보여도 모델 경로만 따라가고 HUD에 LANELESS로 표시됩니다.",
             "끄면 차선 확률이 높을 때 차선 중심 경로를 섞는 Lane 모드로 돌아갑니다.",
-        ),
-        "turn_desire": toggle(
-            "교차로 회전 desire (실험)", "경로 모드",
-            "결합 중 차선 변경 최소 속도보다 느릴 때 깜빡이를 켜면 모델에 좌·우회전 의도를 알려 회전 경로를 잡게 "
-            "합니다(openpilot에 없는 기능). 2.5초마다 다시 알리고, 그동안은 Lane 모드라도 모델 경로를 따릅니다. "
-            "깜빡이를 끄면 모델 입력에서도 지워 바로 풀리고, 속도가 오르면 새로 알리지 않습니다(이미 알린 의도는 "
-            "모델에 최대 5초 남습니다). 빠를 때 켠 깜빡이도 켜 둔 채 그 속도 아래로 감속하면 회전으로 알립니다(진행 "
-            "중인 차선 변경이 먼저입니다). 그래서 저속 차선 변경·갓길 정차나, 차선 변경 뒤 깜빡이를 켠 채 정체로 "
-            "감속할 때도 회전으로 알리니 그때는 깜빡이를 끄거나 직접 조향하세요. 회전 중 깜빡이 방향으로 핸들을 "
-            "돌리면 시스템은 반대 방향 토크를 내지 않습니다.",
-            "켜면 저속 깜빡이에서 모델이 회전 경로를 따릅니다. 처음엔 한적한 교차로에서 시험하세요.",
-            "끄면 교차로 회전은 운전자가 합니다(openpilot과 같음).",
         ),
         "lane_change_min_speed_kph": number(
             "차선 변경 최소 속도", "운전자 개입", "km/h", 1, 0, 80,

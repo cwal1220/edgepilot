@@ -3,9 +3,8 @@
 Every sample is exactly what the runtime feeds the core on the board: the recorded H.264 frame
 (1280x720) through the device warp (tools/model/model_warp.py, MaixCAM2 intrinsics from
 src/common/app_config.h, the calibration the recording carries), the 5-frame image history per tower
-(t-4 and t), the desire pulses controlsd sent (src/model/model_temporal.h: rising edge, turn desire
-cleared with its blinker, 100 ticks max-pooled to 25), and the core's own 96-tick hidden-state
-history from running the fp32 core in order.
+(t-4 and t), the desire pulses controlsd sent (src/model/model_temporal.h: rising edge, 100 ticks
+max-pooled to 25), and the core's own 96-tick hidden-state history from running the fp32 core in order.
 
   make_m2_data.py calib <spec.json> <out_dir>
       Pulsar2 calibration set (<out_dir>/<tensor>.tar of NNNN.npy, float32 with a batch axis).
@@ -43,26 +42,24 @@ TENSORS = ("input_imgs", "big_input_imgs", "desire", "features_buffer", "traffic
 
 
 def recorded(route_dir: Path):
-    """ControlState (time, desire, blinkers) and the calibration of every ModelState."""
-    cs_t, cs_des, cs_lb, cs_rb, m_t, rpy = [], [], [], [], [], []
+    """ControlState (time, desire) and the calibration of every ModelState."""
+    cs_t, cs_des, m_t, rpy = [], [], [], []
     for path in rr.route_event_files(route_dir):
         for rec in rr.iter_event_records(path):
             if rec.type == rr.RECORD_CONTROL_STATE:
                 c = rec.control_state()
                 cs_t.append(c["timestamp_ns"] * 1e-9)
                 cs_des.append(int(c["desire"]))
-                cs_lb.append(int(c["left_blinker"]))
-                cs_rb.append(int(c["right_blinker"]))
             elif rec.type == rr.RECORD_MODEL_STATE:
                 lay = rec.model_layout()
                 m_t.append(np.frombuffer(rec.payload, "<u8", 1, lay["capture_timestamp_ns"])[0] * 1e-9)
                 rpy.append(np.frombuffer(rec.payload, "<f4", 3, lay["calibration"] + 8).copy())
-    return (np.array(cs_t), np.array(cs_des), np.array(cs_lb), np.array(cs_rb), np.array(m_t), np.array(rpy))
+    return np.array(cs_t), np.array(cs_des), np.array(m_t), np.array(rpy)
 
 
 def run_stream(sess, route_dir: Path, seg_dirs: list[Path]):
     """Yield (route time, feed, raw output) for every frame of a contiguous run of segments."""
-    cs_t, cs_des, cs_lb, cs_rb, m_t, rpy_all = recorded(route_dir)
+    cs_t, cs_des, m_t, rpy_all = recorded(route_dir)
     t_first = cs_t[0]
     segments = [rr.read_segment_index(d) for d in seg_dirs]
     t0 = segments[0].frames["capture_timestamp_ns"][0] * 1e-9 - t_first
@@ -86,10 +83,6 @@ def run_stream(sess, route_dir: Path, seg_dirs: list[Path]):
             cur[cs_des[j]] = 1.0
         pulse = np.where(cur - prev > 0.99, cur, 0.0).astype(np.float32)
         prev = cur
-        if not cs_lb[j]:
-            desire[:, 1] = 0.0
-        if not cs_rb[j]:
-            desire[:, 2] = 0.0
         desire = np.roll(desire, -1, 0)
         desire[-1] = pulse
         feed = {

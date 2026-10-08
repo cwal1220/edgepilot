@@ -160,8 +160,8 @@ LateralControlResult LateralController::update(const LateralPath &path,
   prev_desired_curvature_ = result.desired_curvature;
 
   if (steering) {
-    steer(target, vehicle_state, speed_mps, now_s, steering_pressed, yaw_rate_valid, curvature_limited,
-          plan_curvature, live, &result);
+    steer(vehicle_state, speed_mps, now_s, steering_pressed, yaw_rate_valid, curvature_limited, plan_curvature,
+          live, &result);
   } else {
     // 상류 LaC.reset(): 포화 시간을 지운다(PID는 토크 제어기가 비활성 틱에 지운다)
     sat_time_ = 0.0f;
@@ -359,11 +359,10 @@ void LateralController::copy_torque_state(LateralControlResult *result) const {
   result->feedforward = torque_controller_.feedforward();
 }
 
-// 조향 중: 토크를 계산하고 85도 고장 회피·회전 desire·Panda 한계를 적용한 뒤 포화를 본다.
-void LateralController::steer(const LateralTarget &target, const VehicleCanState &vehicle_state,
-                              float speed_mps, double now_s, bool steering_pressed, bool yaw_rate_valid,
-                              bool curvature_limited, float plan_curvature, const LiveLateralParams &live,
-                              LateralControlResult *result) {
+// 조향 중: 토크를 계산하고 85도 고장 회피와 Panda 한계를 적용한 뒤 포화를 본다.
+void LateralController::steer(const VehicleCanState &vehicle_state, float speed_mps, double now_s,
+                              bool steering_pressed, bool yaw_rate_valid, bool curvature_limited,
+                              float plan_curvature, const LiveLateralParams &live, LateralControlResult *result) {
   const SteeringParams &control_params = config_.steering_params;
   /* 85도 위에서도 컨트롤러 토크를 그대로 내되, 요청을 끄는 프레임(avoid_lkas_fault_max_frames,
    * update_large_angle_hold)에 0에 닿도록 크기를 steer_delta_down × 남은 프레임으로 묶는다.
@@ -386,16 +385,6 @@ void LateralController::steer(const LateralTarget &target, const VehicleCanState
       steering_pressed, steer_limited_by_safety_ || above_fault_angle, control_params, plan_delay_s(),
       vehicle_state.yaw_rate_rad_s, yaw_rate_valid, road_bank_lat_accel_, live);
   result->desired_torque = std::clamp(raw_torque, -torque_cap, torque_cap);
-  /* 회전 desire 중 운전자가 깜빡이 방향으로 돌리고 있으면(운전자 토크 > steer_driver_allowance)
-   * 그 반대 방향 토크는 내지 않는다. 걷는 속도에서 모델 계획이 회전을 놓치면 회전에 들어가는
-   * 운전자를 밀었다(2026-10-03 8:16·8:48). panda 운전자 클램프도 반대 토크를 줄이지만 운전자
-   * 토크가 242를 넘어야 0이 된다. 토크와 운전자 토크는 같은 부호계다(+ = 왼쪽). */
-  if (target.turn_desire != 0) {
-    const int toward = target.turn_desire == 1 ? 1 : -1;
-    if (vehicle_state.driver_torque * toward > control_params.steer_driver_allowance)
-      result->desired_torque = toward > 0 ? std::max(result->desired_torque, 0)
-                                          : std::min(result->desired_torque, 0);
-  }
   copy_torque_state(result);
   result->apply_torque = apply_hyundai_steer_torque_limits(
       result->desired_torque, last_torque_, vehicle_state.driver_torque,

@@ -42,9 +42,7 @@ public:
                         const std::function<bool()> &source_still_valid);
     void set_input_calibration(const float rpy[3]);
     void set_camera_mount(float offset_m, float height_m);
-    /* 깜빡이는 회전 desire를 이력에서 지우는 데 쓴다(SupercomboTemporalState::clear_turn_desire).
-     * 모르면(재생) 켜진 것으로 두어 지우지 않는다. */
-    void set_desire(int desire, bool left_blinker = true, bool right_blinker = true);
+    void set_desire(int desire);
     // 소스 프레임의 크로마 순서(NV21이면 true). 워프 두 탑에 같이 적용한다.
     void set_chroma_vu(bool vu);
 

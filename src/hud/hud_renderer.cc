@@ -335,21 +335,12 @@ void draw_alert(HudCanvas &canvas, const HudAlertCard &alert)
                 HudAlign::center);
 }
 
-// 왼쪽 열: 조향 중에 하고 있는 조작(차선 변경, 교차로 회전). 다음 칩이 올 y를 돌려준다.
+// 왼쪽 열: 조향 중에 하고 있는 조작(차선 변경). 다음 칩이 올 y를 돌려준다.
 int draw_maneuver(HudCanvas &canvas, int y, const HudState &hud)
 {
-    if (!steering_now(hud)) return y;
-    const char *text = nullptr;
-    int direction = 0;
-    if (hud.lane_change == 2) {
-        text = "CHANGING LANES";
-        direction = hud.lane_change_direction;
-    } else if (hud.turn_direction) {
-        text = hud.turn_direction < 0 ? "TURN LEFT" : "TURN RIGHT";
-        direction = hud.turn_direction;
-    }
-    if (!text) return y;
-    chip(canvas, kMargin, y, text, state_color(hud), HudAlign::left, direction < 0 ? ChipMark::left : ChipMark::right);
+    if (!steering_now(hud) || hud.lane_change != 2) return y;
+    chip(canvas, kMargin, y, "CHANGING LANES", state_color(hud), HudAlign::left,
+         hud.lane_change_direction < 0 ? ChipMark::left : ChipMark::right);
     return y + kChipH + kGap;
 }
 

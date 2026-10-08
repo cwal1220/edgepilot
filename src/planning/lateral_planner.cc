@@ -275,23 +275,20 @@ MpcReferences mpc_references(const std::array<std::array<double, 3>, kTrajectory
 }  // namespace
 
 struct LateralPlanner::Impl {
-  Impl(const SteeringParams &steering, const DrivingParams &driving)
-      : lane_planner(steering.path_offset_m) {
-    update_params(steering, driving);
+  explicit Impl(const SteeringParams &steering) : lane_planner(steering.path_offset_m) {
+    update_params(steering);
   }
 
-  void update_params(const SteeringParams &steering,
-                     const DrivingParams &driving) {
+  void update_params(const SteeringParams &steering) {
     lane_planner.update_offsets(steering.path_offset_m);
     lane_path_weight = steering.lane_path_weight;
     DesireHelperParams desire_params;
     // desire_helper의 torque_applied는 carstate.steeringPressed에서 나오므로
     // 컨트롤러와 같은 임계값을 써야 한다.
     desire_params.steering_pressed_threshold = steering.steering_pressed_threshold;
-    desire_params.lane_change_min_speed_mps = driving.lane_change_min_speed_kph / 3.6;
-    desire_params.turn_desire_enabled = driving.turn_desire;
+    desire_params.lane_change_min_speed_mps = steering.lane_change_min_speed_kph / 3.6;
     desire_helper.update_params(desire_params);
-    laneless_mode = driving.laneless_mode;
+    laneless_mode = steering.laneless_mode;
     const double center_to_front = steering.center_to_front_m();
     constexpr double civic_mass = 1326.0 + 136.0;
     constexpr double civic_wheelbase = 2.70;
@@ -386,17 +383,13 @@ struct LateralPlanner::Impl {
       lane_planner.scale_near_probability(desire_helper.lane_change_lane_prob());
   }
 
-  /* Lane 모드에서 이번 프레임에 모델 경로를 따를지(차선이 안 보일 때, 회전 desire 중) 정하고, 출력
-   * 인계 비율 plan_mix를 그쪽으로 옮긴다. */
+  /* Lane 모드에서 이번 프레임에 모델 경로를 따를지(차선이 안 보일 때) 정하고, 출력 인계 비율 plan_mix를
+   * 그쪽으로 옮긴다. */
   bool update_path_source() {
     const double lane_probability = lane_planner.mean_effective_probability();
     bool use_model_path = false;
     const bool lane_change_off = desire_helper.lane_change_state() == LaneChangeState::Off;
-    if (desire_helper.turn_desire_active()) {
-      // 회전 desire를 준 동안은 차선선 경로가 회전을 막지 않게 모델 경로를 따른다.
-      use_model_path = true;
-      laneless_buffer = true;
-    } else if (lane_probability < 0.3 && lane_change_off) {
+    if (lane_probability < 0.3 && lane_change_off) {
       use_model_path = true;
       laneless_buffer = true;
     // 복귀 문턱을 openpilot의 0.5에서 0.4로 내렸다. 교차로 후 차선
@@ -408,7 +401,7 @@ struct LateralPlanner::Impl {
     } else if (!lane_change_off) {
       laneless_buffer = false;
     }
-    /* 모델 경로 구간(교차로처럼 차선이 안 보일 때, 회전 desire)은 laneless 모드와 같은 openpilot
+    /* 모델 경로 구간(교차로처럼 차선이 안 보일 때)은 laneless 모드와 같은 openpilot
      * 메인 계산(plan_yaw_target)으로 목표를 낸다. 예전에는 모델 경로 위치를 Lane MPC로 따라갔는데,
      * 경로를 "지금 속도 x 시간" 거리에서 읽고 MPC가 곡률 변화를 눌러 25 km/h 아래에서 laneless보다
      * 26~30% 덜 꺾고 0.3~0.4초 늦었다(2026-10-05 재생; 실주행 저속 회전의 운전자 토크 중앙값
@@ -513,7 +506,6 @@ struct LateralPlanner::Impl {
   // 이번 프레임의 desire와 차선 변경 단계(LateralTarget의 정수 필드로).
   void fill_desire(LateralTarget *target) const {
     target->desire = static_cast<int>(desire_helper.desire());
-    target->turn_desire = desire_helper.turn_desire_direction();
     target->lane_change_state = static_cast<int>(desire_helper.lane_change_state());
     target->lane_change_direction = desire_helper.direction();
   }
@@ -533,15 +525,13 @@ struct LateralPlanner::Impl {
   int invalid_count = 0;
 };
 
-LateralPlanner::LateralPlanner(const SteeringParams &params,
-                                                 const DrivingParams &driving)
-    : impl_(std::make_unique<Impl>(params, driving)) {}
+LateralPlanner::LateralPlanner(const SteeringParams &params)
+    : impl_(std::make_unique<Impl>(params)) {}
 
 LateralPlanner::~LateralPlanner() = default;
 
-void LateralPlanner::update_params(const SteeringParams &params,
-                                            const DrivingParams &driving) {
-  impl_->update_params(params, driving);
+void LateralPlanner::update_params(const SteeringParams &params) {
+  impl_->update_params(params);
 }
 
 LateralTarget LateralPlanner::update(const ModelState &model,

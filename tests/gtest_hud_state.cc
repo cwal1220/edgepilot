@@ -128,28 +128,25 @@ TEST(HudState, ControlStateMapping) {
 
 TEST(HudState, ManeuverFlagsMapping) {
   ControlState c;
-  c.hud_flags = kHudFlagLaneChangePending | kHudFlagLaneChangeRight | kHudFlagTurnLeft;
+  c.hud_flags = kHudFlagLaneChangePending | kHudFlagLaneChangeRight;
   c.driver_torque = -96;
   HudState hud;
   hud_apply_control_state(c, true, &hud);
-  // 차선 변경 대기(오른쪽)와 좌회전 desire, 운전자 토크 눈금
+  // 차선 변경 대기(오른쪽)와 운전자 토크 눈금
   ASSERT_EQ(hud.lane_change, 1);
   ASSERT_EQ(hud.lane_change_direction, 1);
-  ASSERT_EQ(hud.turn_direction, -1);
   ASSERT_FALSE(hud.steer_paused);
   ASSERT_NEAR(hud.driver_torque_fraction, -96.0f / SteeringParams{}.steer_max, 1e-6f);
-  c.hud_flags = kHudFlagLaneChanging | kHudFlagSteerPaused | kHudFlagSteerPausedByDriver | kHudFlagTurnRight;
+  c.hud_flags = kHudFlagLaneChanging | kHudFlagSteerPaused | kHudFlagSteerPausedByDriver;
   hud_apply_control_state(c, true, &hud);
   ASSERT_EQ(hud.lane_change, 2);
   ASSERT_EQ(hud.lane_change_direction, -1);
   ASSERT_TRUE(hud.steer_paused);
   ASSERT_TRUE(hud.steer_paused_by_driver);
-  ASSERT_EQ(hud.turn_direction, 1);
   hud_apply_control_state(c, false, &hud);
   // 낡은 스냅샷은 조작 표시를 끈다
   ASSERT_EQ(hud.lane_change, 0);
   ASSERT_FALSE(hud.steer_paused);
-  ASSERT_EQ(hud.turn_direction, 0);
   ASSERT_EQ(hud.driver_torque_fraction, 0.0f);
 }
 

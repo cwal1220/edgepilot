@@ -106,7 +106,7 @@ keeps the AX system open.
   green `AUTO HOLD` badge under it while the car holds the brake, the set speed
   card (with the vision cruise speed as `SET` when it is lower) and gear card
   and steering mode chip at the top left with a manoeuvre chip below it while
-  steering (`TURN LEFT/RIGHT` for turn desire, `CHANGING LANES`), a status pill
+  steering (`CHANGING LANES`), a status pill
   at the top right (red `REC`
   while `recordd` writes a route, a Wi-Fi fan lit by signal, or `OFFLINE` unless
   a `wlan` link is associated with an AP; the USB link does not count), TPMS
