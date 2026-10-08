@@ -107,7 +107,6 @@ private:
   float last_center_to_front_m_ = -1.0f;
   float last_tire_stiffness_factor_ = -1.0f;
   float last_steer_ratio_ = -1.0f;
-  float last_steer_ratio_rear_ = -1.0f;
   float normalized_output_ = 0.0f;
   float error_ = 0.0f;
   float feedforward_ = 0.0f;

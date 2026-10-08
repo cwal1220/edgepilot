@@ -227,8 +227,7 @@ void TorqueController::update_vehicle_model(const SteeringParams &params) {
   if (last_mass_kg_ == params.mass_kg && last_wheelbase_m_ == params.wheelbase_m &&
       last_center_to_front_m_ == center_to_front &&
       last_tire_stiffness_factor_ == params.tire_stiffness_factor &&
-      last_steer_ratio_ == params.steer_ratio &&
-      last_steer_ratio_rear_ == params.steer_ratio_rear) {
+      last_steer_ratio_ == params.steer_ratio) {
     return;
   }
   const float center_to_rear = params.wheelbase_m - center_to_front;
@@ -245,7 +244,6 @@ void TorqueController::update_vehicle_model(const SteeringParams &params) {
   last_center_to_front_m_ = center_to_front;
   last_tire_stiffness_factor_ = params.tire_stiffness_factor;
   last_steer_ratio_ = params.steer_ratio;
-  last_steer_ratio_rear_ = params.steer_ratio_rear;
 }
 
 // 조향각과 속도에서 실제 curvature를 계산한다.
@@ -255,8 +253,8 @@ float TorqueController::vehicle_model_curvature(float steering_angle_rad,
   update_vehicle_model(params);
   float denom = 1.0f - slip_factor_ * speed_mps * speed_mps;
   if (std::fabs(denom) < 1e-6f) denom = denom >= 0.0f ? 1e-6f : -1e-6f;
-  const float curvature_factor =
-      (1.0f - params.steer_ratio_rear) / denom / params.wheelbase_m;
+  // 상류 curvature_factor의 (1 - steerRatioRear)는 1이다: 후륜 조향이 있는 차를 다루지 않는다(상류도 모두 0)
+  const float curvature_factor = 1.0f / denom / params.wheelbase_m;
   return curvature_factor * steering_angle_rad / params.steer_ratio;
 }
 

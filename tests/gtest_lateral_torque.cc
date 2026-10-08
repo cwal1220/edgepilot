@@ -193,7 +193,7 @@ double upstream_measured_curvature(const SteeringParams &p, const LiveLateralPar
   const double cf = 192150.0 * tsf * m / civic_m * (ar / l) / (civic_ar / civic_l) * x;
   const double cr = 202500.0 * tsf * m / civic_m * (af / l) / (civic_af / civic_l) * x;
   const double sf = m * (cf * af - cr * ar) / (l * l * cf * cr);
-  const double factor = (1.0 - p.steer_ratio_rear) / (1.0 - sf * u * u) / l;
+  const double factor = 1.0 / (1.0 - sf * u * u) / l;  // 상류 (1 - steerRatioRear) = 1
   const double sa = (angle_deg - live.angle_offset_deg) * 3.14159265358979323846 / 180.0;
   const double roll = std::fabs(sf) < 1e-6 ? 0.0 : 9.81 * live.roll_rad / ((1.0 / sf) - u * u);
   return -(factor * sa / std::max<double>(live.steer_ratio, 0.1) + roll);
