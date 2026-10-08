@@ -35,7 +35,7 @@ runtime_files=(
 )
 [ -x "${BIN_DIR}/pandad" ] && runtime_files+=("${BIN_DIR}/pandad")
 [ -x "${BIN_DIR}/panda_flash" ] && runtime_files+=("${BIN_DIR}/panda_flash")
-param_files=(calibration.json adaptive_cruise.json steering.json driving.json recording.json display.json)
+param_files=(calibration.json adaptive_cruise.json steering.json recording.json display.json)
 
 for file in "${runtime_files[@]}" "$AXMODEL" scripts/web_console/__main__.py; do
   [ -f "$file" ] || { echo "Missing: $file" >&2; exit 1; }
