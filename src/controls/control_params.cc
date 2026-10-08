@@ -19,7 +19,6 @@ constexpr JsonBoolField<SteeringParams> kSteeringBools[] = {
 };
 constexpr JsonIntField<SteeringParams> kSteeringInts[] = {
     {"steering_pressed_threshold", 0, 500, &SteeringParams::steering_pressed_threshold},
-    {"avoid_lkas_fault_max_frames", 0, 300, &SteeringParams::avoid_lkas_fault_max_frames},
     {"avoid_lkas_fault_cut_frames", 1, 100, &SteeringParams::avoid_lkas_fault_cut_frames},
 };
 constexpr JsonFloatField<SteeringParams> kSteeringFloats[] = {
@@ -30,7 +29,6 @@ constexpr JsonFloatField<SteeringParams> kSteeringFloats[] = {
     {"steer_ratio", 8.0f, 25.0f, &SteeringParams::steer_ratio},
     {"tire_stiffness_factor", 0.2f, 2.0f, &SteeringParams::tire_stiffness_factor},
     {"steer_actuator_delay", 0.01f, 1.0f, &SteeringParams::steer_actuator_delay},
-    {"avoid_lkas_fault_max_angle_deg", 1.0f, 180.0f, &SteeringParams::avoid_lkas_fault_max_angle_deg},
     {"avoid_lkas_fault_hold_angle_deg", 0.0f, 180.0f, &SteeringParams::avoid_lkas_fault_hold_angle_deg},
     {"angle_offset_deg", -10.0f, 10.0f, &SteeringParams::angle_offset_deg},
     {"torque_lat_accel_offset", -1.0f, 1.0f, &SteeringParams::torque_lat_accel_offset},
@@ -46,13 +44,7 @@ constexpr JsonBoolField<DrivingParams> kDrivingBools[] = {
     {"laneless_mode", &DrivingParams::laneless_mode},
     {"turn_desire", &DrivingParams::turn_desire},
 };
-constexpr JsonIntField<DrivingParams> kDrivingInts[] = {
-    {"model_timeout_ms", 50, 2000, &DrivingParams::model_timeout_ms},
-    {"vehicle_state_timeout_ms", 50, 2000, &DrivingParams::vehicle_state_timeout_ms},
-    {"inactive_release_ms", 0, 5000, &DrivingParams::inactive_release_ms},
-};
 constexpr JsonFloatField<DrivingParams> kDrivingFloats[] = {
-    {"mdps_speed_spoof_kph", 30.0f, 100.0f, &DrivingParams::mdps_speed_spoof_kph},
     {"lane_change_min_speed_kph", 0.0f, 80.0f, &DrivingParams::lane_change_min_speed_kph},
 };
 
@@ -82,7 +74,6 @@ bool load_driving_params_json(const std::string &path,
   if (!params) return false;
   return load_json_param_file(path, [params](const std::string &text) {
     parse_json_fields(text, kDrivingBools, params);
-    parse_json_fields(text, kDrivingInts, params);
     parse_json_fields(text, kDrivingFloats, params);
   }, error);
 }

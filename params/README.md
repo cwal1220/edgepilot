@@ -16,7 +16,7 @@ PID 상태는 유지되며 engage 여부에 따른 적용 지연은 없다.
 - 한 번에 하나의 값만 조금씩 바꾸고, 변경 전후 로그를 남긴다.
 - 허용 범위를 벗어난 숫자는 로더가 아래 표의 범위로 제한한다.
 - JSON은 주석을 지원하지 않으므로 설명은 이 문서에서 관리한다.
-- `mdps_speed_spoof_kph`와 차량 제원은 다른 차량 값으로 임의 변경하지 않는다.
+- 차량 제원은 다른 차량 값으로 임의 변경하지 않는다.
 - 웹 콘솔은 `EDGEPILOT_ENABLE_WEB_CONSOLE=1`일 때 기본 8080 포트에서 실행된다.
   `차량 특성` 탭은 학습되는 조향 값(조향비, 타이어 강성, 조향각 영점, 도로 기울기 보정, 토크 배율·마찰·편향, 조향
   지연)을 학습기(paramsd·torqued·lagd)별로 묶어, 값마다 지금 제어에 쓰는 값과 학습값·수동값을 한 카드에 보여준다.
@@ -48,19 +48,17 @@ CAN과 상태는 60초 청크 `events/NNN.bin`, 당시 파라미터는 `params/`
 | `camera_height_m` | 1.22 | m / 0.8~2.0 | 도로면에서 카메라까지 높이다. `camera_offset_m`의 효과 크기를 정하는 데만 쓴다(오프셋이 0이면 무관). |
 | `hud_debug` | false | bool | 주행 화면 왼쪽에 다른 카드에 없는 수치를 모은 진단 카드(FPS, 조향 토크, paramsd 강성·평균 영점, torqued 원시 추정·진행률, lagd 블록)를 띄운다. 아직 유효하지 않은 학습기 줄은 주황이다. 기어는 설정 속도 옆 카드에, TPMS와 카메라 보정은 아래 모서리 카드에, 보드 상태(CPU 온도·CPU·RAM·디스크)는 TPMS 위 카드에, 제어가 쓰는 학습값(SR·영점·토크 계수·지연)은 보정 위 카드에 늘 있고, 네트워크 정보는 오른쪽 위 상태 알약을 누르면 나온다. overlayd가 1초 안에 반영한다. 주행 화면 왼쪽 열을 눌러도 켜고 끌 수 있고, 그건 이 값이 바뀌거나 overlayd가 다시 시작할 때까지만 간다. |
 
-설정은 웹의 `기기 설정` 메뉴에서 바꾼다. 백라이트는 param server가 즉시 적용하고, 뜰 때마다
-다시 적용한다. 알림음 크기는 param server가 파일만 고치고 overlayd가 읽는다.
+설정은 웹의 `기기 설정` 메뉴에서 바꾼다. 백라이트는 웹 콘솔이 즉시 적용하고, 뜰 때마다
+다시 적용한다. 알림음 크기는 웹 콘솔이 파일만 고치고 overlayd가 읽는다.
 
 ## driving.json
 
 ### 상태와 CAN
 
-| 파라미터 | 현재값 | 단위 / 허용 범위 | 설명 |
-|---|---:|---|---|
-| `model_timeout_ms` | 250 | ms / 50~2000 | 모델 경로가 마지막으로 갱신된 뒤 유효하다고 인정하는 시간이다. 초과하면 조향 경로를 사용할 수 없다. |
-| `vehicle_state_timeout_ms` | 500 | ms / 50~2000 | 차량 CAN 상태와 yaw-rate 신호의 freshness 제한이다. 초과하면 제어를 차단한다. |
-| `inactive_release_ms` | 3000 | ms / 0~5000 | disengage 직후 순정 LKAS로 넘기기 전에 0 토크 해제 프레임을 유지하는 시간이다. openpilot_c2의 기본 handoff 시간과 같다. |
-| `mdps_speed_spoof_kph` | 60.0 | km/h / 30~100 | 저속에서도 MDPS가 LKAS 조향을 허용하도록 MDPS 버스의 CLU11 속도를 위조하는 값이다. K7 YG HEV 기준값은 60 km/h다. |
+모델 경로와 차량 CAN 상태를 낡았다고 보는 시간(250 ms, 500 ms), 해제 뒤 순정 LKAS로 넘기기 전에
+0 토크 프레임을 이어 보내는 시간(3초, openpilot_c2의 기본 인계 시간과 같다), 저속에서도 MDPS가 LKAS를 받도록 MDPS 버스에 쓰는 속도
+(60 km/h)는 상류(openpilot·opendbc, 커뮤니티 포크)처럼 코드 상수다(`src/controls/control_params.h`의
+`DrivingParams`). 파일에서 읽지 않는다.
 
 ### 차선 변경
 
@@ -114,7 +112,9 @@ panda와 같은 운전자 클램프(허용 50 + 운전자 토크 x 2)와 변화�
 | `lead_hold_s` | 0.6 | s / 0.1~2.0 | 비전 검출이 잠시 끊겨도 마지막 선행차를 유지하는 시간이다. |
 | `lead_restore_delay_s` | 2.0 | s / 1~10 | 선행차가 사라진 뒤 최초 SET 상한으로 복귀하거나, 마지막 `SET-` 뒤 `RES+`로 명령 방향을 바꾸기 전 대기 시간이다. |
 | `command_interval_s` | 1.0 | s / 0.5~5.0 | 연속 버튼 펄스를 시작할 수 있는 최소 간격이다. |
-| `button_pulse_frames` | 5 | 100Hz frame / 1~10 | 한 번의 버튼 조작을 차량에 전달하는 연속 CLU11 프레임 수다. K7 검증 전에는 기본값을 유지한다. |
+
+버튼 한 번을 이어 보내는 CLU11 프레임 수(5)는 상류와 커뮤니티 포크처럼 코드 상수다
+(`AdaptiveCruiseConfig::button_pulse_frames`).
 
 ## steering.json
 
@@ -172,10 +172,12 @@ panda와 같은 운전자 클램프(허용 50 + 운전자 토크 x 2)와 변화�
 | 파라미터 | 현재값 | 단위 / 허용 범위 | 설명 |
 |---|---:|---|---|
 | `avoid_lkas_fault_enabled` | true | bool | 큰 조향각 fault 회피를 사용한다. K7 YG HEV 실측(2026-09-18): steer 요청이 켜진 채 85도 위에 0.98~1.12초 머물면 MDPS가 토크와 무관하게 ToiFlt/FailState를 세우고 각도가 85도 아래로 돌아올 때까지 어시스트를 끊는다. 85도 위에서도 토크는 그대로 내되 허용 프레임에 0에 닿을 만큼만 남기고(`steer_delta_down` × 남은 프레임), 그 프레임부터 85도 아래로 올 때까지 steer request를 ToiFlt 없이 끈다. 정차 대기 중에도 같고, 85도 위에서는 request를 새로 켜지 않는다. 그 체류 중 운전자가 핸들을 돌렸으면(조향 감지) 85도 아래가 아니라 15도 아래로 오고 손을 뗄 때까지 끈 채로 둔다(carrotpilot 해제 조건): 회전을 빠져나오며 핸들을 펴는 운전자를 밀지 않는다. 끄면 안 된다. |
-| `avoid_lkas_fault_max_angle_deg` | 85.0 | degree / 1~180 | fault 회피 카운터를 세는 절대 조향각 기준이다. 이 각도 위에서 request를 유지한 프레임을 센다. |
-| `avoid_lkas_fault_max_frames` | 89 | frame / 0~300 | 85도 위에서 steer request를 유지하는 프레임 수다. 이 프레임에 request를 끄고, 토크는 그때 0에 닿도록 `steer_delta_down`씩 미리 내려온다(최대 토크면 약 0.35초 유지 뒤 0.55초 하강). 실측 fault 하한 98프레임보다 9프레임 이르다. fault가 더 일찍 나는 상황이 발견되면 이 값을 낮춘다. |
 | `avoid_lkas_fault_hold_angle_deg` | 80.0 | degree / 0~180 | 운전자가 핸들을 잡지 않았을 때(steering pressed 아님) 컨트롤러가 스스로 가는 최대 핸들 각도다. 목표 곡률을 이 각도가 내는 곡률(학습 SR·강성·오프셋·롤을 쓰는 차량 모델) 안으로 묶어, 85도를 넘겨 0.89초 뒤 토크가 빠지고 핸들이 풀렸다 다시 잡는 반복 대신 이 각도에서 토크를 끊김 없이 유지한다. 운전자가 조향 중이면 묶지 않는다(더 감는 운전자를 밀지 않는다). 횡가속 한계(3.3 m/s²)가 더 좁은 약 36 km/h 위에서는 걸리지 않는다. 0이면 끈다. |
 | `avoid_lkas_fault_cut_frames` | 2 | frame / 1~100 | `avoid_lkas_fault_enabled`를 끈 경우에만 쓴다. MDPS 오류가 이어질 때 steer request를 끊는 프레임 수다(openpilot 방식). 켠 경우 85도 위에서는 짧게 끊지 않고 85도 아래로 올 때까지 끈다: K7에서 2프레임 컷 뒤 request를 다시 켜면 3~14 ms 안에 fault가 났다(2026-10-03, 4번 중 4번). |
+
+MDPS 고장 한계는 코드 상수다(`SteeringParams`): 85도 위에서 89프레임까지 요청을 유지하고, 이는 실측 고장
+하한 98프레임보다 9프레임 이르다. 상류 hyundai `carcontroller.py`의 `MAX_ANGLE`·`MAX_ANGLE_FRAMES`와 같은
+값이다. 고장이 더 일찍 나는 상황이 발견되면 이 상수를 낮춘다.
 
 ## calibration.json
 

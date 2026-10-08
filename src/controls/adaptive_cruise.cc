@@ -64,9 +64,6 @@ namespace {
 constexpr JsonBoolField<AdaptiveCruiseConfig> kAdaptiveBools[] = {
     {"enabled", &AdaptiveCruiseConfig::enabled},
 };
-constexpr JsonIntField<AdaptiveCruiseConfig> kAdaptiveInts[] = {
-    {"button_pulse_frames", 1, 10, &AdaptiveCruiseConfig::button_pulse_frames},
-};
 constexpr JsonFloatField<AdaptiveCruiseConfig> kAdaptiveFloats[] = {
     {"standstill_gap_m", 2.0f, 20.0f, &AdaptiveCruiseConfig::standstill_gap_m},
     {"following_time_s", 0.8f, 4.0f, &AdaptiveCruiseConfig::following_time_s},
@@ -87,7 +84,6 @@ bool load_adaptive_cruise_params_json(
   if (!config) return false;
   return load_json_param_file(path, [config](const std::string &text) {
     parse_json_fields(text, kAdaptiveBools, config);
-    parse_json_fields(text, kAdaptiveInts, config);
     parse_json_fields(text, kAdaptiveFloats, config);
   }, error);
 }

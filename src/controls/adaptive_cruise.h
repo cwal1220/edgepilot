@@ -13,6 +13,8 @@ struct AdaptiveCruiseConfig {
   float lead_hold_s = 0.6f;
   float lead_restore_delay_s = 2.0f;
   float command_interval_s = 1.0f;
+  /* 버튼 한 번을 이어 보내는 CLU11 프레임 수. 상류(RES_ACCEL 25개 묶음)와 커뮤니티 포크처럼 코드
+   * 상수라 파일에서 읽지 않는다. */
   int button_pulse_frames = 5;
 };
 

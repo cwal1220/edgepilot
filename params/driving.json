@@ -1,8 +1,4 @@
 {
-  "model_timeout_ms": 250,
-  "vehicle_state_timeout_ms": 500,
-  "inactive_release_ms": 3000,
-  "mdps_speed_spoof_kph": 60.0,
   "lane_change_min_speed_kph": 30.0,
   "laneless_mode": false,
   "turn_desire": false

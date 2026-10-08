@@ -1162,8 +1162,6 @@ TEST(LateralController, CanFixture) {
       << "조향 파라미터 읽기";
   ASSERT_TRUE(load_driving_params_json("params/driving.json", &config.driving_params, &error))
       << "주행 파라미터 읽기";
-  ASSERT_NEAR(config.driving_params.mdps_speed_spoof_kph, 60.0f, 1e-6f)
-      << "주행 파라미터의 MDPS 속도";
   LateralController controller(config);
   VehicleCanState vehicle;
   const LateralPath path = replay_path();

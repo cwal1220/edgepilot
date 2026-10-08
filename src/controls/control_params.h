@@ -3,7 +3,9 @@
 #include <string>
 
 /* controlsd가 함께 읽는 런타임 파라미터. params/steering.json과
- * params/driving.json이 각각의 출처다. CAN 계층(car/)은 이 헤더를 보지 않는다 —
+ * params/driving.json이 각각의 출처다. 다만 상류(opendbc CarControllerParams, 모듈 상수)에서도
+ * 코드에 박힌 차량·통신 상수는 여기 필드로만 두고 파일에서 읽지 않는다(필드마다 적었다). 테스트와
+ * 리플레이 도구는 이 필드를 바꿔 쓴다. CAN 계층(car/)은 이 헤더를 보지 않는다 —
  * 토크 제한은 lateral_controller.cc가 HyundaiSteeringLimits로 바꿔 넘긴다. */
 
 /* 기본값은 params/steering.json(K7 YG HEV 실차 검증값)과 일치시킨다. 로드 실패는
@@ -38,6 +40,8 @@ struct SteeringParams {
   float tire_stiffness_factor = 0.83f;
   float steer_actuator_delay = 0.42f;
   bool avoid_lkas_fault_enabled = true;
+  /* MDPS 고장 한계: 85도 위에 0.98~1.12초 머물면 고장(K7 실측). 상류 hyundai carcontroller의
+   * MAX_ANGLE·MAX_ANGLE_FRAMES와 같은 값이고, 상류처럼 차량 상수라 파일에서 읽지 않는다. */
   float avoid_lkas_fault_max_angle_deg = 85.0f;
   int avoid_lkas_fault_max_frames = 89;
   /* 운전자가 핸들을 잡지 않았을 때 컨트롤러가 스스로 가는 최대 핸들 각도. 고장 각도(85도) 아래에서
@@ -78,10 +82,17 @@ struct SteeringParams {
 };
 
 struct DrivingParams {
+  /* 파일에서 읽지 않는 고정값. 낡음 판정은 상류도 고정 규칙이다(메시지 주기의 10배, CAN 버스는
+   * 0.5초). 모델 경로는 그보다 엄격하게 250 ms, 차량 CAN 상태는 버스와 같은 500 ms를 쓴다. */
   int model_timeout_ms = 250;
   int vehicle_state_timeout_ms = 500;
+  /* 해제 뒤 순정 LKAS로 넘기기 전에 0 토크 프레임을 이어 보내는 시간(openpilot_c2의 기본 인계 시간과
+   * 같다). 상류는 LKAS11을 늘 보내므로 대응 값이 없다. */
   int inactive_release_ms = 3000;
+  /* 저속에서도 MDPS가 LKAS 토크를 받도록 MDPS 버스 CLU11에 쓰는 속도. 상류에는 없는 기능이고,
+   * 커뮤니티 포크(openpilot_c2)도 60 km/h(38 mph)를 코드에 박아 둔다. */
   float mdps_speed_spoof_kph = 60.0f;
+
   float lane_change_min_speed_kph = 30.0f;
   bool laneless_mode = false;
   /* 실험(상류 없음): 결합 중 차선 변경 최소 속도 미만에서 깜빡이를 켜면 모델에 좌·우회전

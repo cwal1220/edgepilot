@@ -9,8 +9,6 @@
   "tire_stiffness_factor": 0.83,
   "steer_actuator_delay": 0.42,
   "avoid_lkas_fault_enabled": true,
-  "avoid_lkas_fault_max_angle_deg": 85.0,
-  "avoid_lkas_fault_max_frames": 89,
   "avoid_lkas_fault_hold_angle_deg": 80.0,
   "avoid_lkas_fault_cut_frames": 2,
   "angle_offset_deg": -1.57,

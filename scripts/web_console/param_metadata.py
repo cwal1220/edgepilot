@@ -38,7 +38,7 @@ PARAM_GROUPS: Dict[str, Dict[str, Any]] = {
     },
     "driving": {
         "label": "주행 제한", "file": "driving.json", "notify": "controlsd", "note": "",
-        "sections": ["경로 모드", "운전자 개입", "상태와 CAN", "데이터 상태", "고정 차량 설정"],
+        "sections": ["경로 모드", "운전자 개입"],
     },
     "adaptive_cruise": {
         "label": "비전 크루즈", "file": "adaptive_cruise.json", "notify": "controlsd",
@@ -145,19 +145,6 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "운전자가 넘겨받아 돌린 회전이면 핸들이 15도 아래로 오고 손을 뗄 때까지 끈 채로 둡니다.",
             "켜면 85도 위에서도 fault 전까지 토크를 유지하다 request를 끕니다.",
             "끄면 큰 조향각에서도 request를 계속 유지해 약 1초 뒤 MDPS fault가 납니다.",
-        ),
-        "avoid_lkas_fault_max_angle_deg": number(
-            "Fault 감시 조향각", "LKAS fault 보호", "°", 1, 1, 180,
-            "LKAS fault 회피 카운터를 세는 절대 조향각입니다.",
-            "더 큰 핸들 각도에서 회피 동작을 시작합니다.",
-            "더 작은 핸들 각도부터 회피 동작을 준비합니다.",
-        ),
-        "avoid_lkas_fault_max_frames": number(
-            "Fault 허용 프레임", "LKAS fault 보호", "frame", 1, 0, 300,
-            "큰 조향각에서 steer request를 유지하는 최대 100 Hz 프레임 수입니다. 이 프레임에 토크가 0에 닿도록 미리 "
-            "내려오고, 그 뒤 85도 아래로 올 때까지 request를 끕니다.",
-            "토크와 request를 더 오래 유지합니다(실측 fault 하한 98프레임).",
-            "더 일찍 내려와 request를 끕니다.",
         ),
         "avoid_lkas_fault_hold_angle_deg": number(
             "스스로 가는 최대 조향각", "LKAS fault 보호", "°", 1, 0, 180,
@@ -290,30 +277,6 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "켜면 저속 깜빡이에서 모델이 회전 경로를 따릅니다. 처음엔 한적한 교차로에서 시험하세요.",
             "끄면 교차로 회전은 운전자가 합니다(openpilot과 같음).",
         ),
-        "model_timeout_ms": number(
-            "모델 경로 유효 시간", "데이터 상태", "ms", 50, 50, 2000,
-            "마지막 모델 경로를 유효하다고 인정하는 최대 시간입니다.",
-            "모델 갱신이 늦어도 기존 경로를 더 오래 사용합니다.",
-            "모델 정지 시 더 빨리 조향을 차단합니다.",
-        ),
-        "vehicle_state_timeout_ms": number(
-            "차량 상태 유효 시간", "데이터 상태", "ms", 50, 50, 2000,
-            "CAN 차량 상태와 yaw-rate를 유효하다고 인정하는 최대 시간입니다.",
-            "CAN 지연을 더 오래 허용하지만 오래된 상태를 쓸 수 있습니다.",
-            "CAN 갱신이 멈추면 더 빨리 제어를 차단합니다.",
-        ),
-        "inactive_release_ms": number(
-            "Disengage 토크 해제 시간", "상태와 CAN", "ms", 100, 0, 5000,
-            "Disengage 후 순정 LKAS에 넘기기 전 0 토크 프레임을 유지하는 시간입니다.",
-            "0 토크 handoff를 더 오래 유지합니다.",
-            "순정 LKAS로 더 빨리 제어권을 넘깁니다.",
-        ),
-        "mdps_speed_spoof_kph": number(
-            "MDPS 위조 속도", "고정 차량 설정", "km/h", 1, 30, 100,
-            "MDPS가 저속에서도 LKAS 조향을 받아들이도록 MDPS 쪽 버스에 보내는 차속입니다. 차량마다 정해진 값입니다.",
-            "MDPS에 더 높은 차량 속도로 보냅니다.",
-            "MDPS에 더 낮은 차량 속도로 보냅니다.",
-        ),
         "lane_change_min_speed_kph": number(
             "차선 변경 최소 속도", "운전자 개입", "km/h", 1, 0, 80,
             "이 속도 미만에서는 방향지시등을 켜도 차선 변경을 시작하지 않습니다.",
@@ -381,12 +344,6 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "일시적으로 비전 lead가 끊겨도 마지막 선행차를 유효하게 유지하는 시간입니다.",
             "짧은 검출 누락에 덜 흔들리지만 오래된 lead를 더 오래 사용합니다.",
             "오래된 lead를 빨리 버리지만 검출 흔들림에 민감해집니다.",
-        ),
-        "button_pulse_frames": number(
-            "버튼 펄스 길이", "버튼 송신", "100 Hz frame", 1, 1, 10,
-            "한 번의 SET-/RES+ 조작을 차량에 전달할 연속 CAN 프레임 수입니다.",
-            "차량이 버튼을 인식하기 쉬워지지만 길게 누른 것으로 해석될 수 있습니다.",
-            "펄스가 짧아지며 너무 작으면 차량이 명령을 놓칠 수 있습니다.",
         ),
     },
     "recording": {

@@ -590,7 +590,6 @@ TEST(AdaptiveCruise, RepositoryConfigLoads) {
   ASSERT_NEAR(config.standstill_gap_m, 5.0f, 0.001f);
   ASSERT_NEAR(config.deceleration_rate_kph_per_s, 1.5f, 0.001f);
   ASSERT_NEAR(config.command_interval_s, 1.0f, 0.001f);
-  ASSERT_EQ(config.button_pulse_frames, 5);
 }
 
 }  // namespace

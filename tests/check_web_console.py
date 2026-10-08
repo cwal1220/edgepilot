@@ -293,8 +293,8 @@ class ParamMetadataTest(unittest.TestCase):
         row = re.compile(r'\{"(\w+)",\s*(-?[\d.]+)f?,\s*(-?[\d.]+)f?,\s*&\w+::\w+\}')
         tables = {
             "steering": ("src/controls/control_params.cc", ("kSteeringInts", "kSteeringFloats")),
-            "driving": ("src/controls/control_params.cc", ("kDrivingInts", "kDrivingFloats")),
-            "adaptive_cruise": ("src/controls/adaptive_cruise.cc", ("kAdaptiveInts", "kAdaptiveFloats")),
+            "driving": ("src/controls/control_params.cc", ("kDrivingFloats",)),
+            "adaptive_cruise": ("src/controls/adaptive_cruise.cc", ("kAdaptiveFloats",)),
             # display는 백라이트(backlight.py) 항목도 있어 런타임이 읽는 키만 대조한다
             "display": ("src/common/device_settings.h", ("kDeviceSettingsFloats",)),
         }

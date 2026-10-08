@@ -8,6 +8,5 @@
   "deceleration_rate_kph_per_s": 1.5,
   "lead_hold_s": 0.6,
   "lead_restore_delay_s": 2.0,
-  "command_interval_s": 1.0,
-  "button_pulse_frames": 5
+  "command_interval_s": 1.0
 }
