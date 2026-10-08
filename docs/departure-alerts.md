@@ -53,7 +53,7 @@ engage 거부 토스트가 뜬다. 알림은 다음 상태 전이에 울린다.
 - `signal_changed`: 선행 차량 출발 또는 신호 변경
 - `engage`: 제어 engage 성공
 - `disengage`: 제어 disengage 또는 fault에 의한 해제
-- `unavailable`: 제어/Panda 상태가 stale이 되거나 Panda/조향 fault가 검출됨
+- `unavailable`: 제어/Panda 상태가 stale이 되거나 Panda fault, 또는 결합 중 MDPS 고장(ToiFlt·ToiUnavail)이 검출됨
 - `unable`: engage 조건을 만족하지 못한 상태에서 engage 명령을 거부할 때
 
 실제 차량/제어 조건으로 engage가 거부되면 LCD 하단 알림 카드에 `UNABLE TO ENGAGE`와
@@ -70,9 +70,15 @@ Panda의 `not ready`/`controls off`는 SET edge와 health 응답 사이의 정�
   완료 상태가 아니다. 이 상태에서는 engage를 거부한다(`UNABLE TO ENGAGE` / `CALIBRATING`).
   engage 중에 이 상태가 되면(마운트 변경 감지 등) 경고를 띄운 채 3초 더 조향하고
   해제한다(openpilot의 soft disable). 3초 안에 완료로 돌아오면 해제하지 않는다.
+- `TAKE CONTROL: STEER UNAVAILABLE`(openpilot steerTempUnavailable): 결합 중 MDPS가 고장(MDPS12
+  ToiFlt 또는 ToiUnavail)을 알렸고, 운전자가 핸들을 잡고 있지 않았으며 놓은 지 1.5초도 지났을 때다.
+  고장 동안은 조향을 쉬고(토크 0, 요청 비트 끔) engage를 거부하며, 3초 안에 풀리지 않으면 해제한다.
+  운전자가 잡은 채 고장이 났거나 막 놓았거나 정차 중이면 해제 예고 없이 `STEERING FAULT`만 띄우고,
+  고장이 풀리면 조향을 다시 한다. K7은 큰 조향각 고장 회피가 켜져 있으면 2026-10-04 이후 녹화에서
+  고속 주행 중 0.1초짜리 고장이 두 번 있었다.
 - `TAKE CONTROL` / `Turn exceeds steering limit`(openpilot steerSaturated): 시속 36 km 이상에서
-  목표 곡률이 횡가속 한계(3.3 m/s²)에 잘리거나 출력이 한계에 붙은 채 0.4초 넘게 이어지고,
-  목표 횡가속이 1 m/s²를 넘으며 실제의 1.2배 이상인데, 최근 2초 안에 핸들을 잡지 않았을
+  목표 곡률이 횡가속 한계(3.0 m/s²)에 잘리거나 출력이 한계에 붙은 채 0.4초 넘게 이어지고,
+  plan 목표 횡가속(한계로 자르기 전)이 1 m/s²를 넘으며 실제의 1.2배 이상인데, 최근 2초 안에 핸들을 잡지 않았을
   때다. 2026-09-25~27 실차 3회 주행에서는 한 번도 해당하지 않았다.
 
 알림음은 `EDGEPILOT_ALERT_SOUND=0`(끄기), `EDGEPILOT_ALERT_VOLUME`(0~100, 기본 70),

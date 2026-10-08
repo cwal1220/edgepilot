@@ -355,25 +355,32 @@ TEST(K7Can, Ahb1PedalCancelsFixedCruiseEstimate) {
   ASSERT_NEAR(cruise_set_speed_kph(vehicle), 64.0f, 0.001f) << "RES는 이전 목표 속도로 돌아간다";
 }
 
-TEST(K7Can, MdpsFaultFilter) {
+// opendbc hyundai carstate: steerFaultTemporary = CF_Mdps_ToiUnavail != 0 or CF_Mdps_ToiFlt != 0(거르지 않는다)
+TEST(K7Can, MdpsTemporaryFault) {
   VehicleCanState vehicle;
   std::array<uint8_t, 8> bytes{};
-  bytes[1] = (1U << 6) | (1U << 7);
-  update_vehicle_can_state(&vehicle, kHyundaiMdps12Address, bytes,
-                           bytes.size(), kMdpsBus, 1.0);
-  // MDPS ToiFlt/FailStat 일시 신호는 openpilot과 같게 거른다
-  ASSERT_TRUE(vehicle.mdps_hard_fault);
-  ASSERT_FALSE(vehicle.steering_fault);
+  const auto feed = [&](uint8_t byte1, double t) {
+    bytes[1] = byte1;
+    update_vehicle_can_state(&vehicle, kHyundaiMdps12Address, bytes, bytes.size(), kMdpsBus, t);
+  };
+  feed(1U << 7, 1.0);
+  ASSERT_FALSE(vehicle.steer_fault_temporary) << "FailStat만으로는 상류도 고장으로 보지 않는다";
+  feed(1U << 6, 1.01);
+  ASSERT_TRUE(vehicle.steer_fault_temporary) << "ToiFlt는 그 프레임부터 고장이다";
+  feed(0, 1.02);
+  ASSERT_FALSE(vehicle.steer_fault_temporary) << "비트가 내려가면 바로 풀린다";
+  feed(1U << 4, 1.03);
+  ASSERT_TRUE(vehicle.steer_fault_temporary) << "ToiUnavail도 그 프레임부터 고장이다";
+}
 
-  bytes[1] = 1U << 4;
-  for (int frame = 0; frame < 100; ++frame) {
-    update_vehicle_can_state(&vehicle, kHyundaiMdps12Address, bytes,
-                             bytes.size(), kMdpsBus, 1.0 + frame * 0.02);
-  }
-  ASSERT_FALSE(vehicle.steering_fault) << "MDPS 사용 불가는 디바운스 기준까지 고장이 아니다";
-  update_vehicle_can_state(&vehicle, kHyundaiMdps12Address, bytes,
-                           bytes.size(), kMdpsBus, 3.0);
-  ASSERT_TRUE(vehicle.steering_fault) << "MDPS 사용 불가가 이어지면 고장이다";
+// opendbc hyundai carstate standstill: 앞 왼쪽·뒤 오른쪽 휠속도가 12 × 0.03125 km/h 이하
+TEST(K7Can, WheelStandstill) {
+  VehicleCanState vehicle;
+  vehicle.wheel_speed_fl_kph = vehicle.wheel_speed_rr_kph = 0.375f;
+  vehicle.wheel_speed_fr_kph = vehicle.wheel_speed_rl_kph = 5.0f;
+  ASSERT_TRUE(vehicle_standstill(vehicle));
+  vehicle.wheel_speed_rr_kph = 0.40625f;
+  ASSERT_FALSE(vehicle_standstill(vehicle));
 }
 
 }  // namespace

@@ -272,4 +272,59 @@ TEST(LateralTorque, LiveTorqueParamsMatchUpstreamStructure) {
   ASSERT_LT(worst_friction, 1e-6f) << "마찰은 토크 공간의 항이고 계수로 제한된다";
 }
 
+
+/* 비활성이면 토크 0을 내고 적분기를 지운다. 상류(#24606)는 남기지만, 녹화 폐루프 재생에서 남긴 적분이 정차 뒤
+ * 출발의 차선 오차를 키웠다(lateral_torque.cc). 다시 켜면 새로 쌓는다. */
+TEST(LateralTorque, IntegratorResetsWhenInactive) {
+  SteeringParams params;
+  params.enabled = true;
+  params.angle_offset_deg = 0.0f;
+  params.torque_friction = 0.0f;
+  TorqueController torque;
+  for (int i = 0; i < 300; ++i)
+    torque.update(true, 20.0f, 0.001f, 0.0f, false, false, params, params.steer_actuator_delay);
+  ASSERT_GT(torque.integral(), 0.05f) << "오차가 이어지면 적분이 쌓인다";
+  ASSERT_EQ(torque.update(false, 20.0f, 0.001f, 0.0f, false, false, params, params.steer_actuator_delay), 0);
+  EXPECT_EQ(torque.normalized_output(), 0.0f);
+  EXPECT_EQ(torque.integral(), 0.0f) << "비활성 틱에 적분기를 지운다";
+}
+
+/* 상류 common/pid.py: 이미 한계에 걸린 방향으로는 적분이 움직이지 않는다(적분이 음수여도 양의 오차로 0 쪽으로
+ * 풀지 않는다). 적분 자체도 ±latAccelFactor 안이다. 예전 이식(0.8 PIController)은 한계에서도 0 쪽이면 풀었다. */
+TEST(LateralTorque, IntegratorDoesNotMoveWhileClipping) {
+  SteeringParams params;
+  params.enabled = true;
+  params.angle_offset_deg = 0.0f;
+  params.torque_friction = 0.0f;
+  params.torque_lat_accel_offset = 0.0f;
+  TorqueController torque;
+  for (int i = 0; i < 1500; ++i)
+    torque.update(true, 20.0f, -0.0008f, 0.0f, false, false, params, params.steer_actuator_delay);
+  const float negative = torque.integral();
+  ASSERT_LT(negative, -0.1f);
+  ASSERT_GT(negative, -params.torque_lat_accel_factor);
+  // 요청을 크게 바꾸면 FF가 바로 출력을 양의 한계에 붙인다. 오차는 조향 지연만큼 뒤에 양수가 된다.
+  float held = 0.0f;
+  int positive_frames = 0;
+  for (int i = 0; i < 300; ++i) {
+    torque.update(true, 20.0f, 0.03f, 0.0f, false, false, params, params.steer_actuator_delay);
+    ASSERT_GE(std::fabs(torque.normalized_output()), 1.0f - 1e-6f);
+    if (torque.error() <= 0.0f) continue;
+    if (positive_frames++ == 0) held = torque.integral();
+    ASSERT_EQ(torque.integral(), held) << "출력이 양의 한계에 붙어 있으면 양의 오차로 적분을 풀지 않는다 " << i;
+  }
+  ASSERT_GT(positive_frames, 100);
+  EXPECT_LT(held, 0.0f) << "적분은 음수인 채다";
+
+  TorqueController bounded;
+  SteeringParams strong = params;
+  strong.torque_kp = 0.0f;  // 30 m/s 위: P 없이 적분만 한계까지 쌓는다
+  for (int i = 0; i < 20000; ++i)
+    bounded.update(true, 35.0f, 0.0004f, 0.0f, false, false, strong, strong.steer_actuator_delay);
+  // 출력이 한계를 넘기 직전 값에서 적분이 멈춘다: 적분 + FF <= 한계
+  const float feedforward = 0.0004f * 35.0f * 35.0f;
+  EXPECT_LE(bounded.integral() + feedforward, strong.torque_lat_accel_factor + 1e-5f);
+  EXPECT_GT(std::fabs(bounded.normalized_output()), 0.99f);
+}
+
 }  // namespace

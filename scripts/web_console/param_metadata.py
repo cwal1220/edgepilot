@@ -144,7 +144,8 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "큰 조향각에서 MDPS fault 전에 토크를 0으로 내리고, 85도 아래로 돌아올 때까지 steer request를 끕니다. "
             "운전자가 넘겨받아 돌린 회전이면 핸들이 15도 아래로 오고 손을 뗄 때까지 끈 채로 둡니다.",
             "켜면 85도 위에서도 fault 전까지 토크를 유지하다 request를 끕니다.",
-            "끄면 큰 조향각에서도 request를 계속 유지해 약 1초 뒤 MDPS fault가 납니다.",
+            "끄면 openpilot 방식으로 85도 위에서 0.89초마다 request를 2프레임 끊습니다. K7은 끊었던 request를 "
+            "다시 켜는 순간 MDPS fault가 납니다.",
         ),
         "avoid_lkas_fault_hold_angle_deg": number(
             "스스로 가는 최대 조향각", "LKAS fault 보호", "°", 1, 0, 180,
@@ -152,12 +153,6 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
             "멈춰 토크를 끊김 없이 유지합니다. 운전자가 조향 중이면 적용하지 않습니다. 0이면 끕니다.",
             "시스템이 혼자 더 급하게 돌지만, 85도에 가까우면 넘어가 토크가 끊길 수 있습니다.",
             "시스템이 혼자 도는 반경이 넓어지고, 더 일찍 운전자 조향이 필요합니다.",
-        ),
-        "avoid_lkas_fault_cut_frames": number(
-            "Fault 컷 길이", "LKAS fault 보호", "frame", 1, 1, 100,
-            "fault 회피를 끈 경우에만 쓰는 값으로, MDPS 오류가 이어질 때 steer request를 끊는 100 Hz 프레임 수입니다.",
-            "request를 더 오래 끊습니다.",
-            "request를 더 짧게 끊습니다.",
         ),
         "live_bank_compensation": toggle(
             "실시간 편경사 보정", "차량 모델", "ESP12 실측 횡가속으로 추정한 도로 편경사를 FF에서 보정합니다.",

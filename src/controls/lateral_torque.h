@@ -26,11 +26,10 @@ struct LiveLateralParams {
 
 class TorqueController {
 public:
-  // PID와 saturation 상태를 초기화한다.
-  void reset();
-
   // openpilot LatControlTorque와 같은 형태로 조향 토크를 계산한다.
-  /* lat_delay_s: 조향 지연(상류 LatControlTorque.update의 lat_delay). 요청 버퍼에서 이만큼 전의
+  /* active: 상류 CC.latActive. 거짓이면 토크 0을 내고 PID 상태를 지운다(상류 #24606은 적분기를 남기지만
+   * 폐루프 재생에서 정차 뒤 차선 오차를 키워 지운다, update 참고). 요청 버퍼와 저크 필터는 늘 갱신한다.
+   * lat_delay_s: 조향 지연(상류 LatControlTorque.update의 lat_delay). 요청 버퍼에서 이만큼 전의
    * 요청을 지금 측정과 비교한다. 컨트롤러는 경로를 읽는 지연과 같은 값(lagd 사용 중이면 추정값,
    * 아니면 steer_actuator_delay)을 넘긴다. */
   int update(bool active,
@@ -38,7 +37,7 @@ public:
              float desired_curvature,
              float steering_angle_deg,
              bool steering_pressed,
-             bool steering_rate_limited,
+             bool steer_limited_by_safety,
              const SteeringParams &params,
              float lat_delay_s,
              float yaw_rate_rad_s = 0.0f,
@@ -64,20 +63,21 @@ public:
   float normalized_output() const { return normalized_output_; }
   float error() const { return error_; }
   float feedforward() const { return feedforward_; }
+  // PID 적분항(횡가속도 공간, 상류 LateralTorqueState.i)
+  float integral() const { return i_; }
   float actual_curvature() const { return actual_curvature_; }
   // 조향각 차량 모델 곡률(제어가 쓰는 실제 곡률)과 ESP12 요레이트 곡률(주행 로그용).
   float actual_curvature_vm() const { return actual_curvature_vm_; }
   float actual_curvature_yaw() const { return actual_curvature_yaw_; }
 
 private:
-  // 토크 공간 이득. torqued를 쓰면 kf = 1/latAccelFactor이고 ki도 같은 비로 옮긴다.
-  struct Gains {
-    float kf = 0.0f;
-    float ki = 0.0f;
-    float friction = 0.0f;
+  // 상류 torque_params: torqued를 쓰면 학습값, 아니면 SteeringParams의 사전값.
+  struct TorqueTuning {
+    float lat_accel_factor = 1.0f;
+    float friction = 0.0f;  // 토크 공간(상류도 그렇다)
     float lat_accel_offset = 0.0f;
   };
-  static Gains gains(const SteeringParams &params, const LiveLateralParams &live);
+  static TorqueTuning torque_tuning(const SteeringParams &params, const LiveLateralParams &live);
 
   // 차량 모델 slip factor를 파라미터에 맞춰 갱신한다.
   void update_vehicle_model(const SteeringParams &params);
@@ -90,14 +90,16 @@ private:
   // opendbc VehicleModel.roll_compensation. vehicle_model_curvature 뒤에 부른다.
   float roll_compensation(float roll_rad, float speed_mps) const;
 
-  // PID 한 스텝을 계산한다. 비례 이득은 속도별 곡선을 따른다.
+  /* 상류 common/pid.py PIDController.update(k_d 0). 횡가속도 공간에서 돌고 출력과 적분기는
+   * ±limit(= latAccelFactor, 상류 update_limits)로 묶인다. 비례 이득은 속도별 곡선을 따른다. */
   float pid_update(float error,
                    float feedforward,
                    bool freeze_integrator,
                    const SteeringParams &params,
-                   const Gains &gains,
+                   float limit,
                    float speed_mps);
 
+  // PID 항(횡가속도 공간). 비활성이면 지운다.
   float p_ = 0.0f;
   float i_ = 0.0f;
   float f_ = 0.0f;

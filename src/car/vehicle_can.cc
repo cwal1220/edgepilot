@@ -10,8 +10,9 @@
 
 namespace {
 
-constexpr int kMdpsToiUnavailableFaultFrames = 100;
 constexpr double kBlinkerHoldSeconds = 0.5;
+// opendbc hyundai carstate STANDSTILL_THRESHOLD(12 × 0.03125 km/h)
+constexpr float kStandstillWheelSpeedKph = 12.0f * 0.03125f;
 /* 이보다 깊으면 페달을 밟은 것이다. 2026-10-04 녹화 두 건: 제동 중 스트로크 중앙값 16 mm(하위 5%
  * 4 mm), 비제동 주행의 99%가 3 mm 이하. 이 기준이 AHB1 작동 상태(CF_Ahb_Act)와 98% 같다. */
 constexpr float kBrakePedalStrokeMm = 3.0f;
@@ -305,16 +306,13 @@ void apply_whl_spd11(VehicleCanState *state, const std::array<uint8_t, 8> &data,
   state->whl_spd11_time_s = now_s;
 }
 
-/* MDPS12: 운전자 토크와 고장. ToiUnavail은 openpilot처럼 kMdpsToiUnavailableFaultFrames 프레임 넘게
- * 이어져야 고장(steering_fault)이다. */
+// MDPS12: 운전자 토크와 일시 고장(opendbc hyundai carstate의 steeringTorque, steerFaultTemporary).
 void apply_mdps12(VehicleCanState *state, const std::array<uint8_t, 8> &data, double now_s) {
   state->mdps12_seed = data;
   state->has_mdps12_seed = true;
   const Mdps12Values mdps = decode_mdps12(data);
   state->driver_torque = mdps.driver_torque;
-  state->mdps_error_count = mdps.toi_unavailable ? state->mdps_error_count + 1 : 0;
-  state->mdps_hard_fault = mdps.toi_fault || mdps.fail_state || mdps.sensor_error;
-  state->steering_fault = state->mdps_error_count > kMdpsToiUnavailableFaultFrames;
+  state->steer_fault_temporary = mdps.toi_unavailable || mdps.toi_fault;
   state->mdps12_time_s = now_s;
 }
 
@@ -530,4 +528,9 @@ float vehicle_speed_kph(const VehicleCanState &state, double now_s,
   /* 클러스터 속도로 대체하지 않는다. 도메인이 달라(저속에서 1.2배) 조용히
    * 단위가 바뀌면 최소 조향 속도 게이트가 뒤집힌다. */
   return std::numeric_limits<float>::quiet_NaN();
+}
+
+bool vehicle_standstill(const VehicleCanState &state) {
+  return state.wheel_speed_fl_kph <= kStandstillWheelSpeedKph &&
+         state.wheel_speed_rr_kph <= kStandstillWheelSpeedKph;
 }

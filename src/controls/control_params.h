@@ -47,9 +47,10 @@ struct SteeringParams {
   /* 운전자가 핸들을 잡지 않았을 때 컨트롤러가 스스로 가는 최대 핸들 각도. 고장 각도(85도) 아래에서
    * 멈춰 토크를 끊김 없이 유지한다. 0이면 끈다. */
   float avoid_lkas_fault_hold_angle_deg = 80.0f;
-  /* avoid_lkas_fault_enabled를 끈 경우에만: MDPS 오류가 이어질 때 steer request를 끊는 프레임 수
-   * (openpilot 방식). 켠 경우 85도 위에서는 짧게 끊지 않고 85도 아래로 올 때까지 끈다. K7에서
-   * 2프레임 컷 뒤 다시 켜면 3~14 ms 안에 fault가 났다(2026-10-03, 4번 중 4번). */
+  /* avoid_lkas_fault_enabled를 끈 경우에만: 85도 위에서 요청을 max_frames 낸 뒤 끊는 프레임 수. 상류
+   * MAX_ANGLE_CONSECUTIVE_FRAMES와 같은 값이고 파일에서 읽지 않는다. 켠 경우 85도 위에서는 짧게 끊지 않고
+   * 85도 아래로 올 때까지 끈다. K7에서 2프레임 컷 뒤 다시 켜면 3~14 ms 안에 fault가 났다(2026-10-03,
+   * 4번 중 4번). */
   int avoid_lkas_fault_cut_frames = 2;
   float angle_offset_deg = -1.57f;  // paramsd 학습 평균(2026-09-27)
   /* openpilot latAccelOffset(m/s^2). 상수 횡가속 편향을 FF에서 뺀다.

@@ -143,7 +143,8 @@ ControlState make_control_state(const LateralControllerConfig &config,
       (result.vehicle_fresh && brake_lights_on(vehicle, now_s) ? kHudFlagBrakeLights : 0U);
   state.seeds_ready = result.seeds_ready ? 1U : 0U;
   state.vehicle_fresh = result.vehicle_fresh ? 1U : 0U;
-  state.steering_fault = vehicle.steering_fault ? 1U : 0U;
+  // 결합 중 MDPS 일시 고장(상류도 결합 중에만 경고한다)
+  state.steering_fault = result.engaged && result.steer_fault ? 1U : 0U;
   state.left_blinker = vehicle.left_blinker ? 1U : 0U;
   state.right_blinker = vehicle.right_blinker ? 1U : 0U;
   state.cruise_active = vehicle.cruise_active ? 1U : 0U;

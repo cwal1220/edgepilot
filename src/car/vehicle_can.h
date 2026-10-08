@@ -145,9 +145,10 @@ struct VehicleCanState {
   float wheel_speed_rl_kph = 0.0f;
   float wheel_speed_rr_kph = 0.0f;
   int driver_torque = 0;
-  bool mdps_hard_fault = false;
-  int mdps_error_count = 0;
-  bool steering_fault = false;
+  /* MDPS가 LKAS 토크를 받지 못한다고 알린다: MDPS12 CF_Mdps_ToiUnavail 또는 CF_Mdps_ToiFlt(opendbc hyundai
+   * carstate의 steerFaultTemporary와 같다). K7은 고장 때 ToiFlt(FailStat과 함께)만 켜고 ToiUnavail은 2026-09·10
+   * 녹화 18건에서 한 번도 켜지 않았다. */
+  bool steer_fault_temporary = false;
 
   int gear = 0;
   /* 운전자가 브레이크 페달을 밟고 있다: TCS13 DriverBraking 또는 AHB1 페달 스트로크 3 mm 초과.
@@ -268,3 +269,6 @@ float cluster_speed_kph(const VehicleCanState &state);
  * 최소 조향 속도 게이트가 뒤집힌다). */
 float vehicle_speed_kph(const VehicleCanState &state, double now_s,
                         double timeout_s = 0.5);
+
+// 바퀴가 멈췄다: 앞 왼쪽과 뒤 오른쪽 휠속도가 0.375 km/h 이하(opendbc hyundai carstate의 standstill).
+bool vehicle_standstill(const VehicleCanState &state);

@@ -81,19 +81,18 @@ LateralTarget replay_target() {
 float reference_plan_curvature(const LateralTarget &target, float speed_mps,
                                float actuator_delay) {
   const float delay = std::max(0.01f, actuator_delay);
+  // 상류 get_curvature_from_plan: MIN_STABLE_DELAY보다 짧으면 그 지점의 yaw를 지연 비율만큼 줄여 쓴다
+  const float read_at = std::max(delay, kMinStableDelayS);
   float psi = target.psis[kLateralControlN - 1];
-  if (delay <= 0.0f) {
-    psi = target.psis[0];
-  } else {
-    for (int i = 1; i < kLateralControlN; ++i) {
-      if (delay <= model_t_idx(i)) {
-        const float p = (delay - model_t_idx(i - 1)) /
-                        (model_t_idx(i) - model_t_idx(i - 1));
-        psi = target.psis[i - 1] + p * (target.psis[i] - target.psis[i - 1]);
-        break;
-      }
+  for (int i = 1; i < kLateralControlN; ++i) {
+    if (read_at <= model_t_idx(i)) {
+      const float p = (read_at - model_t_idx(i - 1)) /
+                      (model_t_idx(i) - model_t_idx(i - 1));
+      psi = target.psis[i - 1] + p * (target.psis[i] - target.psis[i - 1]);
+      break;
     }
   }
+  if (delay < kMinStableDelayS) psi *= delay / kMinStableDelayS;
   const float speed = std::max(speed_mps, kMinCurvatureSpeedMps);
   const float current = target.curvatures[0];
   return current + 2.0f * (psi / (speed * delay) - current);
@@ -204,6 +203,165 @@ TEST(LateralController, LargeAngleFaultAvoidance) {
   for (int i = 0; i < 30; ++i) result = step();
   ASSERT_TRUE(result.active);
   ASSERT_NE(result.apply_torque, 0);
+}
+
+/* avoid_lkas_fault를 끄면 상류 hyundai carcontroller의 common_fault_avoidance다: 85도 위에서 요청을 89프레임
+ * 낸 뒤 2프레임은 요청을 끄고 ToiFlt를 켜며(토크는 그대로) 다시 센다. */
+TEST(LateralController, UpstreamAngleCutWhenAvoidanceOff) {
+  LateralControllerConfig config;
+  config.force_engaged = true;
+  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.steering_params.avoid_lkas_fault_enabled = false;
+  const SteeringParams &sp = config.steering_params;
+  LateralController controller(config);
+  VehicleCanState vehicle = ready_vehicle();
+  int frame = 0;
+  auto step = [&]() {
+    const int f = frame++;
+    stamp_can_times(&vehicle, 1.0 + f * 0.01);
+    return controller.update(replay_path(), replay_target(), vehicle, 1.0 + f * 0.01, f);
+  };
+  vehicle.steering_angle_deg = 20.0f;
+  for (int i = 0; i < 100; ++i) step();
+  vehicle.steering_angle_deg = 100.0f;
+  for (int cycle = 0; cycle < 2; ++cycle) {
+    for (int since = 1; since <= sp.avoid_lkas_fault_max_frames; ++since) {
+      const LateralControlResult r = step();
+      const HyundaiLkas11Values lkas = decode_lkas11(r.frames.front().data);
+      ASSERT_TRUE(lkas.steer_req && !lkas.toi_fault) << cycle << " " << since;
+      ASSERT_FALSE(r.large_angle_hold);
+    }
+    for (int cut = 0; cut < sp.avoid_lkas_fault_cut_frames; ++cut) {
+      const LateralControlResult r = step();
+      const HyundaiLkas11Values lkas = decode_lkas11(r.frames.front().data);
+      ASSERT_TRUE(!lkas.steer_req && lkas.toi_fault) << "2프레임 요청을 끄고 ToiFlt를 켠다 " << cut;
+      ASSERT_TRUE(r.active);
+      ASSERT_EQ(lkas.steer_torque, r.apply_torque) << "토크는 그대로 보낸다";
+      ASSERT_NE(r.apply_torque, 0);
+    }
+  }
+}
+
+/* MDPS 일시 고장(MDPS12 ToiFlt·ToiUnavail, 상류 steerFaultTemporary): 결합 중이면 그 프레임부터 조향을 쉬고
+ * (토크 0, 요청 비트 끔) steerTempUnavailable로 해제 예고를 띄운다. 풀리면 토크를 0부터 다시 올리고, 3초
+ * 이어지면 해제한다. engage도 거부한다. */
+TEST(LateralController, MdpsFaultPausesSteeringAndSoftDisables) {
+  LateralControllerConfig config;
+  config.driving_params.vehicle_state_timeout_ms = 2000;
+  LateralController controller(config);
+  const SteeringParams &sp = config.steering_params;
+  VehicleCanState vehicle = ready_vehicle(1.0);
+  int frame = 0;
+  auto step = [&](double t) {
+    stamp_can_times(&vehicle, t);
+    vehicle.steering_angle_deg = 5.0f;
+    return controller.update(replay_path(), replay_target(), vehicle, t, frame++, true, true);
+  };
+  auto press_set = [&](double t) {
+    vehicle.clu_button = 2;
+    step(t);
+    vehicle.clu_button = 0;
+    return step(t + 0.01);
+  };
+  ASSERT_TRUE(press_set(1.0).engaged);
+  double t = 1.02;
+  LateralControlResult r;
+  for (; t < 3.0; t += 0.01) r = step(t);
+  ASSERT_TRUE(r.active);
+  ASSERT_NE(r.apply_torque, 0);
+
+  vehicle.steer_fault_temporary = true;
+  r = step(t += 0.01);
+  EXPECT_TRUE(r.steer_fault && r.engaged && r.active && r.soft_disabling);
+  EXPECT_EQ(r.active_block, BlockReason::SteerTempUnavailable);
+  EXPECT_EQ(r.apply_torque, 0) << "고장 프레임부터 토크를 내지 않는다(상류 latActive=false)";
+  EXPECT_FALSE(decode_lkas11(r.frames.front().data).steer_req) << "요청 비트도 내린다";
+  for (int i = 0; i < 20; ++i) r = step(t += 0.01);
+  vehicle.steer_fault_temporary = false;
+  r = step(t += 0.01);
+  EXPECT_TRUE(r.active && !r.soft_disabling && r.active_block == BlockReason::None) << "풀리면 해제 예고도 거둔다";
+  EXPECT_TRUE(decode_lkas11(r.frames.front().data).steer_req);
+  EXPECT_LE(std::abs(r.apply_torque), sp.steer_delta_up) << "토크는 0부터 다시 올린다";
+
+  vehicle.steer_fault_temporary = true;
+  for (const double start = t; t < start + 2.9; t += 0.01) {
+    r = step(t);
+    ASSERT_TRUE(r.engaged && r.soft_disabling) << t;
+  }
+  for (const double start = t; t < start + 0.2; t += 0.01) r = step(t);
+  EXPECT_FALSE(r.engaged) << "3초 이어지면 해제한다";
+  const LateralControlResult again = press_set(t += 0.01);
+  EXPECT_TRUE(again.engage_rejected) << "고장 중에는 engage를 거부한다";
+  EXPECT_EQ(again.active_block, BlockReason::SteerTempUnavailable);
+}
+
+/* 상류 car_events: 운전자가 핸들을 잡은 채 고장이 시작했거나, 놓은 지 1.5초가 안 됐거나, 정차면 해제 예고
+ * 없이 조향만 쉰다(그 고장 동안 유지). */
+TEST(LateralController, MdpsFaultIsQuietAfterDriverOverride) {
+  LateralControllerConfig config;
+  config.force_engaged = true;
+  config.driving_params.vehicle_state_timeout_ms = 2000;
+  LateralController controller(config);
+  VehicleCanState vehicle = ready_vehicle();
+  int frame = 0;
+  double t = 1.0;
+  auto step = [&]() {
+    stamp_can_times(&vehicle, t);
+    const LateralControlResult r = controller.update(replay_path(), replay_target(), vehicle, t, frame++);
+    t += 0.01;
+    return r;
+  };
+  for (int i = 0; i < 100; ++i) step();
+  vehicle.driver_torque = 300;
+  for (int i = 0; i < 20; ++i) step();
+  vehicle.steer_fault_temporary = true;
+  LateralControlResult r = step();
+  ASSERT_TRUE(r.steering_pressed && r.steer_fault);
+  EXPECT_EQ(r.active_block, BlockReason::None) << "운전자가 잡은 채 시작한 고장은 경고하지 않는다";
+  EXPECT_FALSE(r.soft_disabling);
+  EXPECT_EQ(r.apply_torque, 0) << "그래도 조향은 쉰다";
+  vehicle.driver_torque = 0;
+  for (int i = 0; i < 400; ++i) {
+    r = step();
+    ASSERT_FALSE(r.soft_disabling) << "놓은 직후에 이어진 고장은 그 고장 동안 조용하다 " << i;
+    ASSERT_EQ(r.apply_torque, 0);
+  }
+  vehicle.steer_fault_temporary = false;
+  for (int i = 0; i < 200; ++i) step();
+  vehicle.steer_fault_temporary = true;
+  r = step();
+  EXPECT_TRUE(r.soft_disabling) << "놓은 지 1.5초가 지난 뒤의 새 고장은 해제 예고다";
+  vehicle.steer_fault_temporary = false;
+  step();
+  vehicle.wheel_speed_fl_kph = vehicle.wheel_speed_fr_kph = 0.0f;
+  vehicle.wheel_speed_rl_kph = vehicle.wheel_speed_rr_kph = 0.0f;
+  vehicle.steer_fault_temporary = true;
+  r = step();
+  EXPECT_FALSE(r.soft_disabling) << "정차 중 고장은 조용하다";
+}
+
+/* 상류 latActive: 최소 조향 속도(0.3 m/s보다 크면 그 속도) 이하나 바퀴가 멈춘 정차에서는 조향하지 않는다.
+ * 목표 곡률은 실제 곡률을 따라가고 토크는 0이다. 요청 비트는 K7 클러스터 경보 때문에 유지한다. */
+TEST(LateralController, StandstillTracksActualCurvature) {
+  LateralControllerConfig config;
+  config.force_engaged = true;
+  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.steering_params.angle_offset_deg = 0.0f;
+  LateralController controller(config);
+  VehicleCanState vehicle = ready_vehicle();
+  vehicle.wheel_speed_fl_kph = vehicle.wheel_speed_fr_kph = 3.0f;  // 0.83 m/s: 최소 조향 속도 1 m/s 아래
+  vehicle.wheel_speed_rl_kph = vehicle.wheel_speed_rr_kph = 3.0f;
+  vehicle.steering_angle_deg = 30.0f;
+  LateralControlResult r;
+  for (int i = 0; i < 300; ++i) {
+    stamp_can_times(&vehicle, 1.0 + 0.01 * i);
+    r = controller.update(replay_path(), replay_target(), vehicle, 1.0 + 0.01 * i, i);
+  }
+  ASSERT_TRUE(r.active);
+  EXPECT_EQ(r.apply_torque, 0);
+  EXPECT_NEAR(r.desired_curvature, r.actual_curvature, 1e-6f) << "정차에서는 목표가 실제 곡률을 따라간다";
+  EXPECT_GT(std::fabs(r.actual_curvature), 0.005f) << "실제 곡률은 정차에서도 조향각으로 낸다(상류 self.curvature)";
+  EXPECT_TRUE(decode_lkas11(r.frames.front().data).steer_req);
 }
 
 /* 정차 대기(Stopped)도 steer 요청을 잡고 있으므로 같은 회피를 건다. 예전에는 active일 때만 세어,
@@ -409,9 +567,23 @@ TEST(LateralController, ClipCurvatureReportsAccelLimit) {
   // 저크 한계만 물면 limited가 아니다(상류 clip_curvature와 같음).
   clip_curvature(20.0f, 0.0f, 0.005f, 0.0f, &limited);
   EXPECT_FALSE(limited);
-  // 횡가속 3.3 m/s² 한계: 20 m/s에서 0.00825 1/m
-  clip_curvature(20.0f, 0.0082f, 0.0095f, 0.0f, &limited);
+  // 횡가속 3.0 m/s² 한계(상류 MAX_LATERAL_ACCEL_NO_ROLL): 20 m/s에서 0.0075 1/m
+  EXPECT_NEAR(clip_curvature(20.0f, 0.0074f, 0.0085f, 0.0f, &limited), 0.0075f, 1e-7f);
   EXPECT_TRUE(limited);
+}
+
+/* 상류 get_curvature_from_plan: 0.3 s(MIN_STABLE_DELAY)보다 짧은 지연은 0.3 s 지점의 yaw를 지연 비율만큼
+ * 줄여 쓰므로, 결과가 0.3 s로 읽은 것과 같다(짧은 지연에서 2·ψ/(v·t)가 잡음을 키우지 않는다). */
+TEST(LateralController, ShortDelayReadsPlanAtMinStableDelay) {
+  LateralTarget target = replay_target();
+  for (int i = 0; i < kLateralControlN; ++i) {  // 곡률이 커지는 plan: ψ = 0.002·t²
+    target.psis[i] = 0.002f * model_t_idx(i) * model_t_idx(i);
+    target.curvatures[i] = 0.0f;
+  }
+  const float at_min = lag_adjusted_curvature(target, 20.0f, 0.0f, kMinStableDelayS);
+  EXPECT_NEAR(lag_adjusted_curvature(target, 20.0f, 0.0f, 0.15f), at_min, 1e-7f);
+  EXPECT_NEAR(lag_adjusted_curvature(target, 20.0f, 0.05f, 0.15f), at_min, 1e-7f) << "plan 나이를 더해도 0.3 s 미만이면 같다";
+  EXPECT_GT(std::fabs(lag_adjusted_curvature(target, 20.0f, 0.0f, 0.5f) - at_min), 1e-6f) << "0.3 s 넘으면 그 지연에서 읽는다";
 }
 
 /* openpilot steerSaturated: 목표 횡가속이 한계에 잘려 0.4초 넘게 포화이고, 실제가 목표의
@@ -444,8 +616,11 @@ TEST(LateralController, SteerSaturatedWarnsWhenTurnExceedsLimit) {
     return warned;
   };
   EXPECT_TRUE(run(0.0f)) << "한계에 잘린 커브를 못 따라가면 경고한다";
-  // 조향각 60도면 20 m/s에서 횡가속이 한계(3.3 m/s²)를 넘는다: 목표/실제 < 1.2 → 경고 없음
-  EXPECT_FALSE(run(60.0f)) << "잘린 목표를 따라가고 있으면 경고하지 않는다";
+  /* 상류는 잘리기 전 모델 목표(action.desiredCurvature)와 비교한다. 조향각 30도면 20 m/s에서 횡가속이
+   * 한계(3.0 m/s²)를 넘어도 plan 목표(8 m/s²)의 절반이라 경고한다. */
+  EXPECT_TRUE(run(30.0f)) << "잘린 목표가 아니라 plan 목표와 비교한다";
+  // 조향각 60도면 plan 목표 가까이 돈다: 목표/실제 < 1.2 → 경고 없음
+  EXPECT_FALSE(run(60.0f)) << "plan 목표를 따라가고 있으면 경고하지 않는다";
   EXPECT_FALSE(run(-60.0f)) << "크기로 비교한다(상류와 같음)";
 }
 
@@ -481,6 +656,8 @@ TEST(LateralController, FixedMaxCurvature) {
   config.driving_params.vehicle_state_timeout_ms = 2000;
   // openpilot 곡률 한계만 본다. 손을 뗀 상태의 조향각 상한(80도)은 HoldAngleCapsOwnSteeringOnly가 본다.
   config.steering_params.avoid_lkas_fault_hold_angle_deg = 0.0f;
+  // 1 m/s(MIN_SPEED)에서 조향하도록 최소 조향 속도를 그 아래로 둔다(그 속도 이하는 상류처럼 정차다)
+  config.steering_params.min_steer_speed_mps = 0.5f;
   LateralController controller(config);
   VehicleCanState vehicle = ready_vehicle();
   vehicle.wheel_speed_fl_kph = vehicle.wheel_speed_fr_kph = 3.6f;
@@ -1194,10 +1371,10 @@ TEST(LateralController, CanFixture) {
      * 참조식이 다른 입력을 보게 되어 비교가 성립하지 않는다. 첫 WHL_SPD11
      * 전에는 속도가 NaN이고 컨트롤러가 어차피 비활성이라 비교하지 않는다. */
     if (std::isfinite(result.control_speed_kph)) {
-      // 컨트롤러처럼 비활성이면 plan 대신 실제 곡률을 클립한다.
+      // 상류 controlsd처럼 조향 중(latActive)이 아니면 plan 대신 실제 곡률을 클립한다.
       const float speed = std::max(0.0f, result.control_speed_kph / 3.6f);
       const float requested =
-          result.active
+          result.lat_active
               ? reference_plan_curvature(target, speed, config.steering_params.steer_actuator_delay)
               : result.actual_curvature;
       const float expected_curvature =

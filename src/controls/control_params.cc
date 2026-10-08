@@ -19,7 +19,6 @@ constexpr JsonBoolField<SteeringParams> kSteeringBools[] = {
 };
 constexpr JsonIntField<SteeringParams> kSteeringInts[] = {
     {"steering_pressed_threshold", 0, 500, &SteeringParams::steering_pressed_threshold},
-    {"avoid_lkas_fault_cut_frames", 1, 100, &SteeringParams::avoid_lkas_fault_cut_frames},
 };
 constexpr JsonFloatField<SteeringParams> kSteeringFloats[] = {
     {"torque_lat_accel_factor", 0.5f, 5.0f, &SteeringParams::torque_lat_accel_factor},
