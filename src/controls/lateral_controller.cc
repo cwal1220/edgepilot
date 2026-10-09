@@ -45,11 +45,8 @@ LateralController::LateralController(LateralControllerConfig config)
     : config_(config), clock_(monotonic_now_ns) {}
 
 // 제어 상태를 유지한 채 런타임 파라미터를 즉시 교체한다.
-void LateralController::update_params(
-    const SteeringParams &steering_params,
-    const DrivingParams &driving_params) {
+void LateralController::update_params(const SteeringParams &steering_params) {
   config_.steering_params = steering_params;
-  config_.driving_params = driving_params;
 }
 
 void LateralController::set_live_params(const LiveLateralParams &live, bool vehicle_valid,
@@ -104,11 +101,11 @@ LateralControlResult LateralController::update(const LateralPath &path,
   result.seeds_ready = seed_frames_ready(vehicle_state);
   result.vehicle_fresh = vehicle_state_fresh(
       vehicle_state, now_s,
-      static_cast<double>(config_.driving_params.vehicle_state_timeout_ms) / 1000.0);
+      static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0);
   result.cluster_speed_kph = cluster_speed_kph(vehicle_state);
   result.control_speed_kph = vehicle_speed_kph(
       vehicle_state, now_s,
-      static_cast<double>(config_.driving_params.vehicle_state_timeout_ms) / 1000.0);
+      static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0);
   const float speed_mps = result.control_speed_kph / 3.6f;
   const LiveLateralParams live = live_params();
   const float plan_age = plan_age_s(target);
@@ -145,7 +142,7 @@ LateralControlResult LateralController::update(const LateralPath &path,
   result.lat_active = steering;
   const bool yaw_rate_valid = signal_time_fresh(
                                   vehicle_state.esp12_time_s, now_s,
-                                  static_cast<double>(config_.driving_params.vehicle_state_timeout_ms) /
+                                  static_cast<double>(config_.timing.vehicle_state_timeout_ms) /
                                       1000.0) &&
                               vehicle_state.yaw_rate_valid;
   update_road_bank(vehicle_state, speed_mps, yaw_rate_valid);
@@ -182,7 +179,7 @@ LateralControlResult LateralController::update(const LateralPath &path,
       result.seeds_ready &&
       (result.active || result.engaged ||
        now_s - last_disengage_s_ <
-           static_cast<double>(config_.driving_params.inactive_release_ms) / 1000.0);
+           static_cast<double>(config_.timing.inactive_release_ms) / 1000.0);
   if (result.should_send) {
     result.frames = build_frames(vehicle_state, result, frame);
   } else {
@@ -578,7 +575,7 @@ BlockReason LateralController::active_block_reason(
   /* 모델 경로 gate는 모델 발행 시각만 본다. 플래너 스레드가 멈춰 target이
    * 갱신되지 않는 경우까지 근거 프레임 캡처 시각으로 함께 막는다. */
   if (target.capture_timestamp_ns != 0 &&
-      plan_age_s > static_cast<float>(config_.driving_params.model_timeout_ms) /
+      plan_age_s > static_cast<float>(config_.timing.model_timeout_ms) /
                        1000.0f) {
     return BlockReason::LateralPlanStale;
   }
@@ -664,7 +661,7 @@ std::vector<CanFrame> LateralController::build_frames(
   // should_send면 세 seed가 다 있다(seed_frames_ready).
   return build_lateral_can_frames(decode_lkas11(vehicle_state.lkas11_seed), decode_clu11(vehicle_state.clu11_seed),
                                   vehicle_state.mdps12_seed, command,
-                                  config_.driving_params.mdps_speed_spoof_kph,
+                                  config_.steering_params.mdps_speed_spoof_kph,
                                   result.active || steer_availability_hold_, vehicle_state.speed_unit_mph, frame);
 }
 

@@ -137,7 +137,7 @@ TEST(LateralController, BrakingDoesNotDisengage) {
 TEST(LateralController, LargeAngleFaultAvoidance) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   const SteeringParams &sp = config.steering_params;
   VehicleCanState vehicle = ready_vehicle();
@@ -210,7 +210,7 @@ TEST(LateralController, LargeAngleFaultAvoidance) {
 TEST(LateralController, UpstreamAngleCutWhenAvoidanceOff) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   config.steering_params.avoid_lkas_fault_enabled = false;
   const SteeringParams &sp = config.steering_params;
   LateralController controller(config);
@@ -247,7 +247,7 @@ TEST(LateralController, UpstreamAngleCutWhenAvoidanceOff) {
  * 이어지면 해제한다. engage도 거부한다. */
 TEST(LateralController, MdpsFaultPausesSteeringAndSoftDisables) {
   LateralControllerConfig config;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   const SteeringParams &sp = config.steering_params;
   VehicleCanState vehicle = ready_vehicle(1.0);
@@ -300,7 +300,7 @@ TEST(LateralController, MdpsFaultPausesSteeringAndSoftDisables) {
 TEST(LateralController, MdpsFaultIsQuietAfterDriverOverride) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   VehicleCanState vehicle = ready_vehicle();
   int frame = 0;
@@ -345,7 +345,7 @@ TEST(LateralController, MdpsFaultIsQuietAfterDriverOverride) {
 TEST(LateralController, StandstillTracksActualCurvature) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   config.steering_params.angle_offset_deg = 0.0f;
   LateralController controller(config);
   VehicleCanState vehicle = ready_vehicle();
@@ -370,7 +370,7 @@ TEST(LateralController, StandstillTracksActualCurvature) {
 TEST(LateralController, LargeAngleHoldCoversStopAndEngage) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   const SteeringParams &sp = config.steering_params;
   LateralController controller(config);
   VehicleCanState vehicle = ready_vehicle();
@@ -428,7 +428,7 @@ TEST(LateralController, LargeAngleHoldCoversStopAndEngage) {
 TEST(LateralController, PathFlickerDebounce) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   LateralPath bad = replay_path();
   bad.usable_for_steering = false;
@@ -453,7 +453,7 @@ TEST(LateralController, PathFlickerDebounce) {
 // 정차(path 무효)에서도 engage는 받아야 한다 — 조향만 쉰다.
 TEST(LateralController, EngageAllowedWithUnavailablePath) {
   LateralControllerConfig config;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   LateralPath bad = replay_path();
   bad.usable_for_steering = false;
@@ -505,7 +505,7 @@ TEST(LateralController, EngageAllowedWithUnavailablePath) {
 /* openpilot calibrationIncomplete/Recalibrating/Invalid(SOFT_DISABLE + NO_ENTRY). */
 TEST(LateralController, CalibrationGatesEngageAndSoftDisables) {
   LateralControllerConfig config;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   VehicleCanState vehicle = ready_vehicle(1.0);
   auto press_set = [&](double t) {
@@ -591,7 +591,7 @@ TEST(LateralController, ShortDelayReadsPlanAtMinStableDelay) {
 TEST(LateralController, SteerSaturatedWarnsWhenTurnExceedsLimit) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralTarget target = replay_target();
   for (int i = 0; i < kLateralControlN; ++i) {  // 20 m/s에서 횡가속 8 m/s² 요구
     target.curvatures[i] = 0.02f;
@@ -630,7 +630,7 @@ TEST(LateralController, SteerSaturatedWarnsWhenTurnExceedsLimit) {
 TEST(LateralController, DriverTorqueDoesNotFadeRequest) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   LateralTarget target = replay_target();
   for (int i = 0; i < kLateralControlN; ++i) {
@@ -653,7 +653,7 @@ TEST(LateralController, DriverTorqueDoesNotFadeRequest) {
 TEST(LateralController, FixedMaxCurvature) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   // openpilot 곡률 한계만 본다. 손을 뗀 상태의 조향각 상한(80도)은 HoldAngleCapsOwnSteeringOnly가 본다.
   config.steering_params.avoid_lkas_fault_hold_angle_deg = 0.0f;
   // 1 m/s(MIN_SPEED)에서 조향하도록 최소 조향 속도를 그 아래로 둔다(그 속도 이하는 상류처럼 정차다)
@@ -687,7 +687,7 @@ TEST(LateralController, FixedMaxCurvature) {
 TEST(LateralController, BankHoldsDuringCurves) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController controller(config);
   double t = 1.0;
   auto step = [&](float yaw_rate_rad_s, float lat_accel_mps2) {
@@ -725,7 +725,7 @@ TEST(LateralController, RuntimeParamsApplyImmediately) {
 
   SteeringParams steering = config.steering_params;
   steering.enabled = false;
-  controller.update_params(steering, config.driving_params);
+  controller.update_params(steering);
   const auto disabled =
       controller.update(replay_path(), replay_target(), vehicle, 1.01, 1);
   // 런타임 조향 파라미터는 다음 제어 틱에 적용된다
@@ -733,7 +733,7 @@ TEST(LateralController, RuntimeParamsApplyImmediately) {
   ASSERT_EQ(disabled.active_block, BlockReason::ControllerDisabled);
 
   steering.enabled = true;
-  controller.update_params(steering, config.driving_params);
+  controller.update_params(steering);
   const auto resumed =
       controller.update(replay_path(), replay_target(), vehicle, 1.02, 2);
   ASSERT_TRUE(resumed.active) << "런타임 파라미터를 바꿔도 컨트롤러 동작이 이어진다";
@@ -1018,7 +1018,7 @@ TEST(LateralController, InactiveDesiredTracksActual) {
 TEST(LateralController, DriverTakeoverHoldsUntilCentered) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   const SteeringParams &sp = config.steering_params;
   LateralController controller(config);
   VehicleCanState vehicle = ready_vehicle();
@@ -1066,7 +1066,7 @@ TEST(LateralController, DriverTakeoverHoldsUntilCentered) {
 TEST(LateralController, HoldAngleCapsOwnSteeringOnly) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   const float v = 20.0f / 3.6f;
   auto run = [&](const LateralControllerConfig &cfg, float plan_curvature, int driver_torque) {
     LateralTarget tight = replay_target();  // 20 km/h 교차로 회전: plan은 반경 10 m를 원한다
@@ -1126,7 +1126,7 @@ LiveLateralParams odd_live_params() {
 TEST(LateralController, LiveParamsSwitchOffIsIdentical) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   LateralController plain(config), fed(config);
   double t = 1.0;
   for (int tick = 0; tick < 600; ++tick, t += 0.01) {
@@ -1158,7 +1158,7 @@ TEST(LateralController, LiveParamsSwitchOffIsIdentical) {
 TEST(LateralController, ParamsdInvalidBlocksOnlyWhenUsed) {
   LateralControllerConfig config;
   config.force_engaged = true;
-  config.driving_params.vehicle_state_timeout_ms = 2000;
+  config.timing.vehicle_state_timeout_ms = 2000;
   config.steering_params.use_live_vehicle_params = true;
   LateralController controller(config);
   const VehicleCanState vehicle = ready_vehicle(1.0);

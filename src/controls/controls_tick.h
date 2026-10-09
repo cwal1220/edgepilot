@@ -30,11 +30,11 @@
 #include <string>
 #include <thread>
 
-/* controlsd의 런타임 파라미터 두 파일(steering/adaptive_cruise.json)과 코드 고정값(driving). 파일은 한꺼번에
+/* controlsd의 런타임 파라미터 두 파일(steering/adaptive_cruise.json)과 코드 고정값(timing). 파일은 한꺼번에
  * 읽고 한꺼번에 바꾼다. */
 struct ControlParams {
   SteeringParams steering;
-  DrivingParams driving;
+  ControlTiming timing;
   AdaptiveCruiseConfig cruise;
 };
 
@@ -194,7 +194,7 @@ public:
   const LateralController &controller() const { return controller_; }
 
 private:
-  LateralControllerConfig config_;  // 조향·주행 파라미터는 여기에 있다
+  LateralControllerConfig config_;  // 조향 파라미터와 제어 타이밍은 여기에 있다
   AdaptiveCruiseConfig cruise_;
   PlannerPort &planner_;
   LateralController controller_;

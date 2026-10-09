@@ -98,8 +98,8 @@ int main(int argc, char **argv) {
       return 1;
     }
   }
-  const DrivingParams dp;
-  const double timeout_s = dp.vehicle_state_timeout_ms / 1000.0;
+  const ControlTiming timing;
+  const double timeout_s = timing.vehicle_state_timeout_ms / 1000.0;
   const std::string cache = torque_cache_path.empty() ? std::string() : read_text_file(torque_cache_path);
   const std::string vehicle_json = vehicle_json_path.empty() ? std::string() : read_text_file(vehicle_json_path);
   const bool use_locationd = source == "steering" ? sp.use_locationd_learner_inputs : source == "locationd";

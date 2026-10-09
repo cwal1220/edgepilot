@@ -4,7 +4,7 @@
 
 /* controlsd가 읽는 조향 런타임 파라미터. params/steering.json이 출처다. 다만 상류(opendbc
  * CarControllerParams, 모듈 상수)에서도 코드에 박힌 차량·통신 상수는 여기 필드로만 두고 파일에서 읽지
- * 않는다(필드마다 적었다. DrivingParams는 전부 그렇다). 테스트와 리플레이 도구는 이 필드를 바꿔 쓴다.
+ * 않는다(필드마다 적었다. ControlTiming은 전부 그렇다). 테스트와 리플레이 도구는 이 필드를 바꿔 쓴다.
  * CAN 계층(car/)은 이 헤더를 보지 않는다 — 토크 제한은 lateral_controller.cc가 HyundaiSteeringLimits로
  * 바꿔 넘긴다. */
 
@@ -25,6 +25,9 @@ struct SteeringParams {
   int steer_driver_allowance = 50;
   int steer_driver_multiplier = 2;
   int steer_driver_factor = 1;
+  /* 저속에서도 MDPS가 LKAS 토크를 받도록 MDPS 버스 CLU11에 쓰는 속도. 상류에는 없는 기능이고, 커뮤니티
+   * 포크(openpilot_c2)도 60 km/h(38 mph)를 코드에 박아 둔다. 파일에서 읽지 않는다. */
+  float mdps_speed_spoof_kph = 60.0f;
   int steering_pressed_threshold = 150;
 
   /* openpilot 토크 튜닝 그대로(횡가속도 공간). 토크 = (FF + P + I) / 배율 + 마찰.
@@ -87,8 +90,8 @@ struct SteeringParams {
   float center_to_front_m() const;
 };
 
-// 주행 타이밍과 CAN 상수. 전부 파일에서 읽지 않는 고정값이다.
-struct DrivingParams {
+// 제어 타이밍. 전부 파일에서 읽지 않는 고정값이다.
+struct ControlTiming {
   /* 낡음 판정은 상류도 고정 규칙이다(메시지 주기의 10배, CAN 버스는 0.5초). 모델 경로는 그보다 엄격하게
    * 250 ms, 차량 CAN 상태는 버스와 같은 500 ms를 쓴다. */
   int model_timeout_ms = 250;
@@ -96,9 +99,6 @@ struct DrivingParams {
   /* 해제 뒤 순정 LKAS로 넘기기 전에 0 토크 프레임을 이어 보내는 시간(openpilot_c2의 기본 인계 시간과
    * 같다). 상류는 LKAS11을 늘 보내므로 대응 값이 없다. */
   int inactive_release_ms = 3000;
-  /* 저속에서도 MDPS가 LKAS 토크를 받도록 MDPS 버스 CLU11에 쓰는 속도. 상류에는 없는 기능이고,
-   * 커뮤니티 포크(openpilot_c2)도 60 km/h(38 mph)를 코드에 박아 둔다. */
-  float mdps_speed_spoof_kph = 60.0f;
 };
 
 // params/steering.json을 읽어 SteeringParams에 반영한다.

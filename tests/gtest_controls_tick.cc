@@ -203,7 +203,7 @@ TEST(ControlsTick, BrakePedalCancelsTheCruiseEstimate) {
 
 TEST(ControlsTick, CruiseSpeedGoesStaleAfterHalfASecond) {
   ControlParams params = Drive::laneless_params();
-  params.driving.vehicle_state_timeout_ms = 1000;
+  params.timing.vehicle_state_timeout_ms = 1000;
   Drive drive(params);
   K7Inputs in;
   ControlState state = drive.run(1.0, in);

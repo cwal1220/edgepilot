@@ -65,7 +65,7 @@ float lag_adjusted_desired_curvature(const LateralTarget &target, float speed_mp
 struct LateralControllerConfig {
   bool force_engaged = false;
   SteeringParams steering_params{};
-  DrivingParams driving_params{};
+  ControlTiming timing{};
 };
 
 struct LateralControlResult {
@@ -121,8 +121,7 @@ public:
   explicit LateralController(LateralControllerConfig config = LateralControllerConfig{});
 
   // 제어 상태를 유지한 채 런타임 파라미터를 즉시 교체한다.
-  void update_params(const SteeringParams &steering_params,
-                     const DrivingParams &driving_params);
+  void update_params(const SteeringParams &steering_params);
 
   /* 학습기의 최신 출력. use_*는 값이 있다는 뜻이고 실제 사용은 스위치가 정한다.
    * 차량 값을 쓰는 중 vehicle_valid가 거짓이고 캘리브가 끝났으면 차단한다

@@ -205,7 +205,7 @@ bool load_control_params(const ControlParamPaths &paths, ControlParams *params, 
 std::string control_params_summary(const ControlParams &params) {
   char text[160];
   std::snprintf(text, sizeof(text), "mdpsSpoof=%.1fkph adaptiveCruise=%u gap=%.1fm/%.1fs decel=%.1fkph/s",
-                params.driving.mdps_speed_spoof_kph, params.cruise.enabled ? 1U : 0U,
+                params.steering.mdps_speed_spoof_kph, params.cruise.enabled ? 1U : 0U,
                 params.cruise.standstill_gap_m, params.cruise.following_time_s,
                 params.cruise.deceleration_rate_kph_per_s);
   return text;
@@ -435,7 +435,7 @@ LateralControllerConfig controller_config(const ControlParams &params, bool forc
   LateralControllerConfig config;
   config.force_engaged = force_engaged;
   config.steering_params = params.steering;
-  config.driving_params = params.driving;
+  config.timing = params.timing;
   return config;
 }
 
@@ -454,8 +454,7 @@ ControlsTick::ControlsTick(const ControlParams &params, bool force_engaged, Plan
 void ControlsTick::apply_params(const ControlParams &params) {
   cruise_ = params.cruise;
   config_.steering_params = params.steering;
-  config_.driving_params = params.driving;
-  controller_.update_params(config_.steering_params, config_.driving_params);
+  controller_.update_params(config_.steering_params);
   planner_.update_params(config_.steering_params);
   adaptive_cruise_controller_.update_config(cruise_);
 }
@@ -472,7 +471,7 @@ void ControlsTick::on_model(const ModelState &model, double now_s) {
   planner_.submit(
       model_, vehicle_, vehicle_speed_mps(
           vehicle_, now_s,
-          static_cast<double>(config_.driving_params.vehicle_state_timeout_ms) / 1000.0),
+          static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0),
       last_result_.actual_curvature, last_result_.active);
 }
 
@@ -505,7 +504,7 @@ ControlState ControlsTick::step(double now_s, uint64_t now_ns) {
   lateral_target_ = planner_.latest();
   panda_ = panda_gate_.update(panda_state_, now_ns, config_.force_engaged);
   const uint64_t model_timeout_ns =
-      static_cast<unsigned long long>(config_.driving_params.model_timeout_ms) *
+      static_cast<unsigned long long>(config_.timing.model_timeout_ms) *
       1000000ULL;
   const PathHoldOutput held = path_gate_.update(model_, now_ns, model_timeout_ns);
   const int frame = control_frame_++;
@@ -558,7 +557,7 @@ LearnerOutputs ControlsTick::update_learners(double now_s) {
    * 컨트롤러와 같은 조향 지연(상류는 lateralDelay). */
   learners_.set_lateral_delay(controller_.plan_delay_s());
   learners_.update(vehicle_, now_s,
-                   static_cast<double>(config_.driving_params.vehicle_state_timeout_ms) / 1000.0,
+                   static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0,
                    last_result_.active, last_result_.apply_torque, last_result_.steering_pressed);
   controller_.set_live_params(learners_.live(), learners_.vehicle_valid(),
                               model_.calibration.status == 1U);

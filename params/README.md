@@ -173,7 +173,7 @@ MDPS 고장 한계는 코드 상수다(`SteeringParams`): 85도 위에서 89프�
 모델 경로와 차량 CAN 상태를 낡았다고 보는 시간(250 ms, 500 ms), 해제 뒤 순정 LKAS로 넘기기 전에
 0 토크 프레임을 이어 보내는 시간(3초, openpilot_c2의 기본 인계 시간과 같다), 저속에서도 MDPS가 LKAS를 받도록 MDPS 버스에 쓰는 속도
 (60 km/h)는 상류(openpilot·opendbc, 커뮤니티 포크)처럼 코드 상수다(`src/controls/control_params.h`의
-`DrivingParams`). 파일에서 읽지 않는다.
+`ControlTiming`, MDPS 속도는 `SteeringParams::mdps_speed_spoof_kph`). 파일에서 읽지 않는다.
 
 ## calibration.json
 

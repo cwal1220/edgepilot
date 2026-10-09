@@ -20,7 +20,7 @@
 namespace {
 
 constexpr float kGravity = 9.8f;
-constexpr double kVehicleTimeoutS = 0.5;  // driving_params 기본값
+constexpr double kVehicleTimeoutS = 0.5;  // ControlTiming 기본값
 // openpilot NNFF future_times. 플랜에서 이 시점의 값을 뽑는다.
 constexpr float kFutureTimes[] = {0.3f, 0.6f, 1.0f, 1.5f};
 constexpr int kFutureCount = 4;
