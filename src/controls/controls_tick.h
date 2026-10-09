@@ -212,6 +212,9 @@ private:
   LateralControlResult last_result_;
   PandaGateOutput panda_;
   DepartureAlertInput alert_input_;
+  /* 마지막으로 온전히 읽은 locationd 상태. 쓰기와 겹쳐 읽지 못한 틱은 상류 SubMaster처럼 이 값을 쓴다. */
+  LocalizationState localization_{};
+  bool localization_seen_ = false;
   bool model_updated_ = false;
   int control_frame_ = 0;
   uint32_t last_logged_alert_event_id_ = 0;

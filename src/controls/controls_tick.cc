@@ -481,15 +481,21 @@ void ControlsTick::on_localization(const LocalizationRead &localization, uint64_
     learners_.set_localizer(false, LocalizerSample{});
     return;
   }
-  const LocalizationState &state = localization.state;
+  /* 읽기가 쓰기와 겹쳐 실패한 틱은 상류 SubMaster처럼 마지막으로 온전히 읽은 상태를 쓴다. 그 틱에 lagd
+   * 지연을 버리면 토크 요청 버퍼를 읽는 위치가 바뀌어 보낸 토크가 튄다. */
+  if (localization.read) {
+    localization_ = localization.state;
+    localization_seen_ = true;
+  }
+  if (!localization_seen_) return;
+  const LocalizationState &state = localization_;
   const uint64_t age_ns = localization.read_ns - state.timestamp_ns;
-  const bool fresh = localization.read && age_ns < 2'000'000'000ULL;
+  const bool fresh = age_ns < 2'000'000'000ULL;
   controller_.set_live_delay(state.lateral_delay_s,
                              fresh && state.lag_status ==
                                  static_cast<uint32_t>(LateralLagStatus::Estimated));
   /* 상류 paramsd·torqued 입력(localizer_sample_from). 표본 시각은 학습기 시계(now_s)로
-   * 옮긴다. 읽기가 쓰기와 겹쳐 실패한 틱은 학습기 입력을 직전 값으로 두고, lagd 지연은 그 틱만
-   * 쓰지 않는다(위 set_live_delay가 무효로 받는다). */
+   * 옮긴다. 새로 읽은 틱에만 넘기고, 못 읽은 틱은 학습기가 직전 표본을 그대로 쓴다. */
   if (localization.read) {
     const double age_s =
         static_cast<double>(static_cast<int64_t>(can_now_ns - state.timestamp_ns)) * 1e-9;

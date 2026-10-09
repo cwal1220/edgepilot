@@ -1,13 +1,14 @@
 /* controlsd 한 틱(ControlsTick)을 controlsd main처럼 10 ms마다 돌린다. K7 수신 CAN(신호 배치대로 채운
  * 바이트), 20 Hz 직선 도로 모델, Panda 상태를 넣고 ControlState와 보낼 CAN을 본다: SET으로 결합해
  * LKAS11을 보내고 문이 열리면 해제한다, Panda가 허가하지 않으면 1초 유예 뒤 거부한다, 브레이크
- * 페달(AHB1)이 고정형 크루즈 추정을 끈다, 휠 속도가 끊기면 크루즈·발행 속도는 0.5초 뒤 비운다.
- * 플래너는 그 자리에서 계산한다(SyncPlanner). */
+ * 페달(AHB1)이 고정형 크루즈 추정을 끈다, 휠 속도가 끊기면 크루즈·발행 속도는 0.5초 뒤 비운다,
+ * locationd를 못 읽은 틱은 마지막 lagd 지연을 쓴다. 플래너는 그 자리에서 계산한다(SyncPlanner). */
 #include "car/can_frame.h"
 #include "controls/control_holds.h"
 #include "controls/controls_tick.h"
 #include "common/ipc_messages.h"
 #include "common/model_output.h"
+#include "localization/lateral_lag.h"
 
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -213,6 +214,35 @@ TEST(ControlsTick, CruiseSpeedGoesStaleAfterHalfASecond) {
   ASSERT_TRUE(std::isfinite(drive.tick().result().control_speed_kph))
       << "조향은 설정한 1 s까지 마지막 휠 속도를 쓴다";
   ASSERT_TRUE(std::isnan(state.ego_speed_kph)) << "크루즈·경보·발행 속도는 0.5 s가 지나면 쓰지 않는다";
+}
+
+/* locationd 상태를 읽다가 쓰기와 겹친 틱(read 거짓, state는 읽다 만 값)은 상류 SubMaster처럼 마지막으로
+ * 온전히 읽은 값을 쓴다. 그 틱에 lagd 지연을 버리면 토크 요청 버퍼를 읽는 위치가 바뀌어 토크가 튄다. */
+TEST(ControlsTick, TornLocalizationReadKeepsTheLastLagEstimate) {
+  ControlParams params;
+  params.steering.use_live_delay = true;
+  SyncPlanner planner(params.steering);
+  ControlsTick tick(params, false, planner, std::string(), std::string(), 1);
+  LocalizationRead good;
+  good.open = good.read = true;
+  good.read_ns = 10'000'000'000ULL;
+  good.state.timestamp_ns = good.read_ns - 50'000'000ULL;
+  good.state.lateral_delay_s = 0.3f;
+  good.state.lag_status = static_cast<uint32_t>(LateralLagStatus::Estimated);
+  tick.on_localization(good, good.read_ns, 10.0);
+  ASSERT_FLOAT_EQ(tick.controller().plan_delay_s(), 0.3f);
+
+  LocalizationRead torn;
+  torn.open = true;
+  torn.read_ns = good.read_ns + 10'000'000ULL;
+  torn.state.lateral_delay_s = 0.6f;  // 읽다 만 값
+  tick.on_localization(torn, torn.read_ns, 10.01);
+  ASSERT_FLOAT_EQ(tick.controller().plan_delay_s(), 0.3f) << "못 읽은 틱은 마지막 값을 쓴다";
+
+  torn.read_ns = good.state.timestamp_ns + 2'100'000'000ULL;
+  tick.on_localization(torn, torn.read_ns, 12.1);
+  ASSERT_FLOAT_EQ(tick.controller().plan_delay_s(), params.steering.steer_actuator_delay)
+      << "마지막 값도 2초가 지나면 낡았다";
 }
 
 }  // namespace
