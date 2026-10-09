@@ -11,6 +11,7 @@
 #include "controls/lateral_path.h"
 #include "controls/lateral_target.h"
 #include "controls/lateral_torque.h"
+#include "car/speed_filter.h"
 #include "car/vehicle_can.h"
 
 /* lag 보상 곡률의 고정 한계. 런타임 튜닝 항목이 아니다. 진단용 참조 구현이
@@ -82,6 +83,7 @@ struct LateralControlResult {
   bool left_lane = false;
   bool right_lane = false;
   float cluster_speed_kph = 0.0f;
+  // 상류 vEgo: 휠 속도 평균을 칼만 필터로 거른 속도. 휠 속도가 낡으면 NaN이다.
   float control_speed_kph = 0.0f;
   float desired_curvature = 0.0f;
   float actual_curvature = 0.0f;
@@ -224,6 +226,8 @@ private:
   bool live_delay_valid_ = false;
   uint32_t calibration_status_ = 1;
   double soft_disable_start_s_ = -1.0;
+  // 상류 CarStateBase.v_ego_kf
+  SpeedFilter v_ego_filter_;
   // openpilot LatControl.sat_time와 selfdrived의 최근 핸들 조작 시각
   float sat_time_ = 0.0f;
   double last_steering_pressed_s_ = -1000.0;

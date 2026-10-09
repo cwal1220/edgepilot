@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <cstdio>
 #include <cstring>
 
@@ -31,11 +32,6 @@ void apply_can_batch(const CanBatch &batch, double now_s,
                              static_cast<uint8_t>(frame.data_len),
                              static_cast<uint8_t>(frame.src), now_s);
   }
-}
-
-float vehicle_speed_mps(const VehicleCanState &vehicle, double now_s,
-                        double timeout_s) {
-  return std::max(0.0f, vehicle_speed_kph(vehicle, now_s, timeout_s) / 3.6f);
 }
 
 /* 모델 lead 출력을 알림/크루즈 입력으로 환산한다. signal_valid는 값이 유효한지,
@@ -463,14 +459,12 @@ bool ControlsTick::on_can_batch(const CanBatch &batch, uint64_t can_now_ns, doub
   return true;
 }
 
-void ControlsTick::on_model(const ModelState &model, double now_s) {
+void ControlsTick::on_model(const ModelState &model) {
   model_ = model;
   model_updated_ = true;
-  planner_.submit(
-      model_, vehicle_, vehicle_speed_mps(
-          vehicle_, now_s,
-          static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0),
-      last_result_.actual_curvature, last_result_.active);
+  // 상류 플래너처럼 거른 vEgo를 준다(직전 틱 값). 휠 속도가 낡았으면 0이다.
+  planner_.submit(model_, vehicle_, std::max(0.0f, last_result_.control_speed_kph / 3.6f),
+                  last_result_.actual_curvature, last_result_.active);
 }
 
 void ControlsTick::on_localization(const LocalizationRead &localization, uint64_t can_now_ns, double now_s) {
@@ -517,9 +511,12 @@ ControlState ControlsTick::step(double now_s, uint64_t now_ns) {
   events_.update(last_result_, vehicle_, panda_, panda_state_, held, model_, now_ns);
 
   const bool radar_lead_fresh = signal_time_fresh(vehicle_.scc11_time_s, now_s, 0.5);
-  /* 크루즈·이탈 경보·발행 속도는 휠 속도를 0.5 s까지만 믿는다. 조향(control_speed_kph)은 설정한
-   * vehicle_state_timeout_ms를 쓰므로 그 값을 늘려도 크루즈 버튼이 낡은 속도로 나가지 않는다. */
-  const float ego_speed_kph = vehicle_speed_kph(vehicle_, now_s);
+  /* 크루즈·이탈 경보·발행 속도(modeld 캘리브레이션, locationd도 읽는다)도 컨트롤러가 거른 vEgo를 쓰되,
+   * 휠 속도를 0.5 s까지만 믿는다. 조향(control_speed_kph)은 ControlTiming의 vehicle_state_timeout_ms를
+   * 쓰므로 그 값을 늘려도 크루즈 버튼이 낡은 속도로 나가지 않는다. */
+  const float ego_speed_kph = std::isfinite(vehicle_speed_kph(vehicle_, now_s))
+      ? last_result_.control_speed_kph
+      : std::numeric_limits<float>::quiet_NaN();
   const float ego_speed_mps = ego_speed_kph / 3.6f;
   const VisionLead lead = observe_vision_lead(model_, now_ns, ego_speed_mps);
   alert_input_ = make_alert_input(
@@ -561,7 +558,8 @@ LearnerOutputs ControlsTick::update_learners(double now_s) {
   learners_.set_lateral_delay(controller_.plan_delay_s());
   learners_.update(vehicle_, now_s,
                    static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0,
-                   last_result_.active, last_result_.apply_torque, last_result_.steering_pressed);
+                   last_result_.control_speed_kph / 3.6f, last_result_.active, last_result_.apply_torque,
+                   last_result_.steering_pressed);
   controller_.set_live_params(learners_.live(), learners_.vehicle_valid(),
                               model_.calibration.status == 1U);
   controller_.set_calibration_status(model_.calibration.status);

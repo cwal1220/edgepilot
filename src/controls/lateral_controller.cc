@@ -103,9 +103,10 @@ LateralControlResult LateralController::update(const LateralPath &path,
       vehicle_state, now_s,
       static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0);
   result.cluster_speed_kph = cluster_speed_kph(vehicle_state);
-  result.control_speed_kph = vehicle_speed_kph(
+  const float raw_speed_kph = vehicle_speed_kph(
       vehicle_state, now_s,
       static_cast<double>(config_.timing.vehicle_state_timeout_ms) / 1000.0);
+  result.control_speed_kph = static_cast<float>(v_ego_filter_.update(raw_speed_kph / 3.6) * 3.6);
   const float speed_mps = result.control_speed_kph / 3.6f;
   const LiveLateralParams live = live_params();
   const float plan_age = plan_age_s(target);

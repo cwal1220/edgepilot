@@ -824,7 +824,7 @@ struct LocalizerDrive {
     } else {
       l.set_localizer(use, LocalizerSample{});
     }
-    l.update(vehicle, now, 0.5, true, 0, false);
+    l.update(vehicle, now, 0.5, vehicle_speed_kph(vehicle, now, 0.5) / 3.6, true, 0, false);
   }
 };
 
@@ -934,7 +934,7 @@ TEST(LateralLearners, TorqueLagFollowsLateralDelay) {
     vehicle = driving_vehicle(1.0 + 0.01 * i);
     vehicle.yaw_rate_valid = true;
     vehicle.lat_accel_valid = true;
-    l.update(vehicle, 1.0 + 0.01 * i, 0.5, true, 100, false);
+    l.update(vehicle, 1.0 + 0.01 * i, 0.5, vehicle_speed_kph(vehicle, 1.0 + 0.01 * i, 0.5) / 3.6, true, 100, false);
     ASSERT_TRUE(std::isfinite(l.torque_params().lat_accel_factor));
   }
 }
@@ -955,7 +955,7 @@ TEST(LateralLearners, LearnersGlue) {
     ASSERT_EQ(l.torque_restore_status(), TorqueRestore::None);
     ASSERT_FALSE(l.live().use_vehicle);
     ASSERT_FALSE(l.live().use_torque);
-    l.update(vehicle, 1.0, 0.5, true, 100, false);
+    l.update(vehicle, 1.0, 0.5, vehicle_speed_kph(vehicle, 1.0, 0.5) / 3.6, true, 100, false);
     // paramsd 입력의 부호·배율은 재생 도구와 같다
     ASSERT_TRUE(l.last_vehicle_input().inputs_fresh);
     ASSERT_NEAR(l.last_vehicle_input().lat_accel_mps2, 0.4, 1e-6);
@@ -982,7 +982,10 @@ TEST(LateralLearners, LearnersGlue) {
     ASSERT_EQ(live.lat_accel_offset, 0.0f);
     // 봉투가 무효인 torqued 메시지는 토크 값을 바꾸지 않는다
     VehicleCanState stale = vehicle;
-    for (long i = 1; i <= 40; ++i) l.update(stale, 1.0 + 0.01 * i + 5.0, 0.5, true, 100, false);
+    for (long i = 1; i <= 40; ++i) {
+      const double now = 1.0 + 0.01 * i + 5.0;
+      l.update(stale, now, 0.5, vehicle_speed_kph(stale, now, 0.5) / 3.6, true, 100, false);
+    }
     // 낡은 torqued 메시지는 적용 값을 바꾸지 않는다
     ASSERT_FALSE(l.torque_params().inputs_ok);
     ASSERT_EQ(l.live().lat_accel_factor, live.lat_accel_factor);

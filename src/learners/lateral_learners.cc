@@ -112,17 +112,15 @@ bool LateralLearners::localizer_at(double t_s, LocalizerSample *out) const {
   return true;
 }
 
-void LateralLearners::update(const VehicleCanState &vehicle, double now_s, double timeout_s,
+void LateralLearners::update(const VehicleCanState &vehicle, double now_s, double timeout_s, double speed_mps,
                              bool lat_active, int apply_torque, bool steering_pressed) {
-  const float speed_kph = vehicle_speed_kph(vehicle, now_s, timeout_s);
   const bool esp_fresh = signal_time_fresh(vehicle.esp12_time_s, now_s, timeout_s);
   Tick tick;
   VehicleParamsInput &in = tick.vin;
   in.t_s = now_s;
-  in.inputs_fresh = vehicle_state_fresh(vehicle, now_s, timeout_s) && esp_fresh &&
-                    std::isfinite(speed_kph);
+  in.inputs_fresh = vehicle_state_fresh(vehicle, now_s, timeout_s) && esp_fresh && std::isfinite(speed_mps);
   in.steering_angle_deg = vehicle.steering_angle_deg;
-  in.speed_mps = std::isfinite(speed_kph) ? speed_kph / 3.6 : 0.0;
+  in.speed_mps = std::isfinite(speed_mps) ? speed_mps : 0.0;
   in.gear = vehicle.gear;
   in.yaw_rate_valid = esp_fresh && vehicle.yaw_rate_valid;
   // 바이어스 추정은 locationd를 쓰는 동안에도 정차마다 따라간다(ESP12로 돌아갈 때를 위해)

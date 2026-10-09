@@ -133,6 +133,10 @@ Library `car`.
     `vehicle_can` decodes received frames into vehicle state, `hyundai_can`
     encodes LKAS11/CLU11/MDPS12 commands. The CAN layer does not see the
     controller's parameters; the controller converts its torque limits.
+- `speed_filter.*`
+  - openpilot's `vEgo`: the wheel-speed average through the speed Kalman
+    filter of opendbc `CarStateBase.update_speed_kf`, run once per control
+    tick.
 
 ## src/controls
 

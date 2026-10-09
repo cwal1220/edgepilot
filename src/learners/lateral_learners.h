@@ -55,7 +55,9 @@ public:
                   const std::string &torque_cache, uint64_t seed,
                   const VehicleParamsOptions &options = {});
 
-  void update(const VehicleCanState &vehicle, double now_s, double timeout_s, bool lat_active,
+  /* speed_mps는 controlsd가 거른 vEgo(상류 paramsd·torqued도 carState.vEgo를 쓴다). 휠 속도가 낡으면
+   * NaN이고 그 틱의 입력은 신선하지 않다. */
+  void update(const VehicleCanState &vehicle, double now_s, double timeout_s, double speed_mps, bool lat_active,
               int apply_torque, bool steering_pressed);
 
   /* use_vehicle = paramsd가 한 번이라도 냈다(상류 sm.seen). use_torque = 봉투가 유효한

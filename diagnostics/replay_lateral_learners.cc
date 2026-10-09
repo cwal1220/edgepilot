@@ -24,6 +24,7 @@
 #include "recorded_vehicle_can.h"
 #include "recording/recording_format.h"
 #include "common/utils_file.h"
+#include "car/speed_filter.h"
 #include "car/vehicle_can.h"
 
 #include <algorithm>
@@ -122,6 +123,7 @@ int main(int argc, char **argv) {
                                                                                  : "손상");
   learners.torque_estimator().set_fit_all_points(fit_all);
   int pressed_counter = 0;
+  SpeedFilter speed_filter;
 
   std::FILE *in_file = inputs_path.empty() ? nullptr : std::fopen(inputs_path.c_str(), "wb");
   std::FILE *out_file = outputs_path.empty() ? nullptr : std::fopen(outputs_path.c_str(), "w");
@@ -181,7 +183,9 @@ int main(int argc, char **argv) {
         const bool use = localizer_sample_from(loc, use_locationd, now_s - sample_t_s, sample_t_s, &sample);
         learners.set_localizer(use, sample);
       }
-      learners.update(vehicle, now_s, timeout_s, cs.active != 0, cs.apply_torque,
+      // controlsd처럼 컨트롤러가 거른 vEgo를 준다(상류 carState.vEgo)
+      const double v_ego = speed_filter.update(vehicle_speed_kph(vehicle, now_s, timeout_s) / 3.6);
+      learners.update(vehicle, now_s, timeout_s, v_ego, cs.active != 0, cs.apply_torque,
                       pressed_counter > kSteeringPressedMinCount);
 
       const VehicleParamsInput &in = learners.last_vehicle_input();

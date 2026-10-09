@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
           ModelState model{};
           if (decode_recorded_model_state(r.payload.data(), static_cast<uint32_t>(r.payload.size()), r.version,
                                           &model))
-            tick.on_model(model, now_s);
+            tick.on_model(model);
           break;
         }
         case RecordType::PandaState: {

@@ -126,7 +126,7 @@ public:
       now_ns_ += 10'000'000ULL;
       const double now_s = static_cast<double>(now_ns_) * 1e-9;
       tick_.on_can_batch(k7_batch(in, now_ns_), now_ns_, now_s);
-      if (ticks_++ % 5 == 0) tick_.on_model(straight_model(now_ns_), now_s);
+      if (ticks_++ % 5 == 0) tick_.on_model(straight_model(now_ns_));
       tick_.on_panda(panda_state(now_ns_, panda_allows));
       tick_.on_localization(LocalizationRead{}, now_ns_, now_s);
       state = tick_.step(now_s, now_ns_);
@@ -261,11 +261,11 @@ TEST(ControlsTick, VisionLeadNeedsTheFixedProbability) {
   model.lead.x = 30.0f;
   model.lead.velocity = 15.0f;
   model.lead.probability = kLeadProbabilityThreshold - 0.05f;
-  tick.on_model(model, 2.0);
+  tick.on_model(model);
   tick.step(2.0, now_ns);
   ASSERT_FALSE(tick.alert_input().lead_valid);
   model.lead.probability = kLeadProbabilityThreshold + 0.05f;
-  tick.on_model(model, 2.0);
+  tick.on_model(model);
   tick.step(2.0, now_ns);
   ASSERT_TRUE(tick.alert_input().lead_valid);
 }

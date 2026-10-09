@@ -223,7 +223,7 @@ int main() {
       if (model_sub.read(&model, sizeof(model), &next_model_seq) &&
           next_model_seq != model_seq) {
         model_seq = next_model_seq;
-        tick.on_model(model, now_s);
+        tick.on_model(model);
       }
       PandaState panda_state;
       uint64_t next_panda_state_seq = panda_state_seq;

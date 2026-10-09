@@ -171,8 +171,8 @@ public:
   void apply_params(const ControlParams &params);
   // 수신 CAN 묶음. 100 ms보다 오래된 묶음은 버리고 false다.
   bool on_can_batch(const CanBatch &batch, uint64_t can_now_ns, double now_s);
-  // 새 모델 상태. 플래너에 이번 틱 차량 상태와 직전 틱 결과를 함께 넘긴다.
-  void on_model(const ModelState &model, double now_s);
+  // 새 모델 상태. 플래너에 이번 틱 차량 상태와 직전 틱 결과(vEgo·실제 곡률·active)를 함께 넘긴다.
+  void on_model(const ModelState &model);
   void on_panda(const PandaState &panda_state) { panda_state_ = panda_state; }
   // lagd 지연과 paramsd·torqued의 locationd 입력.
   void on_localization(const LocalizationRead &localization, uint64_t can_now_ns, double now_s);

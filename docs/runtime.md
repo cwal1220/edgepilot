@@ -179,6 +179,10 @@ keeps the AX system open.
   with the KIA K7 YG HEV torque controller and `LKAS11`/`CLU11`/`MDPS12` packer
   at 100 Hz
 - consumes model path, lane, road-edge, and vehicle-state IPC
+- filters the wheel-speed average into `vEgo` as openpilot does
+  (`car/speed_filter`); the controller, the planner, the learners and the
+  published `ego_speed_kph` (read by modeld's calibration and locationd) all
+  use it
 - uses the vision lead distance and relative speed to adjust the stock
   fixed-speed cruise setting with rate-limited `SET-`/`RES+` CLU11 pulses; the
   first driver SET speed remains the maximum. Closing distance is projected

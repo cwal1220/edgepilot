@@ -3,6 +3,7 @@
  * CLU11 속도 바꿔치기). 신호 배치대로 손으로 채운 바이트로 검사한다. */
 #include "car/can_frame.h"
 #include "car/hyundai_can.h"
+#include "car/speed_filter.h"
 #include "car/vehicle_can.h"
 
 #include <gtest/gtest.h>
@@ -178,6 +179,41 @@ TEST(K7Can, Cgw1BcanTimeout) {
   ASSERT_FALSE(decoded.hazard);
   ASSERT_TRUE(decoded.driver_door_open) << "타임아웃 문은 열린 것으로(결합을 막는다)";
   ASSERT_TRUE(decoded.seatbelt_unlatched) << "타임아웃 안전벨트는 미착용으로(결합을 막는다)";
+}
+
+/* vEgo는 상류 opendbc CarStateBase.update_speed_kf(simple_kalman KF1D)와 같다. 기준값은 상류 파이썬을 같은
+ * 입력으로 돌려 얻었다: 10 m/s 50틱, 2 m/s² 가속에 ±0.05 m/s 잡음 100틱, 그다음 15 m/s로 뛰기(다시 시작). */
+TEST(SpeedFilter, MatchesUpstreamKalman) {
+  SpeedFilter filter;
+  auto raw_at = [](int t) {
+    if (t < 50) return 10.0;
+    if (t < 150) return 10.0 + 0.02 * (t - 49) + (t % 2 ? 0.05 : -0.05);
+    return 15.0;
+  };
+  struct Expected { int t; double v, a; };
+  const Expected expected[] = {
+      {0, 10.0, 0.0}, {49, 10.0, 0.0}, {50, 9.994778188325945, -0.049777691948353464},
+      {60, 10.163186164791778, 1.1099879378996782}, {100, 11.03736443927332, 1.95609838693478},
+      {149, 12.024550996758542, 2.0456818688001057}, {150, 15.0, 0.0}};
+  size_t next = 0;
+  for (int t = 0; t <= 150; ++t) {
+    const double v = filter.update(raw_at(t));
+    if (next < std::size(expected) && expected[next].t == t) {
+      EXPECT_NEAR(v, expected[next].v, 1e-9) << t;
+      EXPECT_NEAR(filter.a_ego(), expected[next].a, 1e-9) << t;
+      ++next;
+    }
+  }
+  ASSERT_EQ(next, std::size(expected));
+}
+
+// 휠 속도가 낡으면(NaN) NaN을 내고, 다음 값에서 그 값으로 다시 시작한다.
+TEST(SpeedFilter, StaleSpeedRestarts) {
+  SpeedFilter filter;
+  for (int i = 0; i < 20; ++i) filter.update(10.0 + 0.02 * i);
+  ASSERT_TRUE(std::isnan(filter.update(std::nan(""))));
+  ASSERT_DOUBLE_EQ(filter.update(10.2), 10.2) << "가까운 값이라도 끊긴 뒤에는 새로 시작한다";
+  ASSERT_NEAR(filter.a_ego(), 0.0, 1e-12);
 }
 
 TEST(K7Can, Ahb1BrakeLights) {
