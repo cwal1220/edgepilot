@@ -229,7 +229,8 @@ with what it does while learning is on, and a button that copies the learned
 value into the manual one. Below are the camera calibration, the learners' last
 ten minutes, the learner input source and the fixed specs (mass, wheelbase,
 centre of gravity). 조향 keeps the controller
-tuning, and searching it for a moved value links to 차량 특성.
+tuning, the path mode (Laneless) and the lane-change minimum speed, and
+searching it for a moved value links to 차량 특성.
 
 > [!WARNING]
 > The web console has no authentication and writes steering parameters that
