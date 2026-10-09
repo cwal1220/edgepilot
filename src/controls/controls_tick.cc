@@ -87,8 +87,7 @@ DepartureAlertInput make_alert_input(double now_s, const VehicleCanState &vehicl
 AdaptiveCruiseInput make_adaptive_input(double now_s, bool enabled,
                                         const VehicleCanState &vehicle,
                                         const LateralControlResult &result,
-                                        const PandaGateOutput &panda,
-                                        const ModelState &model, bool model_updated,
+                                        const PandaGateOutput &panda, bool model_updated,
                                         const VisionLead &lead, float ego_speed_kph) {
   AdaptiveCruiseInput input;
   input.now_s = now_s;
@@ -106,8 +105,7 @@ AdaptiveCruiseInput make_adaptive_input(double now_s, bool enabled,
   input.cluster_speed_kph = result.cluster_speed_kph;
   input.driver_set_speed_kph = cruise_set_speed_kph(vehicle);
   input.vision_lead_updated = model_updated;
-  input.vision_lead_valid = lead.signal_valid;
-  input.vision_lead_probability = model.lead.probability;
+  input.vision_lead_valid = lead.valid;
   input.vision_lead_distance_m = lead.distance_m;
   input.vision_lead_relative_speed_mps = lead.relative_speed_mps;
   return input;
@@ -527,8 +525,7 @@ ControlState ControlsTick::step(double now_s, uint64_t now_ns) {
   alert_input_ = make_alert_input(
       now_s, vehicle_, last_result_, model_, model_updated_, lead, ego_speed_mps);
   adaptive_cruise_ = adaptive_cruise_controller_.update(make_adaptive_input(
-      now_s, cruise_.enabled, vehicle_, last_result_, panda_, model_,
-      model_updated_, lead, ego_speed_kph));
+      now_s, cruise_.enabled, vehicle_, last_result_, panda_, model_updated_, lead, ego_speed_kph));
 
   if (adaptive_cruise_.command_button != 0) {
     last_result_.frames.push_back(

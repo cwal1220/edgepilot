@@ -1,7 +1,6 @@
 #include "controls/adaptive_cruise.h"
 
 #include "car/can_frame.h"
-#include "common/model_output.h"
 #include "common/utils_math.h"
 #include "common/utils_json.h"
 
@@ -48,8 +47,6 @@ bool valid_set_speed(float speed_kph) {
 
 bool valid_vision_lead(const AdaptiveCruiseInput &input) {
   return input.vision_lead_valid &&
-         std::isfinite(input.vision_lead_probability) &&
-         input.vision_lead_probability >= kLeadProbabilityThreshold &&
          std::isfinite(input.vision_lead_distance_m) &&
          std::isfinite(input.vision_lead_relative_speed_mps) &&
          input.vision_lead_distance_m >= 1.0f &&

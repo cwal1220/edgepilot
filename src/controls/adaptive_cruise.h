@@ -39,8 +39,8 @@ struct AdaptiveCruiseInput {
   float cluster_speed_kph = 0.0f;
   float driver_set_speed_kph = 0.0f;
   bool vision_lead_updated = false;
+  // 모델 앞차가 유효하고 고정한 확률 문턱(kLeadProbabilityThreshold)을 넘었다. 문턱은 controlsd가 본다.
   bool vision_lead_valid = false;
-  float vision_lead_probability = 0.0f;
   float vision_lead_distance_m = 0.0f;
   float vision_lead_relative_speed_mps = 0.0f;
 };

@@ -26,7 +26,7 @@ build-host/bin/gtest_lateral_learners --gtest_filter='LateralLearners.Torque*'
 
 | 실행 파일 | 개수 | 검사 내용 |
 | --- | ---: | --- |
-| `gtest_adaptive_cruise` | 15 | 비전 크루즈 버튼 간격과 한계. 차량 모형과 폐루프로 돌려 설정 속도 동기화, 재설정, 반응 없는 차, 오르내림 반복, 고정 앞차 확률(0.5)을 본다 |
+| `gtest_adaptive_cruise` | 14 | 비전 크루즈 버튼 간격과 한계. 차량 모형과 폐루프로 돌려 설정 속도 동기화, 재설정, 반응 없는 차, 오르내림 반복을 본다 |
 | `gtest_alert_tones` | 1 | 알림음 합성: 모든 소리가 무음에서 시작해 무음으로 끝나고, 봉우리가 같고, 0.3~2.5초이며, 서로 다르다 |
 | `gtest_background_writer` | 1 | 루프 밖 파일 쓰기 스레드: 같은 경로는 최신 내용, 지우기, 실패 수, flush는 넘긴 쓰기가 끝날 때까지 기다림, 없앨 때 남은 쓰기 마치기 |
 | `gtest_calibration` | 12 | 온라인 보정 상태 기계(calibrationd.py 참조, 카메라 높이·높이 표준편차 조건 포함), 장착 변경·초기화 재보정, 범위 밖 저장값 복원, 저장·복원·수동 보정, 환경 변수, 투영 행렬과 YUV6 워프(openpilot OpenCL 참조), NV21 색차 순서, 카메라 장착 위치 |

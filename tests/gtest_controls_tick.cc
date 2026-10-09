@@ -2,7 +2,8 @@
  * 바이트), 20 Hz 직선 도로 모델, Panda 상태를 넣고 ControlState와 보낼 CAN을 본다: SET으로 결합해
  * LKAS11을 보내고 문이 열리면 해제한다, Panda가 허가하지 않으면 1초 유예 뒤 거부한다, 브레이크
  * 페달(AHB1)이 고정형 크루즈 추정을 끈다, 휠 속도가 끊기면 크루즈·발행 속도는 0.5초 뒤 비운다,
- * locationd를 못 읽은 틱은 마지막 lagd 지연을 쓴다. 플래너는 그 자리에서 계산한다(SyncPlanner).
+ * locationd를 못 읽은 틱은 마지막 lagd 지연을 쓴다, 확률 문턱 밑의 모델 앞차는 쓰지 않는다. 플래너는 그
+ * 자리에서 계산한다(SyncPlanner).
  * 보드의 작업 스레드 플래너(LateralPlannerWorker)는 SyncPlanner와 같은 결과를 내는지 따로 본다. */
 #include "car/can_frame.h"
 #include "controls/control_holds.h"
@@ -246,6 +247,27 @@ TEST(ControlsTick, TornLocalizationReadKeepsTheLastLagEstimate) {
   tick.on_localization(torn, torn.read_ns, 12.1);
   ASSERT_FLOAT_EQ(tick.controller().plan_delay_s(), params.steering.steer_actuator_delay)
       << "마지막 값도 2초가 지나면 낡았다";
+}
+
+/* 모델 앞차는 openpilot radard처럼 고정한 확률(0.5) 밑이면 쓰지 않는다. 출발 알림과 비전 크루즈가 같은
+ * 판정(observe_vision_lead)을 받는다. */
+TEST(ControlsTick, VisionLeadNeedsTheFixedProbability) {
+  ControlParams params;
+  SyncPlanner planner(params.steering);
+  ControlsTick tick(params, false, planner, std::string(), std::string(), 1);
+  const uint64_t now_ns = 2'000'000'000ULL;
+  ModelState model = straight_model(now_ns);
+  model.lead.valid = 1;
+  model.lead.x = 30.0f;
+  model.lead.velocity = 15.0f;
+  model.lead.probability = kLeadProbabilityThreshold - 0.05f;
+  tick.on_model(model, 2.0);
+  tick.step(2.0, now_ns);
+  ASSERT_FALSE(tick.alert_input().lead_valid);
+  model.lead.probability = kLeadProbabilityThreshold + 0.05f;
+  tick.on_model(model, 2.0);
+  tick.step(2.0, now_ns);
+  ASSERT_TRUE(tick.alert_input().lead_valid);
 }
 
 // Lane 모드 모델: 차선 둘과 직진 plan. 차선 중심이 차에서 offset_m만큼 떨어져 있다.

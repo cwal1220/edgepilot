@@ -1,7 +1,6 @@
 /* AdaptiveCruiseController: 비전 앞차에 맞춰 SET/RES 버튼을 흉내 내는 크루즈(이 차에는 SCC가
  * 없다). 차량 모형이 버튼 펄스를 실제 설정 속도 변화로 바꿔 돌려준다. */
 #include "controls/adaptive_cruise.h"
-#include "common/model_output.h"
 
 #include <gtest/gtest.h>
 #include <cmath>
@@ -65,7 +64,6 @@ AdaptiveCruiseInput base_input(double now_s) {
   input.ego_speed_kph = 80.0f;
   input.cluster_speed_kph = 80.0f;
   input.driver_set_speed_kph = 80.0f;
-  input.vision_lead_probability = 0.9f;
   return input;
 }
 
@@ -321,28 +319,6 @@ TEST(AdaptiveCruise, SessionResetAndMinimumSpeed) {
   // 기능을 끄면 세션과 출력을 지운다
   ASSERT_FALSE(output.session_valid);
   ASSERT_EQ(output.command_button, 0);
-}
-
-TEST(AdaptiveCruise, LeadBelowTheFixedProbabilityIsIgnored) {
-  AdaptiveCruiseController controller;
-  Vehicle vehicle;
-  activate(&controller, &vehicle);
-
-  AdaptiveCruiseInput input = base_input(1.0);
-  input.vision_lead_updated = true;
-  input.vision_lead_valid = true;
-  input.vision_lead_probability = kLeadProbabilityThreshold - 0.05f;
-  input.vision_lead_distance_m = 8.0f;
-  input.vision_lead_relative_speed_mps = -6.0f;
-  AdaptiveCruiseOutput output = tick(&controller, input, &vehicle);
-  // openpilot radard처럼 고정한 확률(0.5) 밑의 앞차는 무시한다
-  ASSERT_FALSE(output.lead_valid);
-  ASSERT_EQ(output.command_button, 0);
-
-  input.vision_lead_probability = kLeadProbabilityThreshold + 0.05f;
-  input.now_s = 1.01;
-  output = tick(&controller, input, &vehicle);
-  ASSERT_TRUE(output.lead_valid);
 }
 
 TEST(AdaptiveCruise, RuntimeConfigUpdate) {
