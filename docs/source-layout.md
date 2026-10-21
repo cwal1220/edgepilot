@@ -342,7 +342,9 @@ Libraries `control_core` and `controls`, process `controlsd`.
   watcher that reloads both files when one changes (checked every second).
 - `lateral_controller.*`, `lateral_torque.*`: apply the planner's
   lag-adjusted curvature through the validated K7 torque/CAN path
-  (`car/hyundai_can`).
+  (`car/hyundai_can`). A new plan is blended in over 50 ms (five ticks)
+  from what the previous plan gives, for the desired curvature and the
+  learned model's inputs alike.
 - `lateral_nn.*`: the learned torque feed-forward: the model file loader,
   the network and the inputs built from the plan and a 1 s history
   ([Lateral NN](lateral-nn.md)).
@@ -411,7 +413,8 @@ Library `planning`.
 - `lateral_planner.*`: applies openpilot lane probability/width logic and the
   lateral MPC (Lane mode), or the plan yaw (Laneless mode and Lane mode's
   model-path stretches), to produce curvature targets. This is the only
-  producer of `LateralTarget`.
+  producer of `LateralTarget`. The MPC starts from its previous solution's
+  curvature with a quarter of the measured curvature mixed in.
 - `lane_line_filter.*`: smooths the two ego lane lines over time for the
   planner: the last filtered lines moved by the car's own motion, blended with
   the new frame. See [Lane-line filter](lane-line-filter.md).

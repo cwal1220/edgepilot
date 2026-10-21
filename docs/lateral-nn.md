@@ -8,7 +8,8 @@ steering torque a target trajectory needs. With `nn_feedforward` on and a
 model chosen from `models/lateral_nn/`, it replaces the linear feed-forward's
 lateral-acceleration, offset and bank terms. In curves the friction
 compensation stays on top of a model trained without it, the model's output is
-raised by the gain its file carries (`curve_gain`), and the PID stays as it is.
+raised by the gain its file carries (`curve_gain`) while the curve tightens,
+and the PID stays as it is.
 
 This diagram shows where the model comes from and where it enters the
 controller:
@@ -171,9 +172,18 @@ learned the torque that was sent, friction included, as the removed
 `k7_hev_v1` and `v2` did, runs alone: adding the term would count the friction
 twice.
 
-The model file's `curve_gain` raises the model's output in curves: ×(1 +
-`curve_gain`), ramped in over the same 0.2→0.6 m/s² of desired lateral
-acceleration as the friction and from 30 to 50 km/h. The models fit the torque
+The model file's `curve_gain` raises the model's output while a curve
+tightens: ×(1 + `curve_gain`), ramped in over the same 0.2→0.6 m/s² of desired
+lateral acceleration as the friction, from 30 to 50 km/h, and with how fast
+the desired lateral acceleration grows (filtered over about 0.1 s, none at 0,
+all from 0.3 m/s³). Until 2026-10-22 it stayed on through the hold and the
+exit too. On the two 2026-10-18 drives with `v4`, the steering angle then gave
+1.07–1.09 times what the controller asked for in steady curves above 80 km/h
+and 1 m/s², and the car sat on the inside of right curves (11 cm in the
+closed-loop replay of those drives, 13–27 cm against the stock camera's lane
+lines on the road). With the gain on the entry only, the replay gives 7 cm
+with no more wobble. Taking the gain out altogether put left curves 4–10 cm
+to the outside. The models fit the torque
 that was sent, at curve entries too: over the entry samples of its training
 data, `v3`'s mean prediction is 1.01 of the sent torque. In the closed loop
 they still deliver less in curves than the linear feed-forward, which reads the
@@ -413,8 +423,9 @@ Before these, the nets alone took 82 µs a tick.
   PID included, for the plan it followed. The model learns that controller's
   closed-loop torque, so a replay of its own training drives flatters it. On
   the held-out drives it is not better than `v3` with the gain.
-- **Curve gain:** calibrated in the replay, whose plant is linear in torque,
-  and not yet driven.
+- **Curve gain:** calibrated in the replay, whose plant is linear in torque.
+  Driven on 2026-10-18 while it applied through whole curves (see above); the
+  entry-only gain of 2026-10-22 is not yet driven.
 
 ## Next
 

@@ -279,8 +279,10 @@ TEST(LateralPlanner, LaneProbabilityAdjustmentsDifferFromUpstream) {
     };
     EXPECT_TRUE(lane_mode_after(model_for(2.4f, 0.05f, 0.9f))) << "4.8 m 폭은 차선을 따른다(상류는 0.2배라 대체)";
     EXPECT_FALSE(lane_mode_after(model_for(2.8f, 0.05f, 0.9f))) << "5.6 m는 차선이 아니다";
-    EXPECT_TRUE(lane_mode_after(model_for(1.75f, 0.3f, 0.9f))) << "std 0.3은 0.4배(0.36, 상류는 0)";
-    EXPECT_FALSE(lane_mode_after(model_for(1.75f, 0.4f, 0.9f)));
+    // 대체 판정의 std 보정은 0.25~0.5(블렌드 가중치는 0.15~0.4)
+    EXPECT_TRUE(lane_mode_after(model_for(1.75f, 0.3f, 0.9f))) << "std 0.3은 0.8배(0.72, 상류는 0)";
+    EXPECT_TRUE(lane_mode_after(model_for(1.75f, 0.4f, 0.9f))) << "std 0.4는 0.4배(0.36)라 대체 문턱 0.3 위에 남는다";
+    EXPECT_FALSE(lane_mode_after(model_for(1.75f, 0.45f, 0.9f))) << "std 0.45는 0.2배(0.18)";
 
     // 확률이 0.9에서 0으로 떨어져도 유효 확률이 초당 2로 내려와 0.3 밑에서야(0.3초 뒤) 대체한다
     LateralPlanner planner{SteeringParams{}};
@@ -294,6 +296,40 @@ TEST(LateralPlanner, LaneProbabilityAdjustmentsDifferFromUpstream) {
         ++frames;
     }
     EXPECT_EQ(frames, 6) << "0.9에서 한 프레임 0.1씩: 여섯 번째 프레임에 0.3 밑";
+}
+
+// 모델 경로로 달리다 차선이 다시 보이면 std가 아직 높아도(0.25~0.5) 돌아온다. 판정값이 초당 2로 0에서 올라 0.4를 넘는
+// 프레임에 차선으로 바꾼다. 블렌드 밴드(0.15~0.4)로 판정하던 때는 std 0.35인 차선(0.2배, 0.18)으로는 돌아오지 않았다.
+TEST(LateralPlanner, ReacquiresLanesWhoseStdIsStillHigh) {
+    const float v = 15.0f;
+    const auto model_for = [&](float prob, float std) {
+        ModelState ms{};
+        ms.valid = 1;
+        for (int i = 0; i < kTrajectorySize; ++i) {
+            ms.plan[i] = {v * model_t_idx(i), 0.0f, 0.0f};
+            ms.lanes[1][i] = {-1.75f, 0.0f};
+            ms.lanes[2][i] = {1.75f, 0.0f};
+        }
+        ms.lane_probabilities[1] = ms.lane_probabilities[2] = prob;
+        ms.lane_stds[1] = ms.lane_stds[2] = std;
+        ms.desire_state[0] = 1.0f;
+        return ms;
+    };
+    // 차선이 없는 교차로(확률 0, std 1)를 지나 std가 std_now인 차선이 나타난 뒤 Lane으로 돌아오기까지 프레임 수(없으면 -1)
+    const auto frames_to_lanes = [&](float std_now) {
+        LateralPlanner planner{SteeringParams{}};
+        LateralTarget r;
+        for (int i = 0; i < 40; ++i) r = planner.update(model_for(0.0f, 1.0f), VehicleCanState{}, steering_input(v));
+        EXPECT_TRUE(r.laneless_mode);
+        for (int frames = 1; frames <= 40; ++frames) {
+            r = planner.update(model_for(0.9f, std_now), VehicleCanState{}, steering_input(v));
+            if (!r.laneless_mode) return frames;
+        }
+        return -1;
+    };
+    EXPECT_EQ(frames_to_lanes(0.05f), 5) << "또렷한 차선: 0.1씩 올라 다섯 번째 프레임에 0.5";
+    EXPECT_EQ(frames_to_lanes(0.35f), 5) << "std 0.35는 0.6배(0.54)";
+    EXPECT_EQ(frames_to_lanes(0.45f), -1) << "std 0.45는 0.2배(0.18)라 모델 경로에 남는다";
 }
 
 // 모델 차선 std는 차선이 또렷해도 0.4를 잠깐 넘는다. 블렌드 가중치는 그 프레임에 내려가지만, 모델 경로 대체는
@@ -333,6 +369,31 @@ TEST(LateralPlanner, BriefLaneStdSpikeKeepsTheLanes) {
 
 // lane_path_weight는 Lane 모드 MPC가 차선 중심에서 벗어난 위치를 되돌리는 세기다. 차가 차선 중심에서
 // 0.3 m 오른쪽에 있으면 가중치 3이 1보다 왼쪽(음) 곡률을 더 크게 요구한다.
+// Lane MPC는 직전 해의 곡률에 잰 곡률을 0.25만큼 섞어 출발한다(0.7.x는 잰 곡률, 0.8.x는 직전 해). 곧은 차로 가운데서
+// 자리 잡은 뒤 차가 0.01 1/m로 돈다고 재면 다음 해의 첫 곡률은 0.0025다. 잰 곡률이 직전 해와 같으면 그대로다.
+TEST(LateralPlanner, MpcStartsPartlyFromTheMeasuredCurvature) {
+    const float v = 20.0f;
+    ModelState ms{};
+    ms.valid = 1;
+    for (int i = 0; i < kTrajectorySize; ++i) {
+        ms.plan[i] = {v * model_t_idx(i), 0.0f, 0.0f};
+        ms.lanes[1][i] = {-1.75f, 0.0f};
+        ms.lanes[2][i] = {1.75f, 0.0f};
+    }
+    ms.lane_probabilities[1] = ms.lane_probabilities[2] = 0.9f;
+    ms.lane_stds[1] = ms.lane_stds[2] = 0.05f;
+    ms.desire_state[0] = 1.0f;
+    LateralPlanner planner{SteeringParams{}};
+    LateralTarget r;
+    for (int i = 0; i < 40; ++i) r = planner.update(ms, VehicleCanState{}, steering_input(v));
+    ASSERT_FALSE(r.laneless_mode);
+    ASSERT_NEAR(r.curvatures[0], 0.0f, 1e-6f) << "곧은 차로 가운데: 곡률 0에서 출발";
+    LateralPlannerInput turning = steering_input(v);
+    turning.measured_curvature = 0.01f;
+    r = planner.update(ms, VehicleCanState{}, turning);
+    EXPECT_NEAR(r.curvatures[0], 0.0025f, 1e-6f);
+}
+
 TEST(LateralPlanner, LanePathWeightStrengthensCentering) {
     const float v = 20.0f;
     auto model_for = [&]() {

@@ -152,4 +152,8 @@ private:
     int request_head_ = 0;
     // 저크 선행 마찰용 1.2Hz 저역통과 상태
     float jerk_filtered_ = 0.0f;
+    // 곡선 이득을 거는 때를 보는 |목표 횡가속|과 그것이 커지는 빠르기(m/s³, 거른 값). 요청 버퍼처럼 active와 무관하게
+    // 매 틱 갱신한다.
+    float abs_lat_accel_prev_ = 0.0f;
+    float abs_lat_accel_rise_ = 0.0f;
 };

@@ -943,6 +943,40 @@ TEST(LateralController, HoldAngleStaysBelowTheFaultAngle) {
 }
 
 // 상류 controlsd: 비활성 중 목표 곡률은 실제 곡률을 따라가고, 재활성 때 거기서 한계 안으로 출발한다.
+// 새 계획(촬영 시각이 바뀐 것)이 오면 목표 곡률은 다섯 틱(50 ms) 동안 직전 계획이 내는 값에서 틱마다 1/5씩 새 계획의
+// 값으로 간다. 그 뒤와 같은 계획이 이어지는 동안은 섞지 않는다. 기대값은 같은 입력에 한 계획만 받은 컨트롤러 둘(촬영
+// 시각이 바뀌지 않아 섞지 않는다)의 같은 틱 값이다. 계획 사이 차이는 곡률 변화율 한계보다 작다.
+TEST(LateralController, NewPlanIsBlendedInOverFiveTicks) {
+    const auto plan = [](float scale, uint64_t capture_ns) {
+        LateralTarget target = replay_target();
+        for (int i = 0; i < kLateralControlN; ++i) {
+            target.psis[i] *= scale;
+            target.curvatures[i] *= scale;
+        }
+        target.capture_timestamp_ns = capture_ns;
+        return target;
+    };
+    const LateralTarget a = plan(1.0f, 1'000'000'000ULL);
+    const LateralTarget b = plan(1.25f, 1'050'000'000ULL);
+    LateralControllerConfig config;
+    config.force_engaged = true;
+    LateralController blended(config), only_a(config), only_b(config);
+    double t = 1.0;
+    for (int frame = 0; frame < 110; ++frame, t += 0.01) {
+        const VehicleCanState vehicle = ready_vehicle(t);
+        const bool switched = frame >= 100;
+        const LateralControlOutput result = blended.update(replay_path(), switched ? b : a, vehicle, t, frame);
+        const float from = only_a.update(replay_path(), a, vehicle, t, frame).desired_curvature;
+        const float to = only_b.update(replay_path(), b, vehicle, t, frame).desired_curvature;
+        if (switched) {
+            ASSERT_TRUE(result.lat_active);
+            ASSERT_GT(std::fabs(to - from), 1e-4f) << "두 계획의 목표 곡률이 다르다";
+        }
+        const float weight = switched ? std::min(1.0f, static_cast<float>(frame - 99) / 5.0f) : 0.0f;
+        EXPECT_NEAR(result.desired_curvature, from + weight * (to - from), 1e-6f) << "frame " << frame;
+    }
+}
+
 TEST(LateralController, InactiveDesiredTracksActual) {
     LateralControllerConfig config;
     config.force_engaged = true;

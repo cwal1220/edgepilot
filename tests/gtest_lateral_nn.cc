@@ -599,26 +599,31 @@ TEST(LateralNnModel, ReadsTheCurveGain) {
     EXPECT_FLOAT_EQ(repository_model()->curve_gain(), 0.3f) << "k7_hev_v3의 폐루프 보정값";
 }
 
-TEST(TorqueController, CurveGainRaisesTheModelInCurvesAtSpeed) {
-    // 마찰을 빼고 모델 피드포워드만 보면 이득은 (1 + gain · 곡선 램프 · 속도 램프)배다: |목표 횡가속| 0.2→0.6 m/s²,
-    // 30→50 km/h
-    const auto ratio = [](float speed_mps, float curvature) {
+TEST(TorqueController, CurveGainRaisesTheModelWhileTheCurveTightens) {
+    // 마찰을 빼고 모델 피드포워드만 보면 이득은 (1 + gain · 커짐 · 곡선 램프 · 속도 램프)배다: |목표 횡가속|이 커지는
+    // 빠르기 0→0.3 m/s³(약 0.1 s로 거름), |목표 횡가속| 0.2→0.6 m/s², 30→50 km/h. 곡률을 1초 동안 from에 두었다가
+    // 1초 동안 to로 일정하게 바꾸고 그 끝 틱의 비를 본다.
+    const auto ratio = [](float speed_mps, float from, float to) {
         const auto ff = [&](float gain) {
             SteeringParams params;
             params.torque_friction = 0.0f;
             TorqueController controller;
-            for (int i = 0; i < 50; ++i)
-                controller.update(torque_in(true, speed_mps, curvature, -3.0f, 0.3f), params,
-                                  nn_ff(0.2f, 1.0f, true, gain));
+            for (int i = -100; i <= 100; ++i)
+                controller.update(torque_in(true, speed_mps, from + (to - from) * 0.01f * std::max(i, 0), -3.0f, 0.3f),
+                                  params, nn_ff(0.2f, 1.0f, true, gain));
             return controller.feedforward();
         };
         return ff(0.3f) / ff(0.0f);
     };
-    EXPECT_NEAR(ratio(20.0f, 0.002f), 1.3f, 1e-4f) << "72 km/h, 0.8 m/s²: 전부";
-    EXPECT_NEAR(ratio(20.0f, 0.001f), 1.15f, 1e-4f) << "0.4 m/s²: 곡선 램프 절반";
-    EXPECT_NEAR(ratio(20.0f, 0.0002f), 1.0f, 1e-6f) << "직선(0.08 m/s²)";
-    EXPECT_NEAR(ratio(40.0f / 3.6f, 0.006f), 1.15f, 1e-4f) << "40 km/h: 속도 램프 절반";
-    EXPECT_NEAR(ratio(25.0f / 3.6f, 0.02f), 1.0f, 1e-6f) << "30 km/h 아래";
+    // 20 m/s에서 곡률 0.0005는 0.2 m/s²
+    EXPECT_NEAR(ratio(20.0f, 0.0005f, 0.002f), 1.3f, 1e-3f) << "72 km/h, 0.2 → 0.8 m/s²(0.6 m/s³): 전부";
+    EXPECT_NEAR(ratio(20.0f, 0.001625f, 0.002f), 1.15f, 2e-3f) << "0.65 → 0.8 m/s²(0.15 m/s³): 커짐 절반";
+    EXPECT_NEAR(ratio(20.0f, 0.002f, 0.002f), 1.0f, 1e-6f) << "곡선 유지: 이득 없음";
+    EXPECT_NEAR(ratio(20.0f, 0.004f, 0.002f), 1.0f, 1e-6f) << "곡선 탈출(1.6 → 0.8 m/s²): 이득 없음";
+    EXPECT_NEAR(ratio(20.0f, -0.0005f, -0.002f), 1.3f, 1e-3f) << "왼쪽 곡선도 |목표 횡가속|이 커지면 전부";
+    EXPECT_NEAR(ratio(20.0f, 0.0f, 0.001f), 1.15f, 1e-3f) << "0.4 m/s²에서 끝나면 곡선 램프 절반";
+    EXPECT_NEAR(ratio(40.0f / 3.6f, 0.0f, 0.006f), 1.15f, 1e-3f) << "40 km/h: 속도 램프 절반";
+    EXPECT_NEAR(ratio(25.0f / 3.6f, 0.0f, 0.02f), 1.0f, 1e-6f) << "30 km/h 아래";
 }
 
 TEST(TorqueController, CurveFrictionOnlyForFrictionFreeModels) {

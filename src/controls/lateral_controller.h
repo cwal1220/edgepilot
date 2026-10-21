@@ -157,6 +157,20 @@ private:
     void disengage(double now_s);
     void resolve_engagement(BlockKind kind, bool soft_condition, bool logical_engaged, bool engage_requested,
                             double now_s, LateralControlOutput *result);
+    // 연이은 계획 사이의 출력 섞기. 새 계획(촬영 시각이 바뀐 것)이 오면 kTargetBlendTicks 틱 동안 직전 계획이 내는
+    // 값에서 새 계획이 내는 값으로 옮긴다. 목표 곡률(requested_curvature)과 학습한 토크 모델의 입력이 같이 쓴다.
+    struct TargetBlend {
+        LateralTarget current;   // 지금 계획. 다음 계획이 오면 previous가 된다
+        LateralTarget previous;  // 직전 계획. 유효했을 때만 섞는다(have_previous)
+        bool have_current = false;
+        bool have_previous = false;
+        int ticks = 0;                      // 지금 계획이 온 뒤 지난 틱
+        float weight = 1.0f;                // 지금 계획의 몫
+        float previous_extra_age_s = 0.0f;  // 직전 계획이 지금 계획보다 먼저 찍힌 만큼(그 계획의 나이에 더한다)
+    };
+    // 틱마다 한 번, requested_curvature 앞에서 부른다.
+    void update_target_blend(const LateralTarget &target);
+
     // 클립 전 목표 곡률. plan_curvature에는 묶기 전의 plan 곡률(상류 modelV2.action.desiredCurvature,
     // 포화 경고가 쓴다)을 적는다.
     float requested_curvature(const LateralTarget &target, const VehicleCanState &vehicle_state, float speed_mps,
@@ -224,6 +238,7 @@ private:
     std::shared_ptr<const LateralNnModel> lateral_nn_;
     LateralNnInputs nn_inputs_;
     float nn_weight_ = 0.0f;  // 선형 ↔ 모델 피드포워드를 섞는 무게(0..1, 1초 램프)
+    TargetBlend target_blend_;
     bool nn_evaluated_ = false;
     LiveLateralParams live_{};
     bool live_vehicle_valid_ = true;

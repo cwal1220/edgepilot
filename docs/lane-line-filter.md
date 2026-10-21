@@ -124,6 +124,14 @@ What did not work:
   could not be checked this way: the closed-loop replay moves the plan's
   positions but not its yaw, which is all the laneless law reads.
 
+  Since 2026-10-22 the controller blends each new plan in over 50 ms
+  instead, from what the previous plan gives (`LateralController`). It is not
+  a filter on the output: once blended in, the new plan alone counts. Alone,
+  it cut the torque step RMS by 18 % and the rate-limit binding in curves from
+  59 to 37 %, and moved the car 0.6–1.3 cm further inside in curves. Together
+  with the lane MPC's start from the measured curvature, which centres more
+  firmly, curves end 7 cm closer to the centre.
+
 ## Evidence
 
 The weight was chosen on replays of the two drives above:

@@ -25,6 +25,8 @@ constexpr int kHeldTurnResumeFrames = 100;
 constexpr float kNnBlendStep = 0.01f;
 // 학습 데이터는 3 m/s 위만 썼다(nnlc csvdata.usable_mask). 그 아래에서는 선형 피드포워드로 돌아간다.
 constexpr float kNnMinSpeedMps = 3.0f;
+// 연이은 계획을 섞는 틱 수(50 ms, update_target_blend)
+constexpr int kTargetBlendTicks = 5;
 // 모델이 읽는 가장 먼 시각에 계획 나이 보정을 더해도 계획 격자 끝(model_t_idx(kLateralControlN - 1) = 2.5 s) 안이다
 static_assert(kLateralNnLatestS + kMaxPlanAgeCompS <= 10.0f * (kLateralControlN - 1) * (kLateralControlN - 1) /
                                                               ((kTrajectorySize - 1.0f) * (kTrajectorySize - 1.0f)) +
@@ -137,6 +139,7 @@ LateralControlOutput LateralController::update(const LateralPath &path, const La
                       vehicle_state.yaw_rate_rad_s, yaw_rate_valid);
 
     const CurvatureBounds hold = hold_angle_bounds(speed_mps, steering, steering_pressed, live);
+    update_target_blend(target);
     bool curvature_limited = false;
     float plan_curvature = 0.0f;
     result.desired_curvature = clip_curvature(speed_mps, prev_desired_curvature_,
@@ -288,6 +291,33 @@ void LateralController::resolve_engagement(BlockKind kind, bool soft_condition, 
     result->active = kind == BlockKind::None || (kind == BlockKind::SoftDisable && soft_disabling);
 }
 
+// 연이은 계획 사이의 출력 섞기. 계획은 20 Hz로 바뀌는데 목표 곡률은 100 Hz 틱마다 새 계획 위로 계단처럼 뛰고, 토크
+// 변화율 한계(올림 3, 내림 7)가 그 계단에 비대칭으로 걸려 곡선에서 보낸 토크가 요구의 0.81~0.90에 머물렀다(2026-10-10~
+// 10-18 주행). 상류 controlsd는 같은 자리를 LAT_SMOOTH_SECONDS로 거른다. 섞는 50 ms는 폐루프 재생(2026-10-22)에서 토크
+// 단계 RMS를 2.65 → 2.18, 곡선의 변화율 한계 걸림을 59 → 37 %로 줄였다(100 ms는 덜 줄었다). 혼자서는 곡선에서 차가
+// 0.6~1.3 cm 안쪽으로 갔고, Lane MPC의 출발 곡률 섞기(lateral_planner)와 함께면 남지 않았다.
+void LateralController::update_target_blend(const LateralTarget &target) {
+    TargetBlend &blend = target_blend_;
+    if (!blend.have_current || target.capture_timestamp_ns != blend.current.capture_timestamp_ns) {
+        blend.have_previous = blend.have_current && blend.current.valid;
+        if (blend.have_previous) blend.previous = blend.current;
+        blend.current = target;
+        blend.have_current = true;
+        blend.ticks = 0;
+    } else {
+        ++blend.ticks;
+    }
+    blend.previous_extra_age_s =
+        blend.have_previous
+            ? static_cast<float>(static_cast<double>(static_cast<int64_t>(blend.current.capture_timestamp_ns -
+                                                                          blend.previous.capture_timestamp_ns)) *
+                                 1e-9)
+            : 0.0f;
+    blend.weight = blend.have_previous
+                       ? std::min(1.0f, static_cast<float>(blend.ticks + 1) / static_cast<float>(kTargetBlendTicks))
+                       : 1.0f;
+}
+
 // 클립 전 목표 곡률. 상류 controlsd: 활성이면 plan, 비활성이면 실제 곡률을 클립에 넣는다. 재활성 때
 // 목표가 실제 곡률에서 한계 안으로 출발하고, 비활성 중의 잘못된 plan 값이 넘어오지 않는다.
 float LateralController::requested_curvature(const LateralTarget &target, const VehicleCanState &vehicle_state,
@@ -299,6 +329,12 @@ float LateralController::requested_curvature(const LateralTarget &target, const 
                                          : torque_controller_.estimate_actual_curvature(
                                                speed_mps, vehicle_state.steering_angle_deg, control_params,
                                                vehicle_state.yaw_rate_rad_s, yaw_rate_valid, live);
+    const TargetBlend &blend = target_blend_;
+    if (steering && blend.weight < 1.0f) {
+        const float previous =
+            lag_adjusted_curvature(blend.previous, speed_mps, plan_age_s + blend.previous_extra_age_s, plan_delay_s());
+        if (std::isfinite(previous)) requested_curvature = previous + blend.weight * (requested_curvature - previous);
+    }
     *plan_curvature = requested_curvature;
     // 운전자가 핸들을 잡지 않았을 때는 목표를 avoid_lkas_fault_hold_angle_deg(80도) 조향각이 내는
     // 곡률 안으로 묶는다(같은 차량 모델, 학습 SR·강성·오프셋·롤). 컨트롤러가 스스로 85도를 넘겨
@@ -361,8 +397,15 @@ float LateralController::lateral_nn_feedforward(const LateralTarget &target, con
     const float speed = std::isfinite(speed_mps) ? std::max(speed_mps, 0.0f) : 0.0f;
     const float age = clamp_float(plan_age_s, 0.0f, kMaxPlanAgeCompS);
     const float roll_rad = live.use_vehicle ? live.roll_rad : 0.0f;
+    const TargetBlend &blend = target_blend_;
     const auto curvature_at = [&](float delta_s) {
-        const float curvature = interp_lateral(delta_s + age, target.curvatures);
+        float curvature = interp_lateral(delta_s + age, target.curvatures);
+        if (blend.weight < 1.0f) {
+            const float previous =
+                interp_lateral(delta_s + age + blend.previous_extra_age_s, blend.previous.curvatures);
+            if (std::isfinite(previous) && std::isfinite(curvature))
+                curvature = previous + blend.weight * (curvature - previous);
+        }
         if (!std::isfinite(curvature)) return NAN;
         return limit_curvature(speed, std::clamp(curvature, hold.lo, hold.hi), roll_rad);
     };

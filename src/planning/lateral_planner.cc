@@ -20,6 +20,10 @@ constexpr double kMinPlanReachM = 10.0;
 // 경로 인계 램프(1/s). 차선을 버릴 때 0.5초, 되찾을 때 0.25초.
 constexpr double kPlanMixOutRatePerS = 2.0;
 constexpr double kPlanMixInRatePerS = 4.0;
+// Lane MPC 출발 곡률에서 잰 곡률의 몫(solve_lane_mpc). 폐루프 재생(2026-10-22, 주행 다섯, 플랜트 셋)에서 곡선 유지의
+// 안쪽 치우침이 0.25로 절반이 되고(우곡선 11.0 → 5.8 cm) 0.5·1.0은 조금 더 줄 뿐이었다. 대신 차선 측정 잡음을 더
+// 따라가 0.5~3 Hz 횡가속이 0.25에서 16 %, 1.0에서 24 % 늘었다.
+constexpr double kMeasuredCurvatureSeed = 0.25;
 
 double interp(double x, const double *xp, const double *fp, size_t count) {
     if (count == 0) return 0.0;
@@ -139,13 +143,24 @@ public:
         // 확률 0.5 넘는 프레임의 20~60%가 std 보정 1 미만) 그때마다 대체로 넘어갔다 왔다(분당 3회, 60%가 1초
         // 안). 높은 std의 차선은 실제로 덜 맞으므로(LKA14와의 오차 p50 3.9 cm → std 0.4~0.6에서 8.5 cm) 블렌드
         // 가중치는 그 프레임의 std로 낮추고, 0.5초 넘게 이어질 때만 경로 출처를 바꾼다. 확률이 떨어지는 교차로는 그대로다.
+        // 판정의 std 밴드는 블렌드보다 넓다(0.25~0.5, switch_std_mod). 새로 보인 차선은 std가 높아(2026-10-22 시내 주행,
+        // 재획득 88건의 처음 std 중앙값 0.62) 블렌드 밴드로는 양쪽 std가 0.3 밑으로 내려올 때까지 모델 경로에 남았다
+        // (차선이 보인 뒤 전환까지 중앙값 0.70 s, p90 1.81 s). 그 동안 차는 LKA14 차로 중앙에서 중앙값 12~27 cm
+        // 벗어나 있었지만, std 0.4~0.6인 차선의 위치 오차는 중앙값 7 cm였다. 넓힌 밴드로는 0.55 s, p90 1.31 s이고
+        // 1초 안에 다시 모델 경로로 돌아가는 재획득은 오히려 줄었다(분당 0.76 → 0.53). 0.3~0.6은 더 빠르지만 새로 차선을
+        // 쓰는 프레임의 오차 p90이 55 cm까지 갔다.
         left_std_history_[std_history_index_] = left_std_;
         right_std_history_[std_history_index_] = right_std_;
         std_history_index_ = (std_history_index_ + 1) % kSwitchStdFrames;
+        const auto switch_std_mod = [](double value) {
+            return value <= kSwitchStdFull   ? 1.0
+                   : value >= kSwitchStdZero ? 0.0
+                                             : (kSwitchStdZero - value) / (kSwitchStdZero - kSwitchStdFull);
+        };
         const double left_switch =
-            left_prob * std_mod(*std::min_element(left_std_history_.begin(), left_std_history_.end()));
+            left_prob * switch_std_mod(*std::min_element(left_std_history_.begin(), left_std_history_.end()));
         const double right_switch =
-            right_prob * std_mod(*std::min_element(right_std_history_.begin(), right_std_history_.end()));
+            right_prob * switch_std_mod(*std::min_element(right_std_history_.begin(), right_std_history_.end()));
         left_prob *= std_mod(left_std_);
         right_prob *= std_mod(right_std_);
         // 차선 std는 std_mod 밴드(0.15~0.40)를 0.10초에 가로지른다(실측 2.43/s).
@@ -233,6 +248,9 @@ private:
     static constexpr double kProbRatePerS = 2.0;
     // 대체 판정이 std를 보는 창(모델 20 Hz로 0.5초)
     static constexpr size_t kSwitchStdFrames = 10;
+    // 모델 경로 대체 판정의 std 보정 밴드: 이 아래는 1, 위는 0(update_probabilities)
+    static constexpr double kSwitchStdFull = 0.25;
+    static constexpr double kSwitchStdZero = 0.5;
     // 아직 받지 않은 칸은 최솟값에 들지 않는다
     static std::array<double, kSwitchStdFrames> filled_history() {
         std::array<double, kSwitchStdFrames> history;
@@ -446,6 +464,12 @@ struct LateralPlanner::Impl {
         LateralMpcWeights weights;
         weights.path = lane_path_weight;
         weights.heading = heading_weight;
+        // 출발 곡률은 직전 해의 곡률(0.8.x)에 잰 곡률을 kMeasuredCurvatureSeed만큼 섞는다(0.7.x는 잰 곡률 그대로).
+        // 직전 해에서만 출발하면 그 오차가 다음 해로 넘어가, 중앙으로 되돌리는 힘이 조향 지연이 길수록 줄었다(지연
+        // 0.55 s에서 0.96, 0.70 s에서 0.44: lagd 0.70 s 재생에서 곡선 RMS가 두 배 가까이 된 것도 이것으로 설명된다).
+        // 그래서 차가 요구보다 조금만 더 돌아도 곡선 안쪽으로 붙은 채 남았다.
+        initial_curvature =
+            kMeasuredCurvatureSeed * measured_curvature + (1.0 - kMeasuredCurvatureSeed) * initial_curvature;
         mpc.run(initial_curvature, std::max(0.0f, v_ego), lateral_factor, references.y, references.heading, weights);
         const bool solver_failed = mpc.status() != 0;
         if (solver_failed) {
