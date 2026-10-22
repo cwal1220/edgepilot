@@ -337,13 +337,14 @@ struct LateralPlanner::Impl {
         desire_helper.update_params(desire_params);
         laneless_mode = steering.laneless_mode;
         const double center_to_front = steering.center_to_front_m();
-        constexpr double civic_mass = 1326.0 + 136.0;
+        // 뒷바퀴 강성은 질량당 값이다(opendbc scale_tire_stiffness_per_mass). 상류 식 aF·m / (L·cR)에서 질량이 약분된다.
+        constexpr double civic_mass = 1462.0;
         constexpr double civic_wheelbase = 2.70;
         constexpr double civic_center_to_front = civic_wheelbase * 0.4;
-        double tire_rear = 202500.0 * steering.tire_stiffness_factor * steering.mass_kg / civic_mass;
-        tire_rear *= (center_to_front / steering.wheelbase_m) / (civic_center_to_front / civic_wheelbase);
+        double tire_rear_per_mass = 202500.0 * steering.tire_stiffness_factor / civic_mass;
+        tire_rear_per_mass *= (center_to_front / steering.wheelbase_m) / (civic_center_to_front / civic_wheelbase);
         factor1 = steering.wheelbase_m - center_to_front;
-        factor2 = center_to_front * steering.mass_kg / (steering.wheelbase_m * tire_rear);
+        factor2 = center_to_front / (steering.wheelbase_m * tire_rear_per_mass);
     }
 
     LateralTarget update(const ModelState &model, const VehicleCanState &vehicle, const LateralPlannerInput &in) {

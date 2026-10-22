@@ -16,9 +16,8 @@ constexpr double kGravity = 9.81;
 double rad(double deg) { return deg * kPi / 180.0; }
 double deg(double r) { return r * 180.0 / kPi; }
 
-// opendbc VehicleDynamicsParams(Civic 기준 스케일)
-constexpr double kStdCargoKg = 136.0;
-constexpr double kCivicMass = 1326.0 + kStdCargoKg;
+// opendbc VehicleDynamicsParams(Civic 기준 스케일). 관성과 강성은 이 기준 질량(1326 kg + 짐 136 kg)으로 나눈 값이다.
+constexpr double kCivicMass = 1462.0;
 constexpr double kCivicWheelbase = 2.70;
 constexpr double kCivicCenterToFront = kCivicWheelbase * 0.4;
 constexpr double kCivicCenterToRear = kCivicWheelbase - kCivicCenterToFront;
@@ -74,14 +73,14 @@ CarKalman::Mat CarKalman::q() {
 CarKalman::Globals CarKalman::globals_from(const VehicleModelConstants &c) {
     Globals g;
     const double l = c.wheelbase_m;
-    g.mass = c.mass_kg;
     g.center_to_front = c.center_to_front_m;
     g.center_to_rear = l - c.center_to_front_m;
-    g.inertia = kCivicInertia * c.mass_kg * l * l / (kCivicMass * kCivicWheelbase * kCivicWheelbase);
-    g.stiffness_front = kCivicStiffnessFront * c.tire_stiffness_factor * c.mass_kg / kCivicMass *
-                        (g.center_to_rear / l) / (kCivicCenterToRear / kCivicWheelbase);
-    g.stiffness_rear = kCivicStiffnessRear * c.tire_stiffness_factor * c.mass_kg / kCivicMass *
-                       (g.center_to_front / l) / (kCivicCenterToFront / kCivicWheelbase);
+    // opendbc scale_rot_inertia_per_mass, scale_tire_stiffness_per_mass
+    g.inertia = kCivicInertia * l * l / (kCivicMass * kCivicWheelbase * kCivicWheelbase);
+    g.stiffness_front = kCivicStiffnessFront * c.tire_stiffness_factor / kCivicMass * (g.center_to_rear / l) /
+                        (kCivicCenterToRear / kCivicWheelbase);
+    g.stiffness_rear = kCivicStiffnessRear * c.tire_stiffness_factor / kCivicMass * (g.center_to_front / l) /
+                       (kCivicCenterToFront / kCivicWheelbase);
     return g;
 }
 
@@ -91,7 +90,8 @@ void CarKalman::step(const Globals &g, const Vec &x, double h, Vec *x_next, Mat 
     const double sf = x[kStiffness], sr = x[kSteerRatio], u = x[kSpeedX];
     const double v = x[kSpeedY], r = x[kYawRate], th = x[kRoadRoll];
     const double e = x[kSteerAngle] - x[kAngleOffset] - x[kAngleOffsetFast];
-    const double m = g.mass, j = g.inertia, af = g.center_to_front, ar = g.center_to_rear;
+    // 관성과 강성이 질량당 값이라 단위 질량으로 같은 식을 쓴다(상류 car_kf m = 1)
+    const double m = 1.0, j = g.inertia, af = g.center_to_front, ar = g.center_to_rear;
     const double cf0 = g.stiffness_front, cr0 = g.stiffness_rear;
     const double csum = cf0 + cr0, d1 = cf0 * af - cr0 * ar, d2 = cf0 * af * af + cr0 * ar * ar;
 
@@ -346,12 +346,12 @@ VehicleParams VehicleParamsLearner::get_msg(bool inputs_ok) {
 std::string vehicle_params_persist_data(const VehicleParams &p, const VehicleModelConstants &c, double yaw_bias_rad_s) {
     char buf[512];
     std::snprintf(buf, sizeof(buf),
-                  "{\n  \"version\": %d,\n  \"mass_kg\": %.6g,\n  \"wheelbase_m\": %.6g,\n"
+                  "{\n  \"version\": %d,\n  \"wheelbase_m\": %.6g,\n"
                   "  \"center_to_front_m\": %.6g,\n  \"tire_stiffness_factor\": %.6g,\n"
                   "  \"steer_ratio\": %.8g,\n  \"stiffness_factor\": %.8g,\n"
                   "  \"angle_offset_average_deg\": %.8g,\n  \"yaw_bias_rad_s\": %.8g\n}\n",
-                  kPersistVersion, c.mass_kg, c.wheelbase_m, c.center_to_front_m, c.tire_stiffness_factor,
-                  p.steer_ratio, p.stiffness_factor, p.angle_offset_average_deg, yaw_bias_rad_s);
+                  kPersistVersion, c.wheelbase_m, c.center_to_front_m, c.tire_stiffness_factor, p.steer_ratio,
+                  p.stiffness_factor, p.angle_offset_average_deg, yaw_bias_rad_s);
     return buf;
 }
 
@@ -359,15 +359,16 @@ VehicleParamsInit restore_vehicle_params(const std::string &json, const VehicleM
     VehicleParamsInit init;
     init.steer_ratio = c.steer_ratio;
     JsonValue root;
-    float version = 0, mass = 0, wheelbase = 0, cf = 0, tsf = 0, sr = 0, sf = 0, offset = 0, bias = 0;
+    float version = 0, wheelbase = 0, cf = 0, tsf = 0, sr = 0, sf = 0, offset = 0, bias = 0;
+    // 2026-10-22까지의 파일에는 mass_kg도 있다. 질량은 차량 모델에서 약분돼(상류도 지웠다) 읽지 않는다.
     const bool parsed = parse_json_object(json, &root) && json_float(root, "version", &version) &&
-                        json_float(root, "mass_kg", &mass) && json_float(root, "wheelbase_m", &wheelbase) &&
-                        json_float(root, "center_to_front_m", &cf) && json_float(root, "tire_stiffness_factor", &tsf) &&
-                        json_float(root, "steer_ratio", &sr) && json_float(root, "stiffness_factor", &sf) &&
+                        json_float(root, "wheelbase_m", &wheelbase) && json_float(root, "center_to_front_m", &cf) &&
+                        json_float(root, "tire_stiffness_factor", &tsf) && json_float(root, "steer_ratio", &sr) &&
+                        json_float(root, "stiffness_factor", &sf) &&
                         json_float(root, "angle_offset_average_deg", &offset) &&
                         json_float(root, "yaw_bias_rad_s", &bias);
     // 상류 지문 대조 자리. 단일 차종이라 차량 상수가 같으면 같은 차로 본다.
-    const bool same_car = parsed && static_cast<int>(version) == kPersistVersion && near_constant(mass, c.mass_kg) &&
+    const bool same_car = parsed && static_cast<int>(version) == kPersistVersion &&
                           near_constant(wheelbase, c.wheelbase_m) && near_constant(cf, c.center_to_front_m) &&
                           near_constant(tsf, c.tire_stiffness_factor);
     // JSON에는 유한한 수만 있다(아니면 parse_json_object가 거부한다)

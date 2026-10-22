@@ -22,7 +22,6 @@ double deg(double r) { return r * 180.0 / kPi; }
 
 VehicleModelConstants k7() {
     VehicleModelConstants c;
-    c.mass_kg = 1816.0;
     c.wheelbase_m = 2.855;
     c.center_to_front_m = 2.855 * 0.4;
     c.tire_stiffness_factor = 1.0;
@@ -276,8 +275,15 @@ TEST(LateralLearners, Persistence) {
     ASSERT_EQ(ok.stiffness_factor, 1.0) << "강성은 주행마다 초기화한다";
 
     VehicleModelConstants other = c;
-    other.mass_kg += 50.0;
+    other.wheelbase_m += 0.05;
     ASSERT_FALSE(restore_vehicle_params(saved, other).restored) << "다른 차의 저장값은 복원하지 않는다";
+    // 2026-10-22까지 쓴 파일에는 질량(mass_kg)이 있다. 질량은 차량 모델에서 약분돼 대조하지 않고 그대로 복원한다
+    const std::string with_mass =
+        "{\n  \"version\": 1,\n  \"mass_kg\": 1816,\n" + saved.substr(saved.find("  \"wheelbase_m\""));
+    ASSERT_NE(with_mass.find("\"mass_kg\""), std::string::npos);
+    const VehicleParamsInit old_file = restore_vehicle_params(with_mass, c);
+    ASSERT_TRUE(old_file.restored);
+    ASSERT_NEAR(static_cast<float>(old_file.steer_ratio), 15.1f, 1e-4f);
     VehicleModelConstants prior = c;
     prior.steer_ratio = 7.0;  // 15.1 > 2×7
     ASSERT_FALSE(restore_vehicle_params(saved, prior).restored) << "말이 안 되는 조향비는 복원하지 않는다";

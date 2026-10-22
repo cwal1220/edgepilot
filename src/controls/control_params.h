@@ -75,7 +75,6 @@ struct SteeringParams {
     // paramsd·torqued 입력을 상류처럼 locationd 요레이트·롤로 받는다. 끄면 ESP12 요레이트(자체 바이어스
     // 추정)와 ESP12 횡가속 롤. locationd가 없거나 낡으면 ESP12로 돌아간다.
     bool use_locationd_learner_inputs = true;
-    float mass_kg = 1816.0f;
     float wheelbase_m = 2.855f;
     float center_to_front_ratio = 0.4f;
     float path_offset_m = 0.0f;

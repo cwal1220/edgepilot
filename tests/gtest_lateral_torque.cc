@@ -187,14 +187,14 @@ LiveLateralParams odd_live_params() {
 }
 
 // 켜면 실제 곡률은 opendbc VehicleModel(update_params(x, sr) → calc_curvature(sa, u, roll))을
-// 부호 반전한 값이다. double 독립 전사본과 비교한다.
+// 부호 반전한 값이다. double 독립 전사본과 비교한다. 강성은 질량당 값이고 질량은 1이다(opendbc 2026-10-12).
 double upstream_measured_curvature(const SteeringParams &p, const LiveLateralParams &live, double angle_deg, double u) {
-    const double civic_m = 1326.0 + 136.0, civic_l = 2.70, civic_af = civic_l * 0.4;
+    const double civic_m = 1462.0, civic_l = 2.70, civic_af = civic_l * 0.4;
     const double civic_ar = civic_l - civic_af;
-    const double m = p.mass_kg, l = p.wheelbase_m, af = p.center_to_front_m(), ar = l - af;
+    const double m = 1.0, l = p.wheelbase_m, af = p.center_to_front_m(), ar = l - af;
     const double tsf = p.tire_stiffness_factor, x = std::max<double>(live.stiffness_factor, 0.1);
-    const double cf = 192150.0 * tsf * m / civic_m * (ar / l) / (civic_ar / civic_l) * x;
-    const double cr = 202500.0 * tsf * m / civic_m * (af / l) / (civic_af / civic_l) * x;
+    const double cf = 192150.0 * tsf / civic_m * (ar / l) / (civic_ar / civic_l) * x;
+    const double cr = 202500.0 * tsf / civic_m * (af / l) / (civic_af / civic_l) * x;
     const double sf = m * (cf * af - cr * ar) / (l * l * cf * cr);
     const double factor = 1.0 / (1.0 - sf * u * u) / l;  // 상류 (1 - steerRatioRear) = 1
     const double sa = (angle_deg - live.angle_offset_deg) * 3.14159265358979323846 / 180.0;

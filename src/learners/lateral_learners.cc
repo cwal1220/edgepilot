@@ -43,7 +43,6 @@ TorqueTuning torque_tuning(const SteeringParams &params) {
 
 VehicleModelConstants LateralLearners::constants(const SteeringParams &params) {
     VehicleModelConstants c;
-    c.mass_kg = params.mass_kg;
     c.wheelbase_m = params.wheelbase_m;
     c.center_to_front_m = params.center_to_front_m();
     c.tire_stiffness_factor = params.tire_stiffness_factor;

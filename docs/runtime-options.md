@@ -225,7 +225,7 @@ at the next start:
 | `live_delay.json` | `locationd` (lagd) | every 60 s and on exit | at `locationd` start, unless it is from another cache version, invalid, or out of range (then it is deleted); a changed `steer_actuator_delay` does not discard it |
 
 A saved learner state that fails to restore is deleted (for torqued, only a
-corrupt cache). paramsd's state also fails when the mass, wheelbase, centre of
+corrupt cache). paramsd's state also fails when the wheelbase, centre of
 gravity or tyre stiffness changed, or when its steering ratio is outside
 0.5-2x the manual one. torqued starts over when its prior (torque factor,
 friction) changed, and keeps only the factor and friction when the learner
@@ -322,7 +322,9 @@ with what it does while learning is on, and a button that copies the learned
 value into the manual one (tyre stiffness and road roll have none: their
 learned value is a factor and a roll). Below are the learner input source
 (locationd or ESP12), the learners' last ten minutes, the camera calibration
-and the fixed specs (mass, wheelbase, centre of gravity).
+and the fixed specs (wheelbase, centre of gravity). There is no vehicle mass:
+tyre stiffness scales with it, so it cancels out of the vehicle model, and
+openpilot dropped it in 2026-10.
 
 The manual values reach the learners as priors when `controlsd` starts
 (`locationd` for the steering delay), so a prior changed while auto-learning

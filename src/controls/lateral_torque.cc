@@ -49,8 +49,9 @@ constexpr float kStraightKpOffSpeedMps = 15.0f;
 // 저속 회전은 P항이 토크 대부분을 낸다(10~30 km/h 회전에서 |P| 평균 312~646, FF 78~103).
 constexpr float kStraightCurvature = 0.003f;
 constexpr float kTurnCurvature = 0.008f;
-constexpr float kStdCargoKg = 136.0f;
-constexpr float kCivicMass = 1326.0f + kStdCargoKg;
+// opendbc VehicleDynamicsParams: 강성과 관성은 이 기준 차(시빅 1326 kg + 짐 136 kg)의 질량으로 나눈 값으로 쓴다.
+// 강성이 질량에 비례해 차량 모델에서 질량이 약분되므로 상류처럼 단위 질량으로 계산한다.
+constexpr float kCivicMass = 1462.0f;
 constexpr float kCivicWheelbase = 2.70f;
 constexpr float kCivicCenterToFront = kCivicWheelbase * 0.4f;
 constexpr float kCivicCenterToRear = kCivicWheelbase - kCivicCenterToFront;
@@ -79,12 +80,13 @@ float apply_deadzone(float error, float deadzone) {
     return 0.0f;
 }
 
-std::pair<float, float> scale_tire_stiffness(float mass, float wheelbase, float center_to_front,
-                                             float tire_stiffness_factor) {
+// opendbc scale_tire_stiffness_per_mass
+std::pair<float, float> scale_tire_stiffness_per_mass(float wheelbase, float center_to_front,
+                                                      float tire_stiffness_factor) {
     const float center_to_rear = wheelbase - center_to_front;
-    float front = kCivicTireStiffnessFront * tire_stiffness_factor * mass / kCivicMass;
+    float front = kCivicTireStiffnessFront * tire_stiffness_factor / kCivicMass;
     front *= (center_to_rear / wheelbase) / (kCivicCenterToRear / kCivicWheelbase);
-    float rear = kCivicTireStiffnessRear * tire_stiffness_factor * mass / kCivicMass;
+    float rear = kCivicTireStiffnessRear * tire_stiffness_factor / kCivicMass;
     rear *= (center_to_front / wheelbase) / (kCivicCenterToFront / kCivicWheelbase);
     return {front, rear};
 }
@@ -293,18 +295,16 @@ TorqueController::TorqueTuning TorqueController::torque_tuning(const SteeringPar
 void TorqueController::update_vehicle_model(const SteeringParams &params) {
     const float center_to_front = params.center_to_front_m();
     // 학습 SR·강성은 매 틱 조금씩 바뀌므로 정확히 같을 때만 건너뛴다(상류는 매번 계산)
-    if (last_mass_kg_ == params.mass_kg && last_wheelbase_m_ == params.wheelbase_m &&
-        last_center_to_front_m_ == center_to_front && last_tire_stiffness_factor_ == params.tire_stiffness_factor &&
-        last_steer_ratio_ == params.steer_ratio) {
+    if (last_wheelbase_m_ == params.wheelbase_m && last_center_to_front_m_ == center_to_front &&
+        last_tire_stiffness_factor_ == params.tire_stiffness_factor && last_steer_ratio_ == params.steer_ratio) {
         return;
     }
     const float center_to_rear = params.wheelbase_m - center_to_front;
     const auto stiffness =
-        scale_tire_stiffness(params.mass_kg, params.wheelbase_m, center_to_front, params.tire_stiffness_factor);
-    // 앞뒤 강성이 양수라 slip factor는 늘 음수다(아래 분모들이 0에 가까워지지 않는다)
-    slip_factor_ = params.mass_kg * (stiffness.first * center_to_front - stiffness.second * center_to_rear) /
+        scale_tire_stiffness_per_mass(params.wheelbase_m, center_to_front, params.tire_stiffness_factor);
+    // 앞뒤 강성이 양수라 slip factor는 늘 음수다(아래 분모들이 0에 가까워지지 않는다). 상류 calc_slip_factor(단위 질량)
+    slip_factor_ = (stiffness.first * center_to_front - stiffness.second * center_to_rear) /
                    (params.wheelbase_m * params.wheelbase_m * stiffness.first * stiffness.second);
-    last_mass_kg_ = params.mass_kg;
     last_wheelbase_m_ = params.wheelbase_m;
     last_center_to_front_m_ = center_to_front;
     last_tire_stiffness_factor_ = params.tire_stiffness_factor;

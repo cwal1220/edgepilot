@@ -130,7 +130,6 @@ private:
     float i_ = 0.0f;
     float f_ = 0.0f;
     float slip_factor_ = 0.0f;
-    float last_mass_kg_ = -1.0f;
     float last_wheelbase_m_ = -1.0f;
     float last_center_to_front_m_ = -1.0f;
     float last_tire_stiffness_factor_ = -1.0f;

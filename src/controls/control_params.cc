@@ -37,7 +37,6 @@ constexpr JsonFloatField<SteeringParams> kSteeringFloats[] = {
     {"avoid_lkas_fault_hold_angle_deg", 0.0f, 84.0f, &SteeringParams::avoid_lkas_fault_hold_angle_deg},
     {"angle_offset_deg", -10.0f, 10.0f, &SteeringParams::angle_offset_deg},
     {"torque_lat_accel_offset", -1.0f, 1.0f, &SteeringParams::torque_lat_accel_offset},
-    {"mass_kg", 1000.0f, 2600.0f, &SteeringParams::mass_kg},
     {"wheelbase_m", 2.0f, 3.5f, &SteeringParams::wheelbase_m},
     {"center_to_front_ratio", 0.2f, 0.7f, &SteeringParams::center_to_front_ratio},
     {"path_offset_m", -1.0f, 1.0f, &SteeringParams::path_offset_m},

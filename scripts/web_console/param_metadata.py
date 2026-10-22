@@ -129,7 +129,6 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
         "torque_lat_accel_offset": number("torque_model", "m/s²", 0.01, -1.0, 1.0, tab="vehicle", learned=True,
                                           unused=(STEERING_OFF, NN_ON)),
         "angle_offset_deg": number("vehicle_model", "°", 0.1, -10, 10, tab="vehicle", learned=True),
-        "mass_kg": number("fixed_specs", "kg", 10, 1000, 2600, tab="vehicle", caution="paramsd_restart"),
         "wheelbase_m": number("fixed_specs", "m", 0.01, 2, 3.5, tab="vehicle", caution="paramsd_restart"),
         "center_to_front_ratio": number("fixed_specs", "", 0.01, 0.2, 0.7, tab="vehicle",
                                         caution="paramsd_restart"),

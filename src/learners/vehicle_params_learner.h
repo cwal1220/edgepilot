@@ -9,7 +9,6 @@
 #include <string>
 
 struct VehicleModelConstants {
-    double mass_kg = 0.0;
     double wheelbase_m = 0.0;
     double center_to_front_m = 0.0;
     double tire_stiffness_factor = 1.0;
@@ -35,7 +34,7 @@ public:
     using Mat = std::array<std::array<double, kN>, kN>;
 
     struct Globals {
-        double mass = 0.0, inertia = 0.0, center_to_front = 0.0, center_to_rear = 0.0;
+        double inertia = 0.0, center_to_front = 0.0, center_to_rear = 0.0;  // 관성과 아래 강성은 질량당 값
         double stiffness_front = 0.0, stiffness_rear = 0.0;
     };
 
