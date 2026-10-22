@@ -15,7 +15,7 @@ namespace {
 
 constexpr uint64_t kAlertModelTimeoutNs = 500'000'000ULL;
 constexpr uint64_t kMaxCanRxAgeNs = 100'000'000ULL;
-constexpr double kRadarLeadTimeoutS = 0.5;                   // SCC11 레이더 앞차
+constexpr double kRadarLeadTimeoutS = 0.5;  // SCC11 레이더 앞차
 
 // 배치는 신선함(valid 포함)을 본 뒤에 들어오고, 프레임 수는 큐에서 꺼낼 때 이미 묶였다.
 void apply_can_batch(const CanBatch &batch, double now_s, VehicleCanState *vehicle) {
@@ -410,8 +410,7 @@ LearnerOutput ControlsTick::update_learners(double now_s) {
     // 요청 끔 동안의 점은 torqued가 거른다(예전에는 active를 넘겨 그 점도 들어갔다).
     learners_.set_lateral_delay(controller_.plan_delay_s());
     learners_.update(vehicle_, now_s, last_result_.vehicle_fresh, last_result_.esp12_fresh,
-                     last_result_.control_speed_kph / 3.6f, last_result_.lat_active, last_result_.apply_torque,
-                     last_result_.steering_pressed);
+                     last_result_.control_speed_kph / 3.6f, last_result_.lat_active, last_result_.apply_torque);
     controller_.set_live_params(learners_.live(), learners_.vehicle_valid());
     controller_.set_calibration_status(static_cast<CalibrationStatus>(model_.calibration.status));
     LearnerOutput out;

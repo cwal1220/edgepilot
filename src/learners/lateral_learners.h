@@ -12,6 +12,7 @@
 #include "car/vehicle_can.h"
 #include "controls/control_params.h"
 #include "controls/lateral_torque.h"
+#include "controls/steering_pressed.h"
 #include "learners/torque_estimator.h"
 #include "learners/vehicle_params_learner.h"
 
@@ -58,8 +59,9 @@ public:
     // speed_mps는 controlsd가 거른 vEgo(상류 paramsd·torqued도 carState.vEgo를 쓴다). 휠 속도가 낡으면
     // NaN이고 그 틱의 입력은 신선하지 않다. vehicle_fresh·esp12_fresh는 컨트롤러의 같은 틱 판정이다
     // (LateralControlOutput, kVehicleStateTimeoutS).
+    // torqued의 운전자 개입은 상류처럼 차의 steeringPressed 판정(현대 150, 5틱)을 따로 낸다(컨트롤러의 설정 문턱이 아니다).
     void update(const VehicleCanState &vehicle, double now_s, bool vehicle_fresh, bool esp12_fresh, double speed_mps,
-                bool lat_active, int apply_torque, bool steering_pressed);
+                bool lat_active, int apply_torque);
 
     // use_vehicle = paramsd가 한 번이라도 냈다(상류 sm.seen). use_torque = 봉투가 유효한
     // torqued 메시지를 받은 적이 있다. 토크 값은 그 뒤 봉투가 유효한 메시지로만 바뀐다
@@ -120,6 +122,7 @@ private:
     YawBiasEstimator bias_;
     VehicleParamsLearner vehicle_;
     TorqueEstimator torque_;
+    SteeringPressedFilter torqued_override_;  // torqued가 점을 거르는 운전자 개입(kTorquedSteerThreshold)
     LiveLateralParams live_{};
     bool vehicle_published_ = false;
     bool torque_published_ = false;

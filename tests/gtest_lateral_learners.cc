@@ -795,7 +795,7 @@ VehicleCanState driving_vehicle(double t) {
 void update_learners(LateralLearners *l, const VehicleCanState &vehicle, double now, int apply_torque) {
     l->update(vehicle, now, vehicle_state_fresh(vehicle, now, kVehicleStateTimeoutS),
               signal_time_fresh(vehicle.esp12_time_s, now, kVehicleStateTimeoutS),
-              vehicle_speed_kph(vehicle, now, kVehicleStateTimeoutS) / 3.6, true, apply_torque, false);
+              vehicle_speed_kph(vehicle, now, kVehicleStateTimeoutS) / 3.6, true, apply_torque);
 }
 
 // controlsd·재생 도구 공용 판단: 스위치·0.5초·필터 유효면 쓴다. inputsOK는 보지 않는다(상류 paramsd).

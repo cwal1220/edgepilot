@@ -26,6 +26,11 @@ double YawBiasEstimator::update(double t_s, double speed_mps, bool yaw_valid, do
 
 namespace {
 
+// torqued가 점을 거르는 운전자 토크(상류 현대 CarControllerParams.STEER_THRESHOLD, carState.steeringPressed). 예전에는
+// 컨트롤러의 설정 문턱(steering_pressed_threshold, 보드 200)을 써서 받아들인 점의 운전자 토크가 중앙값 11~13, p90 35~45였고
+// 적합 잔차와 -0.32 ~ -0.42 상관이었다(2026-10-22 리뷰, 주행 열).
+constexpr int kTorquedSteerThreshold = 150;
+
 VehicleParamsInit restore_or_prior(const std::string &json, const VehicleModelConstants &c) {
     if (!json.empty()) return restore_vehicle_params(json, c);
     VehicleParamsInit init;
@@ -103,7 +108,7 @@ bool LateralLearners::localizer_at(double t_s, LocalizerSample *out) const {
 }
 
 void LateralLearners::update(const VehicleCanState &vehicle, double now_s, bool vehicle_fresh, bool esp12_fresh,
-                             double speed_mps, bool lat_active, int apply_torque, bool steering_pressed) {
+                             double speed_mps, bool lat_active, int apply_torque) {
     Tick tick;
     VehicleParamsInput &in = tick.vin;
     in.t_s = now_s;
@@ -126,7 +131,7 @@ void LateralLearners::update(const VehicleCanState &vehicle, double now_s, bool 
     tin.lat_active = lat_active;
     tin.steer_torque = static_cast<double>(kTorqueOutputSign * apply_torque) / kHyundaiSteerMax;
     tin.speed_mps = in.speed_mps;
-    tin.steer_override = steering_pressed;
+    tin.steer_override = torqued_override_.update(vehicle.driver_torque, kTorquedSteerThreshold);
 
     vehicle_published_ = torque_published_ = false;
     vehicle_persist_due_ = torque_persist_due_ = false;

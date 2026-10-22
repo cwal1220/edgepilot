@@ -51,8 +51,22 @@ accumulates a pose difference against the recorded car,
 
 ```text
 dpsi' = v * (k_path_sim - k_path_rec)
-dy'   = v * dpsi
+dy'   = v * (dpsi + lever(v) * (k_path_sim - k_path_rec))
 ```
+
+`lever(v) = max(0, 2.33 - 0.0029 * v²)` m (`--camera-lever a,b`) is how far
+the camera's path points outside the body axis per unit of curvature: the
+tyres slip, so the camera does not travel along the body axis. It was
+measured on 2026-10-22 from the lane direction at the camera against the
+curvature in steady curves on five drives (51 km/h 1.74 m, 64 km/h 1.16 m,
+78 km/h 0.78 m, 88 km/h 0.59 m). Before 2026-10-22 the replay used 0
+(`--camera-lever 0,0` reproduces it exactly); the numbers in this document
+from before then were made that way. The lane MPC's own rotation radius
+(`lateral_planner`, `(L − a) − a/(L·cR)·v²`) is lower than the measured
+lever, but in the replay with the lever, putting the measured value into the
+MPC moved the car about 4.5 cm outward in both curve directions (right curves
++2.9 → −1.6 cm inside, left −2.3 → −6.9 cm) with the same overall RMS, and
+upstream's 0 was worse (15.06 against 14.84 cm), so the MPC keeps its value.
 
 `k_path` is the path the car travels: the steering angle's curvature delayed
 by the angle-to-path lag (`--path-lag`, 0.11 s). The recorded side goes

@@ -1,6 +1,6 @@
 // 녹화를 paramsd·torqued 학습기로 재생한다. CAN은 런타임과 같은 vehicle_can으로 풀고
-// controlsd와 같은 LateralLearners를 부른다(활성·보낸 토크는 ControlState, 운전자 개입은
-// 기록된 운전자 토크를 컨트롤러와 같게 디바운스). 게시한 학습값을 CSV로 남길 수 있다.
+// controlsd와 같은 LateralLearners를 부른다(활성·보낸 토크는 ControlState, torqued의 운전자 개입은 학습기가
+// CAN의 운전자 토크로 판정한다). 게시한 학습값을 CSV로 남길 수 있다.
 // 사용: replay_lateral_learners [옵션] <events.bin...>
 // --upstream-schedule: 조향각·속도를 상류처럼 20 Hz로만 관측(기본은 런타임과 같은 매 틱).
 // --outputs out.csv / --torque-outputs tout.csv: paramsd·torqued가 게시한 값.
@@ -22,7 +22,6 @@
 #include "common/utils_time.h"
 #include "controls/control_params.h"
 #include "controls/lateral_torque.h"
-#include "controls/steering_pressed.h"
 #include "learners/lateral_learners.h"
 #include "learners/localizer_inputs.h"
 #include "recorded_vehicle_can.h"
@@ -102,7 +101,6 @@ int main(int argc, char **argv) {
     bool have_loc = false;
     if (!cache.empty())
         std::printf("torqued cache %zu B: %s\n", cache.size(), torque_restore_name(learners.torque_restore_status()));
-    SteeringPressedFilter steering_pressed;  // 컨트롤러와 같은 판정
     SpeedFilter speed_filter;
 
     std::FILE *out_file = outputs_path.empty() ? nullptr : std::fopen(outputs_path.c_str(), "w");
@@ -150,7 +148,6 @@ int main(int argc, char **argv) {
         // 제어 틱(ControlState, 100 Hz)마다 한 번 넣는다. controlsd가 부를 자리와 같다.
         ControlState cs;
         if (type != RecordType::ControlState || !read_record(buf, &cs)) continue;
-        const bool pressed = steering_pressed.update(cs.driver_torque, sp.steering_pressed_threshold);
         // controlsd처럼 매 틱 최신 locationd 상태로 판단한다(기록 시각 = 학습기 시계)
         if (have_loc) {
             const double sample_t_s = static_cast<double>(loc.timestamp_ns) * 1e-9;
@@ -164,7 +161,7 @@ int main(int argc, char **argv) {
         // 신선도도 컨트롤러와 같은 판정이다(LateralControlOutput::vehicle_fresh·esp12_fresh)
         learners.update(vehicle, now_s, vehicle_state_fresh(vehicle, now_s, kVehicleStateTimeoutS),
                         signal_time_fresh(vehicle.esp12_time_s, now_s, kVehicleStateTimeoutS), v_ego, lat_active,
-                        cs.apply_torque, pressed);
+                        cs.apply_torque);
 
         const VehicleParamsInput &in = learners.last_vehicle_input();
         const LiveLateralParams live = learners.live();

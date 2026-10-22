@@ -88,6 +88,10 @@ stretch starts from the real pose.
   inverse steering-angle model uses the same learned values.
 - `--camera-shift D`: shifts the model output as if the camera mount offset
   differed from the recording by D m.
+- `--camera-lever a,b`: the camera lever `a − b·v²` m that tyre slip adds to
+  the camera's sideways travel (2.33, 0.0029 by default, measured 2026-10-22;
+  `0,0` reproduces the replay before then). See
+  [Closed-loop replay](../docs/closed-loop-replay.md).
 - `--torque F,O,R`: substitutes torqued values (factor, offset, friction) to see
   the behaviour once they are valid.
 - In laneless mode no lane holds the position, so the closed loop diverges
