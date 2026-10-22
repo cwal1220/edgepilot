@@ -10,7 +10,6 @@ std::string AppConfig::usage(const char *program_name) {
 }
 
 void AppConfig::set_warp_source(unsigned width, unsigned height) {
-    // default_input_warp_*와 같은 연산 순서라 기본값에서는 비트까지 같다.
     const float w = static_cast<float>(width), h = static_cast<float>(height);
     input_warp_fx = camera_fx * w / static_cast<float>(kDefaultSensorWidth);
     input_warp_fy = camera_fy * h / static_cast<float>(kDefaultSensorHeight);
@@ -33,7 +32,6 @@ AppConfig AppConfig::from_env_defaults() {
         config.camera_cy = v[3];
     }
     config.set_warp_source(config.nv12_width, config.nv12_height);
-    config.replay_nv12_path = env_string("EDGEPILOT_REPLAY_NV12");
     config.calibration_auto = env_flag("EDGEPILOT_CALIB_AUTO", true);
     config.profile = env_flag("EDGEPILOT_PROFILE");
     config.flow_calibration = env_flag("EDGEPILOT_FLOW_CALIB", true);

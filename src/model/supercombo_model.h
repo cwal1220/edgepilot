@@ -22,10 +22,6 @@ class SupercomboModel {
 public:
     SupercomboModel(const char *model_file, const AppConfig &config);
 
-    // 재생: 다음 NV12 프레임(nv12 크기)을 replay_frame()(GDC 소스 CMM)에 바로 읽어 넣고 run_replay_frame으로
-    // 실행한다.
-    uint8_t *replay_frame() { return gdc_.source(); }
-    bool run_replay_frame(std::vector<float> &raw_output);
     // 소스 NV12가 다른 CMM 블록(프레임 링 슬롯)에 있을 때 GDC가 직접 읽는다. 워프 뒤
     // source_still_valid()가 거짓이면(읽는 동안 덮어써짐) 모델 상태를 바꾸지 않고 false.
     bool run_frame_phys(unsigned long long src_phys, std::vector<float> &raw_output,

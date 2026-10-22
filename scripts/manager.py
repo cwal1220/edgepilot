@@ -63,9 +63,7 @@ SUPERVISE_INTERVAL_S = 0.25
 
 
 def now_ns() -> int:
-    if hasattr(time, "CLOCK_BOOTTIME"):
-        return time.clock_gettime_ns(time.CLOCK_BOOTTIME)
-    return time.monotonic_ns()
+    return time.clock_gettime_ns(time.CLOCK_BOOTTIME)
 
 
 def env_enabled(name: str, default: bool = False) -> bool:
@@ -240,10 +238,7 @@ def note_exit(state: ProcState, now: float) -> float:
 def child_setup(nice_adjust: int):
     os.setsid()
     if nice_adjust != 0:
-        try:
-            os.nice(nice_adjust)
-        except OSError:
-            pass
+        os.nice(nice_adjust)
 
 
 class Manager:

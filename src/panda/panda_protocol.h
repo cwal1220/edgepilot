@@ -30,10 +30,6 @@ constexpr uint8_t kPandaFlasherMagic[4] = {0xde, 0xad, 0xd0, 0x0d};
 constexpr size_t kPandaVersionMaxBytes = 64;
 
 // board/safety.h의 SAFETY_*
-constexpr uint16_t kPandaSafetySilent = 0;
-constexpr uint16_t kPandaSafetyElm327 = 3;
-constexpr uint16_t kPandaSafetyHyundai = 8;
-constexpr uint16_t kPandaSafetyAllOutput = 17;
 constexpr uint16_t kPandaSafetyNoOutput = 19;
 constexpr uint16_t kPandaSafetyHyundaiCommunity = 24;
 

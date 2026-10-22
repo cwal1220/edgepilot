@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "car/car_specs.h"
 #include "car/hyundai_can.h"
 #include "common/utils_math.h"
 
@@ -43,8 +44,8 @@ TorqueTuning torque_tuning(const SteeringParams &params) {
 
 VehicleModelConstants LateralLearners::constants(const SteeringParams &params) {
     VehicleModelConstants c;
-    c.wheelbase_m = params.wheelbase_m;
-    c.center_to_front_m = params.center_to_front_m();
+    c.wheelbase_m = kWheelbaseM;
+    c.center_to_front_m = kCenterToFrontM;
     c.tire_stiffness_factor = params.tire_stiffness_factor;
     c.steer_ratio = params.steer_ratio;
     return c;

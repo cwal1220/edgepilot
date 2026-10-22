@@ -82,8 +82,8 @@ HyundaiClu11Values decode_clu11(const std::array<uint8_t, 4> &data);
 // 프레임(카메라 버스).
 std::vector<CanFrame> build_lateral_can_frames(const HyundaiLkas11Values &lkas_seed, const HyundaiClu11Values &clu_seed,
                                                const std::array<uint8_t, 8> &mdps12_seed,
-                                               const HyundaiLkasCommand &lkas_command, float mdps_speed_spoof_kph,
-                                               bool lkas_active, bool is_mph, int frame);
+                                               const HyundaiLkasCommand &lkas_command, bool lkas_active, bool is_mph,
+                                               int frame);
 
 // 비전 크루즈의 버튼 펄스: 운전자 CLU11 seed에 버튼만 바꿔 파워트레인 버스로 보낸다.
 CanFrame create_cruise_button_frame(const HyundaiClu11Values &clu_seed, int button, int frame);

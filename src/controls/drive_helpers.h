@@ -93,11 +93,3 @@ inline float clip_curvature(float speed_mps, float prev_curvature, float new_cur
     if (limited) *limited = curvature != rate_limited;
     return curvature;
 }
-
-// 둘을 잇는다. plan이 무효면 0. 컨트롤러와 replay_planner가 같은 구현을 쓴다.
-inline float lag_adjusted_desired_curvature(const LateralTarget &target, float speed_mps, float plan_age_s,
-                                            float steer_actuator_delay_s, float prev_curvature, float roll_rad = 0.0f) {
-    if (!target.valid) return 0.0f;
-    return clip_curvature(speed_mps, prev_curvature,
-                          lag_adjusted_curvature(target, speed_mps, plan_age_s, steer_actuator_delay_s), roll_rad);
-}

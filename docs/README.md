@@ -50,7 +50,6 @@ flowchart TB
 | [Board setup](board-setup.md) | SSH, the web console's packages, what to avoid on the stock image |
 | [Build and deploy](build-and-deploy.md) | SDK fetch, the arm64 build container, upload, build version, host tests |
 | [Boot time](boot-time.md) | what the boot tuning changes and how long the board takes to start |
-| [Camera intrinsics](camera-intrinsics.md) | measuring the camera with `camcal` and a checkerboard on a TV |
 | [Rehearsal](rehearsal.md) | replaying a recorded drive through the whole runtime on the board |
 
 ## How it works

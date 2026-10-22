@@ -9,6 +9,7 @@
 //   lagd 값. 끝에 요레이트 비교와 lagd 결과, 녹화된 마지막 lagd 상태를 출력한다. (CAN 횡가속 LatAccel은 부호가
 //   반대이고 배율이 맞지 않아 롤 비교 기준으로 쓰지 않는다: 2026-09-27 경로에서 요레이트·속도 대비 −0.35배)
 #include "car/vehicle_can.h"
+#include "cli_args.h"
 #include "common/ipc_messages.h"
 #include "common/utils_file.h"
 #include "localization/localization_pipeline.h"
@@ -48,39 +49,38 @@ struct Stats {
 
 int main(int argc, char **argv) {
     const char *usage = "usage: %s [--steering s.json] [--lag-cache live_delay.json] <out.csv> <events.bin...>\n";
-    LateralLagConfig lag_config;
-    std::string lag_cache;
-    int arg = 1;
-    for (; arg < argc && std::strncmp(argv[arg], "--", 2) == 0; ++arg) {
-        const std::string name = argv[arg];
-        if (arg + 1 >= argc) {
-            std::fprintf(stderr, usage, argv[0]);
-            return 2;
-        }
-        const std::string value = argv[++arg];
-        if (name == "--steering") {
-            const std::string text = read_text_file(value);
-            if (text.empty()) {
-                std::fprintf(stderr, "%s: cannot read\n", value.c_str());
-                return 1;
-            }
-            apply_steering_initial_lag(text, &lag_config);
-        } else if (name == "--lag-cache") {
-            lag_cache = read_text_file(value);
-            if (lag_cache.empty()) {
-                std::fprintf(stderr, "%s: cannot read\n", value.c_str());
-                return 1;
-            }
-        } else {
-            std::fprintf(stderr, usage, argv[0]);
-            return 2;
-        }
+    std::string steering_path, lag_cache_path;
+    std::vector<std::string> positional;
+    ArgReader args(argc, argv);
+    while (args.next()) {
+        if (args.is("--steering"))
+            steering_path = args.value();
+        else if (args.is("--lag-cache"))
+            lag_cache_path = args.value();
+        else if (args.is_option())
+            args.fail();
+        else
+            positional.push_back(args.arg());
     }
-    if (argc - arg < 2) {
+    if (args.error() || positional.size() < 2) {
         std::fprintf(stderr, usage, argv[0]);
         return 2;
     }
-    std::FILE *csv = std::fopen(argv[arg], "w");
+    LateralLagConfig lag_config;
+    if (!steering_path.empty()) {
+        const std::string text = read_text_file(steering_path);
+        if (text.empty()) {
+            std::fprintf(stderr, "%s: cannot read\n", steering_path.c_str());
+            return 1;
+        }
+        apply_steering_initial_lag(text, &lag_config);
+    }
+    const std::string lag_cache = lag_cache_path.empty() ? std::string() : read_text_file(lag_cache_path);
+    if (!lag_cache_path.empty() && lag_cache.empty()) {
+        std::fprintf(stderr, "%s: cannot read\n", lag_cache_path.c_str());
+        return 1;
+    }
+    std::FILE *csv = std::fopen(positional[0].c_str(), "w");
     if (!csv) return 1;
     std::fprintf(csv,
                  "t,v,can_yaw_right,loc_yaw_right,loc_yaw_std,loc_roll,loc_pitch,flags,loc_vx,"
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
     LocalizationState recorded{};  // 녹화된 마지막 locationd 상태(보드가 낸 lagd)
     bool have_recorded = false;
 
-    RouteEvents events(std::vector<std::string>(argv + arg + 1, argv + argc));
+    RouteEvents events(std::vector<std::string>(positional.begin() + 1, positional.end()));
     TimeOrderedEvents::Record record;
     while (events.next(&record)) {
         const EventRecordHeader &rh = record.header;

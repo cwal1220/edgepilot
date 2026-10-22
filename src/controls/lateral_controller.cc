@@ -679,8 +679,8 @@ std::vector<CanFrame> LateralController::build_frames(const VehicleCanState &veh
 
     // should_send면 세 seed가 다 있다(seed_frames_ready).
     return build_lateral_can_frames(decode_lkas11(vehicle_state.lkas11_seed), decode_clu11(vehicle_state.clu11_seed),
-                                    vehicle_state.mdps12_seed, command, config_.steering_params.mdps_speed_spoof_kph,
-                                    lkas_active, vehicle_state.speed_unit_mph, frame);
+                                    vehicle_state.mdps12_seed, command, lkas_active, vehicle_state.speed_unit_mph,
+                                    frame);
 }
 
 int LateralController::next_lkas11_counter(const VehicleCanState &vehicle_state) {

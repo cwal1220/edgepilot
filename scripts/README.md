@@ -21,7 +21,7 @@ flowchart TB
     subgraph board["board"]
         dir["/root/edgepilot<br>binaries, manager.py, web_console/"]
         units["edgepilot.service"]
-        others["camcal.service<br>wifi-dhcp-renew.service"]
+        others["wifi-dhcp-renew.service"]
         drivers["edgepilot-drivers.service"]
         manager["manager.py"]
         procs["runtime processes<br>and web console"]
@@ -45,9 +45,9 @@ flowchart TB
 
 | Script | Usage | What it does |
 | --- | --- | --- |
-| `fetch_maixcam2_sdk.sh` | `[root@board]` | Fetches the MaixCAM2 cross-build dependencies into `deps/ax630/`. The MSP SDK `v3.0.0_20250319114413` (SHA256 pinned) and the MaixCDK headers (commit `30f4b8b`) come from the network; the board's `/opt/lib`, `libmaixcam_lib.so.1.2.5`, `libsamplerate` and OpenCV 4.11 are copied from the board over SSH as they are |
+| `fetch_maixcam2_sdk.sh` | `[root@board]` | Fetches the MaixCAM2 cross-build dependencies into `deps/ax630/`. The MSP SDK `v3.0.0_20250319114413` (SHA256 pinned) and the MaixCDK headers (commit `30f4b8b`) come from the network; the board's `/opt/lib`, `libmaixcam_lib.so.1.2.5` and `libsamplerate` are copied from the board over SSH as they are |
 | `upload_to_board.sh` | `[root@board]` | Uploads to the board the runtime in `build-ax630/bin`, the board-side Python, the whole web console directory (its page, `static/` with the i18n catalogues `static/i18n/*.json`, and three.js), the parameter defaults, the model (`models/supercombo.axmodel`, only when it changed), every learned torque model in `models/lateral_nn/` (models that exist only on the board are kept) and the Panda firmware image (as `firmware/panda.bin.signed`, when it was built). When the board's `/usr/lib/libmaixcam_lib.so` differs from the 1.2.5 the build used, it uploads 1.2.5 and changes the link (the stock file is kept as `.stock`) |
-| `install_autostart.sh` | `[--remove] [root@board]` | Installs `edgepilot.service` (runs the manager at boot, instead of the stock launcher), `camcal.service` and `wifi-dhcp-renew.service`, and puts `maix_npu_ai_isp=1` in `/boot/configs` (reboot once after it first does, or `camerad` refuses to start) |
+| `install_autostart.sh` | `[--remove] [root@board]` | Installs `edgepilot.service` (runs the manager at boot, instead of the stock launcher) and `wifi-dhcp-renew.service`, and puts `maix_npu_ai_isp=1` in `/boot/configs` (reboot once after it first does, or `camerad` refuses to start) |
 | `install_boot_tuning.sh` | `[--remove] [root@board]` | Makes the boot faster: installs `edgepilot-drivers.service`, which loads the AX drivers early in the boot, turns off stock services that are not used, and bounds the journal size. It takes effect from the next boot ([Boot time](../docs/boot-time.md)) |
 | `run_host_tests.sh` | `[--linux]` | Builds the host tests and runs them all with `ctest` ([tests/](../tests/README.md)). It needs neither the board nor `deps/`. `--linux` builds and runs them in the board build's Docker image, with the board's compiler |
 
@@ -89,9 +89,8 @@ The full build and deploy procedure is in
 | `web_console/` | `python3 -m web_console [--host address] [--port port]` | The web console (FastAPI, default `0.0.0.0:8080`). The manager starts it too. It handles parameter editing, the vehicle characteristics (learned and manual values) and the BEV, and shows the backlight state (`backlight.py`); the page is in `static/`. The Panda firmware card on the device settings tab flashes the Panda (only while parked; `pandad` does the writing). The recording tab's recording files card shows the routes on the SD card with their sizes and deletes them (`recordings.py`) |
 | `web_console/static/` | (static files) | The web console page (ES modules, no build step): `index.html`, `console.css`, `console.js` (header line and tabs), `ui.js` (shared helpers), the parameter tab (`param_state.js`, `param_editor.js`, `param_view.js`), the vehicle characteristics tab (`vehicle_view.js`), the Panda card (`panda_card.js`), the learned torque model card (`lateral_nn_card.js`), the recording files card (`recordings_card.js`), the BEV tab (`bev_view.js`, `bev.js` with its GPU helpers `bev_gl.js` and geometry writers `bev_geometry.js`, the ego model `bev_ego.js`, the lead model `bev_car.js`, `bev_data.js`, `bev_math.js`, the planner's lane filter copy `lane_filter.js`), the remembered browser choices (`storage.js`) and three.js 0.186.1 (`three/`) |
 | `web_console/backlight.py` | (module) | Reads the LCD backlight state from sysfs for the header line (PWM3 `pwmchip0/pwm3`, 10 kHz, duty = brightness x `disp_max_backlight` from `/boot/board`). Only `overlayd` writes the backlight: it applies `display.json` within 1 s and again each time it starts. The web console only edits `display.json` |
-| `edgepilot.service` | installed by `install_autostart.sh` | The systemd unit that starts the manager at boot (`Conflicts=launcher.service camcal.service`, `Restart=always`). `systemctl start launcher.service` returns to the stock launcher. Child logs go to `/run/edgepilot/<name>.log` |
+| `edgepilot.service` | installed by `install_autostart.sh` | The systemd unit that starts the manager at boot (`Conflicts=launcher.service`, `Restart=always`). `systemctl start launcher.service` returns to the stock launcher. Child logs go to `/run/edgepilot/<name>.log` |
 | `edgepilot-drivers.service` | installed by `install_boot_tuning.sh` | Loads the AX media drivers early in the boot. The stock image loads them from `rc.local`, which waits for the Wi-Fi connection |
-| `camcal.service` | `systemctl start camcal` | The capture for measuring the camera intrinsics ([Camera intrinsics](../docs/camera-intrinsics.md)). It stops the runtime while it runs |
 | `wifi-dhcp-renew.service`, `wifi-dhcp-renew.sh` | installed by `install_autostart.sh` | Renews the wlan0 DHCP lease each time the Wi-Fi joins another access point |
 | `requirements-web-console.txt` | `python3 -m pip install -r ...` | The web console's dependencies (fastapi, uvicorn) |
 
@@ -120,5 +119,4 @@ The order in which these units start at boot is in
   supervises them
 - [Runtime options](../docs/runtime-options.md): environment variables,
   parameter files and the web console
-- [Camera intrinsics](../docs/camera-intrinsics.md): the `camcal` capture
 - [Host tests](../tests/README.md): what `run_host_tests.sh` runs

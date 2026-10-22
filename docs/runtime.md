@@ -64,7 +64,7 @@ Stop it with Ctrl-C or `SIGTERM`: children get `SIGTERM`, then `SIGKILL` after
 - starts after `edgepilot-drivers.service`, which loads the AX drivers early in
   boot and is installed by `scripts/install_boot_tuning.sh`, and after
   `usb-gadget.service` ([Boot time](boot-time.md#unit-order))
-- has `Conflicts=launcher.service camcal.service` and `Restart=always`
+- has `Conflicts=launcher.service` and `Restart=always`
 - reads `/etc/environment` for `LD_LIBRARY_PATH`
 - sets `EDGEPILOT_LOG_DIR=/run/edgepilot`, so each child's output goes to
   `/run/edgepilot/<name>.log` (tmpfs, emptied past 1 MiB after keeping the
@@ -73,7 +73,6 @@ Stop it with Ctrl-C or `SIGTERM`: children get `SIGTERM`, then `SIGKILL` after
   on the USB-C port is used and `pandad` runs
 
 `systemctl start launcher.service` switches back to the stock UI, and
-`systemctl start camcal` stops the runtime for a camera capture;
 `install_autostart.sh --remove` undoes the install.
 
 The script puts `maix_npu_ai_isp=1` in `/boot/configs`, which splits the NPU
@@ -371,15 +370,12 @@ Every process that calls `AX_IVPS_Init` gets one TDP and one VPP sync work
 queue, and the board has four of each (`/dev/ivps_tdp0-3`,
 `/dev/ivps_vpp0-3`). `camerad`, `modeld`, `recordd` and `overlayd` take all
 four, so a fifth process gets `AX_ERR_IVPS_BUSY` (`0x800d0111`) from any TDP or
-VPP call. That fifth process is typically a tool run while the runtime is up.
+VPP call, so a tool run while the runtime is up must not need TDP or VPP.
 
-- Such tools must not need TDP or VPP. `VideoDecoder::receive_luma` copies the
-  decoded Y plane with the CPU for that reason.
 - The GDC (`/dev/ivps_gdc0`) is shared and not limited this way.
 - `modeld` holds its pair because the GDC warp calls `AX_IVPS_Init`. The flow
-  calibrator builds its pyramid on that VPP queue straight from the ring slot,
-  and falls back to an IVE pyramid without one, as in a tool; what each path
-  costs is in [Flow calibration](flow-calibration.md#evidence).
+  calibrator builds its pyramid on that VPP queue straight from the ring slot;
+  what it costs is in [Flow calibration](flow-calibration.md#evidence).
 
 ### Copies that stay
 

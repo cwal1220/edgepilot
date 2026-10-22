@@ -233,7 +233,7 @@ TEST(PandaSafety, SteeringLimitsAndFramesMatchTheFirmware) {
     std::vector<CanFrame> frames;
     for (int frame = 0; frame < 2; ++frame) {
         const std::vector<CanFrame> lateral = build_lateral_can_frames(HyundaiLkas11Values{}, HyundaiClu11Values{}, {},
-                                                                       HyundaiLkasCommand{}, 60.0f, true, false, frame);
+                                                                       HyundaiLkasCommand{}, true, false, frame);
         frames.insert(frames.end(), lateral.begin(), lateral.end());
     }
     frames.push_back(create_cruise_button_frame(HyundaiClu11Values{}, 1, 0));
@@ -258,10 +258,6 @@ TEST(PandaProtocol, ConstantsMatchTheFirmwareSources) {
     EXPECT_EQ(define_value("board/boards/board_declarations.h", "HW_TYPE_BLACK_PANDA"), kPandaHwBlack);
     EXPECT_EQ(define_value("board/boards/board_declarations.h", "HW_TYPE_UNO"), kPandaHwUno);
     EXPECT_EQ(define_value("board/boards/board_declarations.h", "HW_TYPE_DOS"), kPandaHwDos);
-    EXPECT_EQ(define_value("board/safety.h", "SAFETY_SILENT"), kPandaSafetySilent);
-    EXPECT_EQ(define_value("board/safety.h", "SAFETY_ELM327"), kPandaSafetyElm327);
-    EXPECT_EQ(define_value("board/safety.h", "SAFETY_HYUNDAI"), kPandaSafetyHyundai);
-    EXPECT_EQ(define_value("board/safety.h", "SAFETY_ALLOUTPUT"), kPandaSafetyAllOutput);
     EXPECT_EQ(define_value("board/safety.h", "SAFETY_NOOUTPUT"), kPandaSafetyNoOutput);
     EXPECT_EQ(define_value("board/safety.h", "SAFETY_HYUNDAI_COMMUNITY"), kPandaSafetyHyundaiCommunity);
     // bootstub의 flasher: 응답 매직과, 섹터 0(bootstub 자신)은 지우지 않는다는 것

@@ -30,7 +30,7 @@ flowchart TB
 ```
 
 `recordd` writes the routes the host tools read (`recording_reader.py`, the
-replay tools, `lane_bias.py`). `gtest_recording` covers
+replay tools, `lane_benchmark.py`). `gtest_recording` covers
 `src/recording/recording_writer.*`.
 
 ## Video
@@ -297,11 +297,9 @@ now fits the turned lane lines back onto the fixed distance grid.
   record types a tool asks for, one 60 s chunk at a time, into NumPy record
   arrays read by field name: a row per state record, or per CAN frame or IMU
   sample of a batch, with the record's log time.
-- `lane_bias.py`, `lane_benchmark.py`, `hud_tools.py`,
-  `estimate_imu_extrinsic.py`, `make_m2_data.py` and `compare_rehearsal.py`
-  read the event log through `iter_states`; `export_can_fixture.py` walks one
-  chunk record by record with `iter_event_records`. Both index a chunk with the
-  same `record_index`.
+- `lane_benchmark.py`, `hud_tools.py`, `make_m2_data.py` and
+  `compare_rehearsal.py` read the event log through `iter_states`, which
+  indexes each chunk with `record_index`.
 - In C++, `src/recording/event_log_reader.h` reads the event log for the
   diagnostic tools and `replayd`, and `read_record` copies a fixed-size state
   record into its struct.

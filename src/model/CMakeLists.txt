@@ -17,7 +17,6 @@ if(EDGEPILOT_BUILD_RUNTIME)
   add_executable(modeld
     modeld.cc
     flow_worker.cc
-    replay_source.cc
     supercombo_model.cc
     ax_engine_session.cc
   )

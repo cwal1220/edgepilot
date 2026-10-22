@@ -42,8 +42,6 @@ FlowTracker::FlowTracker(const FlowIntrinsics &k, int width, int height, std::un
 
 FlowTracker::~FlowTracker() = default;
 
-const char *FlowTracker::pyramid_engine() const { return engine_->pyramid_engine(); }
-
 void FlowTracker::start_window() {
     const int16_t *resp = engine_->corner_response();
     n_ = resp ? pick_flow_corners(resp, engine_->width() / 2, FlowEngine::kBandRows, 2, FlowEngine::kBandTop,
@@ -110,7 +108,7 @@ void FlowTracker::update(const FlowFrame &f) {
     }
     const double wall0 = monotonic_now_ns() * 1e-6, cpu0 = thread_cpu_ms();
     const bool consecutive = have_last_ && f.frame_id == last_frame_ + 1;
-    if (!engine_->push(f.y_phys, f.stride) || (f.still_valid && !f.still_valid())) {
+    if (!engine_->push(f.y_phys) || (f.still_valid && !f.still_valid())) {
         lose();
         lead_.reset();
         have_last_ = false;

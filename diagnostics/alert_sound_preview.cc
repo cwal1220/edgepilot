@@ -1,11 +1,11 @@
 // 알림음 미리 듣기. overlayd가 보드 스피커로 내는 소리(alert_tones.h)를 100% 크기 48 kHz 모노
 // WAV로 쓴다. 보드에서는 pkill -USR1 overlayd 할 때마다 하나씩 차례로 울린다.
 // 사용: alert_sound_preview [--out PREFIX]  →  PREFIX_<이름>.wav
+#include "cli_args.h"
 #include "hud/alert_tones.h"
 
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <string>
 #include <vector>
 
@@ -49,13 +49,16 @@ bool write_wav(const std::string &path, const std::vector<int16_t> &pcm) {
 
 int main(int argc, char **argv) {
     std::string prefix = "alert";
-    for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
-            prefix = argv[++i];
-        } else {
-            std::fprintf(stderr, "usage: %s [--out PREFIX]\n", argv[0]);
-            return 2;
-        }
+    ArgReader args(argc, argv);
+    while (args.next()) {
+        if (args.is("--out"))
+            prefix = args.value();
+        else
+            args.fail();
+    }
+    if (args.error()) {
+        std::fprintf(stderr, "usage: %s [--out PREFIX]\n", argv[0]);
+        return 2;
     }
     for (int i = 0; i < static_cast<int>(AlertSoundId::Count); ++i) {
         const AlertSoundId id = static_cast<AlertSoundId>(i);

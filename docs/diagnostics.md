@@ -18,28 +18,26 @@ flowchart LR
         planner["replay_planner<br>planner"]
         controls["replay_controls<br>controlsd tick"]
         dataset["extract_lateral_dataset<br>CSV for fits"]
-        bias["lane_bias.py<br>lateral bias"]
         bench["lane_benchmark.py<br>stock lane comparison"]
         hud["hud_tools.py, hud_snapshot<br>HUD frames"]
-        make["make_replay.py<br>SCNV12R1 file"]
+        m2["make_m2_data.py eval<br>model inputs, fp32 reference"]
     end
     subgraph board["board"]
-        modeld["modeld replay<br>raw output dump"]
+        axrun["run_axmodel_assembled.py<br>axmodel outputs"]
     end
     route --> planner
     route --> controls
     route --> dataset
-    route --> bias
     route --> bench
     route --> hud
-    route --> make
-    make --> modeld
+    route --> m2
+    m2 --> axrun
     classDef compute fill:#ebf3fe,stroke:#2f81f7,color:#1f2328
     classDef proc fill:#f6f8fa,stroke:#8b949e,color:#1f2328
     classDef group fill:#ffffff,stroke:#d1d9e0,color:#59636e
     class host,board group
-    class modeld compute
-    class route,planner,controls,dataset,bias,bench,hud,make proc
+    class axrun compute
+    class route,planner,controls,dataset,bench,hud,m2 proc
 ```
 
 ## Lateral planner replay
@@ -61,10 +59,10 @@ includes the model's latency, and the delay and roll are the ones the recorded
 `LearnerState` says were in use (`steer_actuator_delay` for routes that predate
 its `plan_delay_s`). On the 10-18 routes this reproduces the recorded desired
 curvature 2 to 2.5 times closer, tick by tick, than the age from the model's
-output with the fixed delay did. The options, which go before the output file,
-are listed in [Diagnostic tools](../diagnostics/README.md#host). `--laneless`
-and `--lane` re-plan the same route both ways without editing
-`params/steering.json`, and lane changes run only with `--vehicle`.
+output with the fixed delay did. The options are listed in
+[Diagnostic tools](../diagnostics/README.md#tools). `--laneless` and `--lane`
+re-plan the same route both ways without editing `params/steering.json`, and
+lane changes run only with `--vehicle`.
 
 For a planner refactor, run the route with `--exact` through the builds before
 and after it. Two builds that plan identically give byte-identical files:
@@ -91,8 +89,13 @@ HUD flags, the wheel angle, the driver torque, the torque controller's
 feed-forward and its friction share (`fr`, normalised torque; nnlc subtracts
 it from the target, see [Lateral NN](lateral-nn.md)), the tick time and the
 frames sent. It also reports how often
-engaged, active and desire agree with the recorded `ControlState`. A route
-engaged before recording started needs `--force-engaged`.
+engaged, active and desire agree with the recorded `ControlState`, and warns
+when, while both steer, the path source (`Laneless`) or the use of the learned
+torque model differs in more than 10 % of the ticks: the route's `params/` and
+`models/` copies are taken when the route starts, so a setting changed while
+driving is not in them. A route engaged before recording started needs
+`--force-engaged`. The cruise state is estimated from the driver's SET/RES, so
+to look at the cruise, start the replay before that session begins.
 
 ```sh
 R=<route>; ./build-host/bin/replay_controls --steering $R/params/steering.json \
@@ -129,34 +132,6 @@ flowchart LR
 | `replay_controls --dump` | the dump and the digest | controlsd refactors |
 | `hud_snapshot` | the `EDGEARGB` frames, within one compiler | HUD refactors ([HUD snapshots](#hud-snapshots)) |
 
-## Lateral bias
-
-If the car holds one side of the lane, `tools/model/lane_bias.py` says whether
-the camera calibration is responsible:
-
-```sh
-python tools/model/lane_bias.py <route_dir> [<route_dir> ...]
-```
-
-It reads the recorded `modelState` and `controlState`, keeps straight engaged
-stretches, and fits the perceived lane-centre offset against distance:
-
-| Term | Meaning |
-| --- | --- |
-| translation (m) | the camera off the vehicle centreline, or the car really off-centre. **Camera intrinsics cannot produce this**: a principal-point or focal-length error acts about the camera, so its lateral effect is exactly zero at `x=0`. |
-| rotation (rad/m) | the calibration-shaped term. A wrong `cx` of `dcx` pixels appears here as roughly `dcx/fx`. |
-
-It also prints the tuning that was active on that drive from the route's own
-`params/` snapshot, the mean steering angle needed to hold a straight line, and
-the mean curvature command, so a control bias can be told apart from a
-perception bias.
-
-Straightness is judged from the model's own 48 m path, never from the steering
-angle. When the car needs a non-zero angle to go straight, an `|angle| < k`
-filter keeps one side of the curve distribution and manufactures a rotation
-term that is not there. On the 2026-08-19 route that mistake reported
--4.22 mrad where the honest figure is -0.74 mrad.
-
 ## Stock lane comparison
 
 The K7's stock camera keeps reporting its own lane lines in `LKA14` while
@@ -191,16 +166,6 @@ Results on the six drives of 2026-10-10 to 10-15, 121 minutes compared:
 - in 15 scenes where the two disagreed by more than 25 cm, the model's line
   was on the paint in 10 and the stock camera's in 3;
 - road text, overpass shadows and lane widening pulled the stock line inward.
-
-Measured on the two logged drives (no lane-line offset was applied on either):
-
-| Drive | `path_offset_m` | Translation | Rotation |
-| --- | ---: | ---: | ---: |
-| 2026-08-16 | 0.00 | +19.9 cm | +0.18 mrad |
-| 2026-08-19 | 0.07 | +7.2 cm | -0.74 mrad |
-
-The rotation term is under 1 mrad on both, so the left-hugging on those drives
-was a lateral offset, not a camera-matrix error.
 
 ## Lateral dataset extraction
 
@@ -295,10 +260,11 @@ writes each frame as an `EDGEARGB` file and prints the draw timings:
 ```
 
 - **Portrait.** To check the board's drawing path, draw with `--portrait`
-  ([Diagnostic tools](../diagnostics/README.md#host)).
-- **Builds.** The renderer needs no OpenCV, so the tool builds on the host as
-  well as in the container build with `-DEDGEPILOT_BUILD_DIAGNOSTICS=ON`. Time
-  it on the board, where the numbers matter (the host is 20-40x faster).
+  ([Diagnostic tools](../diagnostics/README.md#tools)).
+- **Builds.** The renderer needs no board library, so the tool builds on the
+  host as well as in the container build with
+  `-DEDGEPILOT_BUILD_DIAGNOSTICS=ON`. Time it on the board, where the numbers
+  matter (the host is 20-40x faster).
 - **Refactors.** Frames from two builds of the same compiler are byte-identical
   when the drawing did not change, which is the check used for HUD refactors.
   Compare the host and the container build separately: GCC fuses multiply-adds
@@ -321,85 +287,26 @@ To draw a recorded moment instead of the synthetic scenes:
 To hear a sound change on the host, write every alert sound `overlayd` plays
 to WAV files (`/tmp/alert_engage.wav`, ...) with
 `alert_sound_preview --out /tmp/alert`
-([Diagnostic tools](../diagnostics/README.md#host)). On the board,
+([Diagnostic tools](../diagnostics/README.md#tools)). On the board,
 `pkill -USR1 -f "[.]/overlayd"` plays them one by one through the speaker.
 
 ## Model on the board
 
-The model checks need the NPU, so they run `modeld` on the board.
-
-### NV12 replay
-
-`modeld` can run headless from a recorded route. Replay mode reads an
-`SCNV12R1` file instead of the camera ring and feeds the same GDC warp as live
-capture, so it validates model execution from stored segments. It does not
-validate the online calibration or the desire input: the replay passes a
-speed of 0, so the calibrator (which takes samples above 15 mph) never
-updates, and the desire input is always 0, while the route's turns and lane
-changes sent desire pulses on the board.
-
-```sh
-# host: cut 120 frames of a route into an SCNV12R1 replay
-python3 tools/model/make_replay.py --route recordings/<route> --out /tmp/replay_nv12 --frames 120
-scp /tmp/replay_nv12/replay.scnv12 root@<board-ip>:/root/edgepilot/
-
-# board (stop the manager first, or at least modeld)
-cd /root/edgepilot
-EDGEPILOT_REPLAY_NV12=/root/edgepilot/replay.scnv12 \
-  ./modeld models/supercombo.axmodel
-```
-
-### Model swap verification
-
 A model swap changes three things at once: the warp input, the temporal
-plumbing, and the network. The board side is verified by running a replay with
-the raw outputs dumped, and comparing them with a host reference:
+plumbing, and the network. The checks need the NPU, so the model runs on the
+board with edgepilot stopped.
 
-```mermaid
-flowchart TB
-    route["recorded route"] --> make["make_replay.py<br>host"]
-    make --> replay["replay.scnv12"]
-    replay --> modeld["modeld on the board<br>replay and raw dump"]
-    modeld --> raw["board_raw.bin<br>SCODMP1"]
-    route --> ref["host reference<br>such as make_m2_data.py eval"]
-    raw --> compare["compare the control slices<br>and the hidden state"]
-    ref --> compare
-    classDef compute fill:#ebf3fe,stroke:#2f81f7,color:#1f2328
-    classDef proc fill:#f6f8fa,stroke:#8b949e,color:#1f2328
-    class modeld compute
-    class route,make,replay,raw,ref,compare proc
-```
-
-```sh
-# board: same frames through the runtime, dumping raw outputs
-EDGEPILOT_REPLAY_NV12=/root/verify/replay.scnv12 \
-EDGEPILOT_RAW_DUMP=/root/verify/board_raw.bin \
-EDGEPILOT_CALIB_AUTO=0 \
-  ./modeld models/<candidate>.axmodel
-```
-
-`board_raw.bin` is an `SCODMP1` file of 2576-float frames.
-
-- **Slices.** Compare it against the host reference on the slices that drive
-  control (plan lateral offset, lane positions) rather than on the raw vector.
-- **Hidden state.** Check that the hidden-state slice evolves smoothly: a dead
-  temporal buffer still produces plausible single-frame output.
-- **Calibration.** With `EDGEPILOT_CALIB_AUTO=0`, the host reference must use
-  the rpy the board restored from `params/calibration.json`, because the
-  calibration service feeds the input warp on every frame.
-- **Desire.** The NV12 replay feeds desire 0, while `make_m2_data.py eval`
-  feeds the recorded desire pulses. Pick a stretch with no lane change or
-  turn, or expect the plan to differ there for the same model.
-
-For the master core, `tools/model/axmodel/make_m2_data.py eval` builds the fp32
-reference with the runtime's queue semantics from a MaixCAM2 recording, and
+`tools/model/axmodel/make_m2_data.py eval` builds the fp32 reference with the
+runtime's queue semantics from a MaixCAM2 recording, and
 `tools/model/axmodel/run_axmodel_assembled.py` runs an axmodel on the same
-inputs on the board. A host runner that takes an `SCNV12R1` replay is not in
-the repository yet.
+inputs on the board. Compare the two on the slices that drive control (plan
+lateral offset, lane positions) rather than on the raw vector, and check that
+the hidden-state slice evolves smoothly: a dead temporal buffer still produces
+plausible single-frame output.
 
-Measured when the master axmodel was brought up (200-frame replay): the board
-output against the host axengine runner gave a plan lateral difference of
-0.0008 m at 2 s, and a hidden-state cosine similarity of 0.9994.
+Measured when the master axmodel was brought up (a 200-frame board replay):
+the board output against the host axengine runner gave a plan lateral
+difference of 0.0008 m at 2 s, and a hidden-state cosine similarity of 0.9994.
 
 ## Related
 
@@ -415,12 +322,10 @@ output against the host axengine runner gave a plan lateral difference of
 - [Recording](recording.md): the route layout the tools read
 - [HUD](hud.md): what the renderer that `hud_snapshot` runs draws, and the
   alert sounds
-- [Model pipeline](model-pipeline.md): the warp and the NPU that the NV12 replay
-  exercises
+- [Model pipeline](model-pipeline.md): the warp and the NPU the model runs on
 - [axmodel pipeline](../tools/model/axmodel/README.md): building the model a
   swap verifies
-- [Runtime options](runtime-options.md): `EDGEPILOT_REPLAY_NV12`,
-  `EDGEPILOT_RAW_DUMP` and the other switches
+- [Runtime options](runtime-options.md): the runtime's switches
 - [Departure alerts](departure-alerts.md): which events sound the alerts that
   `alert_sound_preview` writes
 - [K7 Panda port](k7-panda-port.md): the K7 CAN signals that the replays decode

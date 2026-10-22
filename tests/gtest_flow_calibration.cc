@@ -1,6 +1,6 @@
 // 광류 보정기의 하드웨어 무관 부분: 이동 방향 풀이(알려진 장면을 투영한 합성 점), 코너 고르기, 곧은 길
-// 조건, 블록 집계, 그리고 가짜 엔진으로 FlowTracker의 프레임 잇기와 버림. IVE 부분은 보드에서 녹화를 재생해
-// 확인한다(diagnostics/flow_calibration_replay).
+// 조건, 블록 집계, 그리고 가짜 엔진으로 FlowTracker의 프레임 잇기와 버림. IVE 부분은 보드 리허설에서
+// 확인한다(docs/rehearsal.md).
 #include "model/flow_calibration.h"
 #include "model/flow_tracker.h"
 
@@ -319,7 +319,7 @@ public:
         for (int y = 8; y < kBandRows - 8; y += 12)
             for (int x = 8; x < width / 2 - 8; x += 12) response_[static_cast<size_t>(y) * (width / 2) + x] = 1000;
     }
-    bool push(unsigned long long, int) override {
+    bool push(unsigned long long) override {
         ++pushes;
         return push_ok;
     }
@@ -335,7 +335,6 @@ public:
         return true;
     }
     int width() const override { return width_; }
-    const char *pyramid_engine() const override { return "fake"; }
 
     bool push_ok = true;
     int pushes = 0;

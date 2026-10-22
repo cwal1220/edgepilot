@@ -103,25 +103,3 @@ bool VideoDecoder::receive_to(unsigned long long dst_phys, uint64_t *pts, int ti
     AX_VDEC_ReleaseFrame(kGroup, &frame);
     return ok;
 }
-
-bool VideoDecoder::receive_luma(uint8_t *dst, int dst_stride, uint64_t *pts, int timeout_ms) {
-    Impl &m = *impl_;
-    AX_VIDEO_FRAME_INFO_T frame = {};
-    if (AX_VDEC_GetFrame(kGroup, &frame, timeout_ms) != 0) return false;
-    const AX_U32 stride = frame.stVFrame.u32PicStride[0];
-    const size_t bytes = static_cast<size_t>(stride) * m.height;
-    auto *src = reinterpret_cast<const uint8_t *>(static_cast<uintptr_t>(frame.stVFrame.u64VirAddr[0]));
-    uint8_t *mapped = nullptr;
-    if (!src) {  // 풀 블록이 이 프로세스에 매핑돼 있지 않으면 잠깐 매핑한다
-        mapped = static_cast<uint8_t *>(AX_SYS_Mmap(frame.stVFrame.u64PhyAddr[0], static_cast<AX_U32>(bytes)));
-        src = mapped;
-    }
-    if (src)
-        for (int y = 0; y < m.height; ++y)
-            std::memcpy(dst + static_cast<size_t>(y) * dst_stride, src + static_cast<size_t>(y) * stride,
-                        static_cast<size_t>(m.width));
-    if (mapped) AX_SYS_Munmap(mapped, static_cast<AX_U32>(bytes));
-    if (pts) *pts = frame.stVFrame.u64PTS;
-    AX_VDEC_ReleaseFrame(kGroup, &frame);
-    return src != nullptr;
-}

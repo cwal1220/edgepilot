@@ -1,6 +1,5 @@
 // supercombo(openpilot master) raw 출력 파서와 시간축 입력 규약(desire 펄스·풀링,
-// 특징 이력, 이미지 이력). SCODMP1 덤프(EDGEPILOT_RAW_DUMP)를 인자로 주면 테스트
-// 대신 첫 프레임을 파싱해 출력한다.
+// 특징 이력, 이미지 이력).
 #include "common/model_output.h"
 #include "model/model_temporal.h"
 
@@ -11,10 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
-#include <fstream>
-#include <iostream>
 #include <vector>
 
 namespace {
@@ -225,57 +221,4 @@ TEST(ModelOutputParser, SplitOutputsReassembleLayout) {
               static_cast<float>(model_output_layout::kPlanOffset + 20 * 15 + 11));
 }
 
-template <typename T>
-bool read_exact(std::ifstream &file, T *value) {
-    file.read(reinterpret_cast<char *>(value), sizeof(T));
-    return file.gcount() == static_cast<std::streamsize>(sizeof(T));
-}
-
 }  // namespace
-
-// 인자가 없으면 테스트, SCODMP1 덤프 경로를 주면 첫 프레임을 파싱해 출력한다.
-int main(int argc, char *argv[]) {
-    ::testing::InitGoogleTest(&argc, argv);
-    if (argc == 1) return RUN_ALL_TESTS();
-    if (argc != 2) {
-        std::cerr << "usage: " << argv[0] << " [SCODMP1 raw dump]\n";
-        return 2;
-    }
-
-    std::ifstream file(argv[1], std::ios::binary);
-    if (!file) {
-        std::perror("open raw dump");
-        return 1;
-    }
-
-    char magic[8]{};
-    file.read(magic, sizeof(magic));
-    if (file.gcount() != static_cast<std::streamsize>(sizeof(magic)) || std::memcmp(magic, "SCODMP1", 7) != 0) {
-        std::cerr << "bad raw dump magic\n";
-        return 1;
-    }
-
-    uint32_t raw_size = 0;
-    uint32_t frame_count = 0;
-    if (!read_exact(file, &raw_size) || !read_exact(file, &frame_count) ||
-        raw_size < static_cast<uint32_t>(kModelOutputFloats)) {
-        std::cerr << "bad raw dump header (frames shorter than the model output)\n";
-        return 1;
-    }
-
-    std::vector<float> raw(raw_size);
-    file.read(reinterpret_cast<char *>(raw.data()), static_cast<std::streamsize>(raw.size() * sizeof(float)));
-    if (file.gcount() != static_cast<std::streamsize>(raw.size() * sizeof(float))) {
-        std::cerr << "short first frame\n";
-        return 1;
-    }
-
-    const ParsedModelOutput parsed = ModelOutputParser::parse(raw.data());
-    ParsedLeadPoint lead;
-    const bool have_lead = parsed.leads.primary(0, 0.0f, &lead);
-    std::cout << "raw_size=" << raw_size << " frames=" << frame_count << " lane0_prob=" << parsed.lanes[0].probability
-              << " pose_vx=" << parsed.pose.trans[0] << " lead_valid=" << (have_lead ? 1 : 0);
-    if (have_lead) std::cout << " lead_x=" << lead.x << " lead_y=" << lead.y;
-    std::cout << "\n";
-    return 0;
-}

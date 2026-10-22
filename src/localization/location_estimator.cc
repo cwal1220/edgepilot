@@ -346,7 +346,7 @@ bool PoseKalman::predict_and_observe(double t, std::initializer_list<Observation
 // ---------------------------------------------------------------- LocationEstimator
 
 // MaixCAM2 IMU 칩이 카메라 대비 기울어 붙어 있다(2026-09-27, 2026-10-01 녹화의 선회 중 자이로
-// 회전축 대 카메라 pose 회전축, tools/camera/estimate_imu_extrinsic.py):
+// 회전축 대 카메라 pose 회전축):
 //   pitch(IMU 앞이 들림): 축 기울기 차 +2.15/+2.37°, Wahba +1.96/+2.22° → +2.2°
 //   roll(IMU 오른쪽이 내려감): +0.20/+1.38°, Wahba +0.57/+1.81° → +1.0°(모델 pose의 롤 성분
 //     오차가 커서 ±0.6° 정도 불확실)

@@ -83,7 +83,7 @@ What goes into the homography, and what comes out:
 
 ```mermaid
 flowchart TB
-    camcal["measured camera matrix<br>1920x1080, kCamera*"] --> k["K at the capture size<br>scaled by width and height"]
+    measured["measured camera matrix<br>1920x1080, kCamera*"] --> k["K at the capture size<br>scaled by width and height"]
     override["EDGEPILOT_CAMERA_INTRINSICS"] -.-> k
     k --> h["homography per view<br>medmodel f 910, sbigmodel f 455"]
     rpy["calibration rpy<br>pose or flow calibrator"] --> h
@@ -95,7 +95,7 @@ flowchart TB
     classDef proc fill:#f6f8fa,stroke:#8b949e,color:#1f2328
     class h,gdc,yuv6 pixel
     class rpy compute
-    class camcal,override,k,mount proc
+    class measured,override,k,mount proc
 ```
 
 Between the rotation and the model frame sits the camera mount. The device
@@ -120,8 +120,7 @@ GDC must come up: without it `modeld` exits and the manager restarts it.
 Against the CPU warp that earlier builds carried (openpilot's OpenCL
 interpolation in fixed point), Y differed by at most 1 LSB and U/V by 0.4 LSB on
 average; on a replay the plan lateral offset at 2 s against the fp32 host
-reference differed by 0.0005 m. Replay (`EDGEPILOT_REPLAY_NV12`) reads each
-frame from the file straight into a CMM buffer that the GDC reads.
+reference differed by 0.0005 m.
 
 The calibration service updates the warp's rpy after every frame, matching
 openpilot's `cameraOdometry -> liveCalibration -> modeld` loop, so each frame
@@ -138,12 +137,16 @@ The source intrinsics are scaled from the measured `1920x1080` MaixCAM2
 
 - **At 1280x720** (the capture size) that is `fx=754.2`, `fy=753.9`,
   `cx=626.8`, `cy=368.4`.
-- **Measurement:** 42 photos of an 11x6 inner-corner chessboard on a 65" TV,
-  taken with `camcal` through the runtime's camera path (0.52 px RMS; see
-  [Camera intrinsics](camera-intrinsics.md#2026-09-26-measurement)).
+- **Measurement (2026-09-26):** 42 photos of an 11x6 inner-corner chessboard
+  on a 65" TV, taken through the runtime's camera path. Views over 0.8 px
+  reprojection error were dropped (58 shots, 54 detected), leaving 0.52 px RMS.
+  The bootstrap 1σ is ±2.1 / ±2.0 / ±2.6 / ±1.7 px for `fx`, `fy`, `cx`, `cy`.
 - **Earlier values:** the stock camera app measured `fx=1132.33`, `fy=1131.47`,
   `cx=932.80`, `cy=556.06`. That agrees on focal length, but `cx` differs by
-  7 px.
+  7 px (about 2.8σ, 0.37° of yaw, which the online calibration had absorbed).
+- **Distortion:** `k1 -0.0090 k2 +0.0135 p1 -0.0010 p2 +0.0002 k3 -0.0210`.
+  Inside the model input windows the pinhole warp is off by 0.09 px mean and
+  0.5 px max for the road model, and 0.18 / 1.0 px for the wide model.
 
 Captures at 1280x720, 1920x1080, and 2560x1440 register to each other by pure
 scaling, so the values scale to any capture size. Distortion stays around 1% at
@@ -151,10 +154,7 @@ the corners, so the warp stays pinhole. The camera's horizontal field of view
 is 80.6°, so 720p gives 13.2 px/° against the 17.9 px/° of the camera
 supercombo was trained on.
 
-`tools/camera/warp_preview.py` shows what the model sees from a captured frame:
-both model views and their footprints on the source image.
-`EDGEPILOT_CAMERA_INTRINSICS` overrides the matrix, for footage from another
-camera.
+`EDGEPILOT_CAMERA_INTRINSICS` overrides the matrix, for another camera module.
 
 ## Temporal inputs
 
@@ -281,8 +281,6 @@ from. The last two floats are not used.
 - [Runtime](runtime.md): the processes around `modeld` and what they cost
 - [Runtime options](runtime-options.md): `EDGEPILOT_PROFILE`, the camera mount
   and the other switches
-- [Camera intrinsics](camera-intrinsics.md): measuring the camera matrix with
-  `camcal`
 - [Flow calibration](flow-calibration.md): the optical-flow source of the
   warp's pitch and yaw
 - [Lead flow](lead-flow.md): the lead's expansion rate and the lead track in

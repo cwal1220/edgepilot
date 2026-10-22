@@ -97,7 +97,7 @@ flowchart TB
 | Step | Where | Notes |
 | --- | --- | --- |
 | Gate | `flow_gate_open` | ≥ 40 km/h, yaw rate (curvature × speed) ≤ 0.25°/s, no blinker or desire, fresh CAN |
-| Pyramid | VPP (`modeld`'s own sync queue), IVE as fallback | 640x360 and 320x180 in one call, read straight from the ring slot. The ring slot itself is the full-resolution level, with no copy |
+| Pyramid | VPP (`modeld`'s own sync queue) | 640x360 and 320x180 in one call, read straight from the ring slot. The ring slot itself is the full-resolution level, with no copy |
 | Corners | IVE Sobel + CornerDet response, then `pick_flow_corners` | at each window start, strongest response per 8x8 cell of the 640x360 road band, up to 300 points |
 | Tracking | IVE pyramidal LK | one frame at a time for 8 frames (0.4 s), about 5 ms of IVE per frame |
 | Solve | `solve_flow_direction` | windows whose median point displacement is under 1 px are dropped first; then travel direction (a, b, 1) plus a small rotation, Sampson epipolar residuals, Cauchy-weighted Gauss-Newton, then two rounds of trimming at three robust scales (1.4826·MAD) |
@@ -163,10 +163,8 @@ shaped the design (`platform/maixcam2/maix_ive_flow.h`):
   - Not asking again leaves tasks running and makes the following ones fail.
 - **Scalers:** the IVPS scalers (TDP/VPP) have four sync queues per board, one
   pair per process that calls `AX_IVPS_Init`, and the runtime takes all four.
-  Inside `modeld` the flow calibrator uses `modeld`'s own queue. A separate
-  tool, such as `flow_calibration_replay` while the runtime is up, gets
-  `AX_ERR_IVPS_BUSY` and falls back to an IVE pyramid: a 5x5 Gaussian filter,
-  then a DMA interval copy.
+  Inside `modeld` the flow calibrator uses `modeld`'s own queue; a fifth
+  process gets `AX_ERR_IVPS_BUSY`.
 - **VPP output:** the VPP refuses YUV400 output, so the levels come out as NV12.
 
 ### Using the estimate
@@ -320,9 +318,10 @@ tracks. It also scattered three times less between one-minute segments.
 
 ### Board replay
 
-On the board, `diagnostics/flow_calibration_replay` decodes a recorded segment
-with the VDEC and feeds it through the same `FlowTracker` that `modeld` runs.
-Over six night segments and four day segments of 2026-10-10:
+A board replay tool (removed on 2026-10-22; the rehearsal now runs the same
+code in `modeld`) decoded recorded segments with the VDEC and fed them through
+the same `FlowTracker` that `modeld` runs. Over six night segments and four day
+segments of 2026-10-10:
 
 | Route | Flow calibrator on the board (median of accepted windows) | OpenCV reference (0.2 s pairs with a forward-backward check) |
 | --- | --- | --- |
@@ -413,5 +412,5 @@ drives.
   console
 - [Parameters](../params/README.md): the `calibration_use_flow` setting
 - [Recording](recording.md): the event log versions that carry these states
-- [Diagnostic tools](../diagnostics/README.md#board): `flow_calibration_replay`
-  and its options
+- [Rehearsal](rehearsal.md): replaying a recorded drive through `modeld` on
+  the board

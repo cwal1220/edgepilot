@@ -1,8 +1,6 @@
 // 횡제어기(LateralController): 결합 게이트와 홀드, 토크 한계와 MDPS 고장 회피, 곡률 제한, Panda
-// 게이트와 넘겨받기, LKAS HUD, 그리고 학습값(paramsd·torqued)과 lagd 지연 소비. CanFixture는 녹화 CAN
-// 픽스처를 컨트롤러에 흘려 openpilot 참조식과 대조하며, 픽스처를 인자로 줄 때만 돈다. CAN 신호는
-// gtest_car, 토크 제어기는 gtest_lateral_torque, 홀드는 gtest_control_holds, 플래너는
-// gtest_lateral_planner가 본다.
+// 게이트와 넘겨받기, LKAS HUD, 그리고 학습값(paramsd·torqued)과 lagd 지연 소비. CAN 신호는 gtest_car, 토크
+// 제어기는 gtest_lateral_torque, 홀드는 gtest_control_holds, 플래너는 gtest_lateral_planner가 본다.
 #include "car/hyundai_can.h"
 #include "car/vehicle_can.h"
 #include "common/model_output.h"
@@ -16,9 +14,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <fstream>
-#include <iterator>
-#include <limits>
 #include <string>
 #include <vector>
 
@@ -65,38 +60,6 @@ LateralTarget replay_target() {
         target.curvatures[i] = 0.0008f;
     }
     return target;
-}
-
-// lag 보상 곡률과 clip_curvature의 독립 전사본. 한계값은 lateral_controller.h에서 그대로
-// 가져온다 — 숫자를 복제하면 구현이 바뀔 때 이 검증이 조용히 썩는다.
-// 픽스처 target은 capture_timestamp_ns=0이라 plan 나이 보정은 0이다.
-float reference_plan_curvature(const LateralTarget &target, float speed_mps, float actuator_delay) {
-    const float delay = std::max(0.01f, actuator_delay);
-    // 상류 get_curvature_from_plan: MIN_STABLE_DELAY보다 짧으면 그 지점의 yaw를 지연 비율만큼 줄여 쓴다
-    const float read_at = std::max(delay, kMinStableDelayS);
-    float psi = target.psis[kLateralControlN - 1];
-    for (int i = 1; i < kLateralControlN; ++i) {
-        if (read_at <= model_t_idx(i)) {
-            const float p = (read_at - model_t_idx(i - 1)) / (model_t_idx(i) - model_t_idx(i - 1));
-            psi = target.psis[i - 1] + p * (target.psis[i] - target.psis[i - 1]);
-            break;
-        }
-    }
-    if (delay < kMinStableDelayS) psi *= delay / kMinStableDelayS;
-    const float speed = std::max(speed_mps, kMinCurvatureSpeedMps);
-    const float current = target.curvatures[0];
-    return current + 2.0f * (psi / (speed * delay) - current);
-}
-
-float reference_clip_curvature(float speed_mps, float prev_curvature, float desired) {
-    const float speed = std::max(speed_mps, kMinCurvatureSpeedMps);
-    const float rate_limit = kMaxLateralJerk / (speed * speed);
-    desired = std::clamp(desired, prev_curvature - rate_limit * kCurvatureRateWindowS,
-                         prev_curvature + rate_limit * kCurvatureRateWindowS);
-    const float accel_speed = std::max(speed, 1.0f);
-    desired = std::clamp(desired, -kMaxLateralAccel / (accel_speed * accel_speed),
-                         kMaxLateralAccel / (accel_speed * accel_speed));
-    return std::clamp(desired, -kMaxCurvature, kMaxCurvature);
 }
 
 TEST(LateralController, BrakingDoesNotDisengage) {
@@ -1252,19 +1215,10 @@ TEST(LateralController, ParamsdInvalidBlocksOnlyWhenUsed) {
 }
 
 TEST(LateralController, CurvatureLimitFollowsRoll) {
-    LateralTarget target = replay_target();
-    for (int i = 0; i < kLateralControlN; ++i) {
-        target.curvatures[i] = 0.05f;
-        target.psis[i] = 0.05f * 20.0f * model_t_idx(i);
-    }
     const float v = 20.0f, roll = 0.03f;
-    const float up = lag_adjusted_desired_curvature(target, v, 0.0f, 0.34f, 0.05f, roll);
+    const float up = clip_curvature(v, 0.05f, 0.05f, roll);
     ASSERT_NEAR(up, (kMaxLateralAccel + roll * 9.81f) / (v * v), 1e-7f) << "롤만큼 횡가속도 상한이 roll*g 움직인다";
-    for (int i = 0; i < kLateralControlN; ++i) {
-        target.curvatures[i] = -0.05f;
-        target.psis[i] = -target.psis[i];
-    }
-    const float down = lag_adjusted_desired_curvature(target, v, 0.0f, 0.34f, -0.05f, roll);
+    const float down = clip_curvature(v, -0.05f, -0.05f, roll);
     ASSERT_NEAR(down, (-kMaxLateralAccel + roll * 9.81f) / (v * v), 1e-7f) << "하한도 같은 roll*g만큼 움직인다";
 }
 
@@ -1285,149 +1239,6 @@ TEST(LateralController, LiveDelaySwitch) {
     EXPECT_FLOAT_EQ(on.plan_delay_s(), 0.44f);
     on.set_live_delay(0.44f, false);
     EXPECT_FLOAT_EQ(on.plan_delay_s(), 0.34f) << "확정 전·오래된 값은 쓰지 않는다";
-}
-
-// 명령줄로 받은 CAN 픽스처(없으면 CanFixture를 건너뛴다)
-const char *g_fixture_path = nullptr;
-
-struct TimedCanFrame {
-    uint64_t timestamp_us = 0;
-    CanFrame frame;
-};
-
-uint32_t read_u32_le(const uint8_t *data) {
-    return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8u) |
-           (static_cast<uint32_t>(data[2]) << 16u) | (static_cast<uint32_t>(data[3]) << 24u);
-}
-
-uint64_t read_u64_le(const uint8_t *data) {
-    return static_cast<uint64_t>(read_u32_le(data)) | (static_cast<uint64_t>(read_u32_le(data + 4)) << 32u);
-}
-
-// EDGECAN1: "EDGECAN1", u32 version 1, u32 record_size 24, u64 count, 이어서 레코드
-// (u64 timestamp_us, u32 address, u8 bus, u8 length, data[8], 2 B 패딩). 시간순이어야 한다.
-// 형식이 틀리면 실패를 남기고 빈 목록을 돌려준다.
-std::vector<TimedCanFrame> read_can_fixture(const std::string &path) {
-    constexpr size_t kHeaderSize = 24;
-    constexpr uint32_t kRecordSize = 24;
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        ADD_FAILURE() << "열 수 없음 " << path;
-        return {};
-    }
-    const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    if (bytes.size() < kHeaderSize || std::memcmp(bytes.data(), "EDGECAN1", 8) != 0) {
-        ADD_FAILURE() << "CAN 픽스처 magic이 틀림";
-        return {};
-    }
-    if (read_u32_le(bytes.data() + 8) != 1 || read_u32_le(bytes.data() + 12) != kRecordSize) {
-        ADD_FAILURE() << "지원하지 않는 CAN 픽스처 버전";
-        return {};
-    }
-    const uint64_t count = read_u64_le(bytes.data() + 16);
-    if (count > (std::numeric_limits<size_t>::max() - kHeaderSize) / kRecordSize ||
-        bytes.size() != kHeaderSize + static_cast<size_t>(count) * kRecordSize) {
-        ADD_FAILURE() << "CAN 픽스처 크기가 틀림";
-        return {};
-    }
-    std::vector<TimedCanFrame> records;
-    records.reserve(static_cast<size_t>(count));
-    for (size_t index = 0; index < static_cast<size_t>(count); ++index) {
-        const uint8_t *record = bytes.data() + kHeaderSize + index * kRecordSize;
-        TimedCanFrame timed;
-        timed.timestamp_us = read_u64_le(record);
-        timed.frame.address = read_u32_le(record + 8);
-        timed.frame.bus = record[12];
-        timed.frame.length = record[13];
-        std::copy_n(record + 14, timed.frame.data.size(), timed.frame.data.begin());
-        if ((index > 0 && timed.timestamp_us < records.back().timestamp_us) || timed.frame.address > 0x1fffffffU ||
-            timed.frame.bus > 7u || timed.frame.length > timed.frame.data.size()) {
-            ADD_FAILURE() << "CAN 픽스처 레코드가 틀림, 인덱스 " << index;
-            return {};
-        }
-        records.push_back(timed);
-    }
-    return records;
-}
-
-// 픽스처는 60초 연속 주행 구간이어야 한다(active > 5900틱, 토크 > 0). 정차
-// 구간은 이 전제에 걸려 실패한다. tools/control/export_can_fixture.py가 녹화
-// events/NNN.bin 하나를 이 형식으로 내보낸다.
-TEST(LateralController, CanFixture) {
-    if (g_fixture_path == nullptr) GTEST_SKIP() << "gtest_lateral_controller <fixture.can>으로 준 경우만 돈다";
-    const std::vector<TimedCanFrame> records = read_can_fixture(g_fixture_path);
-    ASSERT_FALSE(records.empty()) << "CAN 픽스처에 프레임이 없다";
-    LateralControllerConfig config;
-    config.force_engaged = true;
-    std::string error;
-    ASSERT_TRUE(load_steering_params("params/steering.json", &config.steering_params, &error)) << "조향 파라미터 읽기";
-    LateralController controller(config);
-    VehicleCanState vehicle;
-    const LateralPath path = replay_path();
-    const LateralTarget target = replay_target();
-    size_t next_record = 0;
-    size_t active_ticks = 0;
-    size_t invalid_frames = 0;
-    size_t lkas0 = 0;
-    size_t lkas1 = 0;
-    size_t clu1 = 0;
-    size_t mdps2 = 0;
-    int max_torque = 0;
-    float max_curvature_error = 0.0f;
-    float ref_prev_curvature = 0.0f;
-
-    const double duration_s = records.back().timestamp_us / 1000000.0;
-    const int ticks = static_cast<int>(std::ceil(duration_s * 100.0)) + 2;
-    for (int tick = 0; tick < ticks; ++tick) {
-        const double now_s = static_cast<double>(tick) * 0.01;
-        const uint64_t now_us = static_cast<uint64_t>(now_s * 1000000.0);
-        // 이 틱까지 도착한 프레임을 먹인다.
-        for (; next_record < records.size() && records[next_record].timestamp_us <= now_us; ++next_record) {
-            const CanFrame &frame = records[next_record].frame;
-            update_vehicle_can_state(&vehicle, frame.address, frame.data, frame.length, frame.bus, now_s);
-        }
-        const auto result = controller.update(path, target, vehicle, now_s, tick);
-        // 컨트롤러는 휠 속도 평균으로 곡률을 낸다. 클러스터 속도를 먹이면
-        // 참조식이 다른 입력을 보게 되어 비교가 성립하지 않는다. 첫 WHL_SPD11
-        // 전에는 속도가 NaN이고 컨트롤러가 어차피 비활성이라 비교하지 않는다.
-        if (std::isfinite(result.control_speed_kph)) {
-            // 상류 controlsd처럼 조향 중(latActive)이 아니면 plan 대신 실제 곡률을 클립한다.
-            const float speed = std::max(0.0f, result.control_speed_kph / 3.6f);
-            const float requested =
-                result.lat_active ? reference_plan_curvature(target, speed, config.steering_params.steer_actuator_delay)
-                                  : result.actual_curvature;
-            const float expected_curvature = reference_clip_curvature(speed, ref_prev_curvature, requested);
-            ref_prev_curvature = expected_curvature;
-            max_curvature_error =
-                std::max(max_curvature_error, std::fabs(result.desired_curvature - expected_curvature));
-        }
-        if (result.active) ++active_ticks;
-        max_torque = std::max(max_torque, std::abs(result.apply_torque));
-        for (const CanFrame &frame : result.frames) {
-            const bool valid_length = (frame.address == kHyundaiClu11Address && frame.length == 4) ||
-                                      (frame.address != kHyundaiClu11Address && frame.length == 8);
-            if (!valid_length) ++invalid_frames;
-            if (frame.address == kHyundaiLkas11Address && frame.bus == 0) ++lkas0;
-            if (frame.address == kHyundaiLkas11Address && frame.bus == 1) ++lkas1;
-            if (frame.address == kHyundaiClu11Address && frame.bus == 1) ++clu1;
-            if (frame.address == kHyundaiMdps12Address && frame.bus == 2) ++mdps2;
-        }
-    }
-    ASSERT_EQ(next_record, records.size()) << "픽스처 프레임을 모두 먹였다";
-    ASSERT_GT(active_ticks, 5900) << "주행 구간 내내 컨트롤러가 활성이다";
-    ASSERT_EQ(invalid_frames, 0) << "생성한 CAN 프레임의 길이가 맞다";
-    // LKAS/MDPS는 100 Hz로 나간다
-    ASSERT_GT(lkas0, 5900);
-    ASSERT_EQ(lkas0, lkas1);
-    ASSERT_EQ(lkas0, mdps2);
-    // CLU11은 50 Hz로 나간다
-    ASSERT_GT(clu1, 2900);
-    ASSERT_GE(clu1 * 2, lkas0 - 1);
-    ASSERT_LE(clu1 * 2, lkas0 + 1);
-    // 조향 토크 범위
-    ASSERT_GT(max_torque, 0);
-    ASSERT_LE(max_torque, 384);
-    ASSERT_LT(max_curvature_error, 1e-6f) << "지연 보정 곡률이 openpilot 참조식과 같다";
 }
 
 // 결합한 컨트롤러와 그 차를 함께 들고 틱을 진행하는 작은 도구(입력 끊김·해제 예고 시험용)
@@ -1570,13 +1381,3 @@ TEST(LateralController, SoftDisableTimerKeepsCountingThroughOtherReasons) {
 }
 
 }  // namespace
-
-int main(int argc, char **argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    if (argc > 2) {
-        std::fprintf(stderr, "usage: %s [fixture.can]\n", argv[0]);
-        return 2;
-    }
-    if (argc == 2) g_fixture_path = argv[1];
-    return RUN_ALL_TESTS();
-}

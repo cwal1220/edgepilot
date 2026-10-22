@@ -46,7 +46,6 @@ public:
     bool restore(const FlowBlocks &blocks) { return calibrator_.restore(blocks); }
     // 보정 초기화: 블록과 진행 중인 창을 버린다(앞차 창은 그대로다).
     void reset_calibration();
-    const char *pyramid_engine() const;
 
     struct Stats {
         uint64_t frames = 0;        // IVE로 처리한 프레임

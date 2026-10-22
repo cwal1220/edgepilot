@@ -131,7 +131,6 @@ POSE_STATE = np.dtype([
 ])
 
 # CanRx·CanTx 레코드: RecordedCanBatchHeader(count, dropped) 뒤에 RecordedCanFrame count개(recording_format.h).
-# can_frames()로 읽는다.
 RECORDED_CAN_BATCH_HEAD = struct.Struct("<II")
 RECORDED_CAN_FRAME = np.dtype([
     ("address", "<u4"),
@@ -141,13 +140,6 @@ RECORDED_CAN_FRAME = np.dtype([
     ("flags", "<u4"),
     ("data", "u1", (64,)),
 ])
-
-
-def can_frames(payload: bytes) -> np.ndarray:
-    """CanRx·CanTx 레코드 페이로드의 프레임들(잘린 레코드면 들어 있는 만큼)."""
-    count, _dropped = RECORDED_CAN_BATCH_HEAD.unpack_from(payload, 0)
-    count = min(count, (len(payload) - RECORDED_CAN_BATCH_HEAD.size) // RECORDED_CAN_FRAME.itemsize)
-    return np.frombuffer(payload, RECORDED_CAN_FRAME, count, RECORDED_CAN_BATCH_HEAD.size)
 
 # ModelState.flow_calibration: 광류 보정기의 상태, 각도는 rad. sd_*는 블록 중앙값들의 표준편차다.
 FLOW_CALIBRATION_STATE = np.dtype([
@@ -183,7 +175,6 @@ assert LEAD_FLOW_STATE.itemsize == 32
 
 # ModelState.lead_track: 모델 앞차 거리와 광류 확대율을 칼만 필터로 섞은 값
 # (model/lead_tracker). 비전 크루즈가 쓴다.
-LEAD_TRACK_FLOW_USED, LEAD_TRACK_FLOW_REJECTED, LEAD_TRACK_DISTANCE_REJECTED, LEAD_TRACK_STARTED = 1, 2, 4, 8
 LEAD_TRACK_STATE = np.dtype([
     ("valid", "<u4"), ("flags", "<u4"),
     ("distance_m", "<f4"),               # 카메라 기준, lead.x와 같다
@@ -216,8 +207,6 @@ MODEL_STATE = np.dtype([
     ("lead_flow", LEAD_FLOW_STATE), ("lead_track", LEAD_TRACK_STATE),
 ])
 assert MODEL_STATE.itemsize == 2648
-# 필드 이름 -> 페이로드 안의 바이트 위치(웹 콘솔 state_layout.py와 같은 값, check_recording_reader.py가 C++와 대조)
-MODEL_STATE_LAYOUT = {name: MODEL_STATE.fields[name][1] for name in MODEL_STATE.names}
 
 
 @dataclass
@@ -225,25 +214,21 @@ class SegmentInfo:
     path: Path
     width: int
     height: int
-    fps: int
-    segment_start_ns: int
     frames: np.ndarray  # FRAME_INDEX_RECORD 배열
 
 
 def read_segment_index(segment_dir: Path) -> SegmentInfo:
     data = (segment_dir / "frames.bin").read_bytes()
-    magic, version, header_size, record_size, width, height, fps = struct.unpack_from(
-        "<8sIIIIII", data, 0)
+    magic, version, header_size, record_size, width, height = struct.unpack_from("<8sIIIII", data, 0)
     if magic != FRAME_INDEX_MAGIC or version != RECORDING_VERSION:
         raise ValueError(f"{segment_dir}: frames.bin is {magic!r} v{version}, not v{RECORDING_VERSION}")
-    segment_start_ns, = struct.unpack_from("<Q", data, 32)
     if record_size != FRAME_INDEX_RECORD.itemsize:
         raise ValueError(f"{segment_dir}: index record size {record_size} != "
                          f"{FRAME_INDEX_RECORD.itemsize}")
     # 깔끔하지 않게 멈추면 파일이 레코드 중간에서 잘릴 수 있다. 온전한 레코드만 남긴다
     count = (len(data) - header_size) // FRAME_INDEX_RECORD.itemsize
     frames = np.frombuffer(data, FRAME_INDEX_RECORD, count=count, offset=header_size)
-    return SegmentInfo(segment_dir, width, height, fps, segment_start_ns, frames)
+    return SegmentInfo(segment_dir, width, height, frames)
 
 
 def segment_video(seg_dir: Path) -> Path | None:
@@ -263,11 +248,7 @@ def route_segments(route_dir: Path) -> list[SegmentInfo]:
         if not (seg_dir.is_dir() and (seg_dir / "frames.bin").exists()
                 and segment_video(seg_dir)):
             continue
-        try:
-            info = read_segment_index(seg_dir)
-        except (ValueError, struct.error) as error:
-            print(f"skipping {seg_dir}: {error}")
-            continue
+        info = read_segment_index(seg_dir)
         if len(info.frames):
             segs.append(info)
     return segs
@@ -404,23 +385,6 @@ def record_index(path: Path, data: bytes) -> np.ndarray:
         rows.append((ts, rtype, offset, size))
         offset += size
     return np.array(rows, RECORD_INDEX)
-
-
-@dataclass
-class EventRecord:
-    """이벤트 로그 레코드 하나. ``payload``는 청크를 복사 없이 가리키는 뷰다."""
-    timestamp_ns: int
-    type: int
-    payload: memoryview
-
-
-def iter_event_records(path: Path) -> Iterator[EventRecord]:
-    """이벤트 청크 하나의 레코드를 파일 순서대로 낸다(record_index가 멈추는 곳까지). 레코드의 payload(와 그 위의
-    frombuffer)는 청크 버퍼를 가리키는 뷰라, 오래 쥘 값은 복사한다: 뷰 하나가 청크 전체를 붙잡는다."""
-    data = path.read_bytes()
-    view = memoryview(data)
-    for ts, rtype, offset, size in record_index(path, data).tolist():
-        yield EventRecord(ts, rtype, view[offset:offset + size])
 
 
 # 고정 크기 상태 레코드: 타입 -> (dtype, 페이로드 크기). ControlState 페이로드는 C++ 꼬리 패딩만큼 dtype보다 길다.

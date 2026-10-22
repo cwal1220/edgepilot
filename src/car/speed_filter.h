@@ -10,7 +10,6 @@ public:
     // vEgoRaw(m/s)를 넣고 vEgo(m/s)를 돌려준다. 2 m/s 넘게 벌어지면 그 값에서 다시 시작한다(상류: 서 있지
     // 않은 채 시작해도 가속도가 튀지 않게). 휠 속도가 낡아 NaN이면 NaN이고, 다음 값에서 다시 시작한다.
     double update(double v_ego_raw);
-    double a_ego() const { return a_ego_; }
 
 private:
     // 정상 상태 칼만 이득(상류 get_kalman_gain)

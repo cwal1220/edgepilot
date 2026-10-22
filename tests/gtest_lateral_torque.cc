@@ -1,6 +1,7 @@
 // 토크 횡제어기(TorqueController, openpilot LatControlTorque 이식): 넘겨받은 조향 지연만큼의 요청
 // 버퍼, 속도별 비례 이득(KP_INTERP), 라이브 뱅크·latAccelOffset feedforward, 그리고 학습값 소비.
 // 실제 곡률은 opendbc calc_curvature의 독립 전사본과, 출력 구조는 상류의 횡가속 공간 PID와 대조한다.
+#include "car/car_specs.h"
 #include "controls/control_params.h"
 #include "controls/lateral_torque.h"
 
@@ -191,7 +192,7 @@ LiveLateralParams odd_live_params() {
 double upstream_measured_curvature(const SteeringParams &p, const LiveLateralParams &live, double angle_deg, double u) {
     const double civic_m = 1462.0, civic_l = 2.70, civic_af = civic_l * 0.4;
     const double civic_ar = civic_l - civic_af;
-    const double m = 1.0, l = p.wheelbase_m, af = p.center_to_front_m(), ar = l - af;
+    const double m = 1.0, l = kWheelbaseM, af = kCenterToFrontM, ar = l - af;
     const double tsf = p.tire_stiffness_factor, x = std::max<double>(live.stiffness_factor, 0.1);
     const double cf = 192150.0 * tsf / civic_m * (ar / l) / (civic_ar / civic_l) * x;
     const double cr = 202500.0 * tsf / civic_m * (af / l) / (civic_af / civic_l) * x;

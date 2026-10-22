@@ -103,78 +103,63 @@ struct Options {
 // 숫자 범위는 파라미터 로더와 같다(sad·kp·ki·laf).
 Options parse_options(int argc, char **argv) {
     Options o;
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        const auto value = [&]() -> const char * {
-            if (i + 1 >= argc) usage(argv[0]);
-            return argv[++i];
-        };
-        // 값이 숫자(목록)가 아니거나 범위 밖이면 사용법 오류
-        const auto check = [&](bool ok) {
-            if (ok) return;
-            std::fprintf(stderr, "bad value for %s: %s\n", arg.c_str(), argv[i]);
-            usage(argv[0]);
-        };
-        const auto number = [&](double lo, double hi) {
-            float v = 0.0f;
-            check(parse_float_arg(value(), &v, lo, hi));
-            return v;
-        };
-        const auto count = [&](int lo, int hi) {
-            int v = 0;
-            check(parse_int_arg(value(), &v, lo, hi));
-            return v;
-        };
-        if (arg == "--open-loop") {
+    ArgReader args(argc, argv);
+    const auto optional = [&](std::optional<float> *out, double lo, double hi) {
+        float v = 0.0f;
+        args.read(&v, lo, hi);
+        *out = v;
+    };
+    while (args.next()) {
+        if (args.is("--open-loop")) {
             o.open_loop = true;
-        } else if (arg == "--wn") {
-            o.wn = number(0.1, 1000.0);
-        } else if (arg == "--zeta") {
-            o.zeta = number(0.0, 100.0);
-        } else if (arg == "--delay") {
-            o.delay = count(0, 1000);
-        } else if (arg == "--gain") {
-            o.gain = number(0.0, 100.0);
-        } else if (arg == "--gain-pts") {
+        } else if (args.is("--wn")) {
+            args.read(&o.wn, 0.1, 1000.0);
+        } else if (args.is("--zeta")) {
+            args.read(&o.zeta, 0.0, 100.0);
+        } else if (args.is("--delay")) {
+            args.read(&o.delay, 0, 1000);
+        } else if (args.is("--gain")) {
+            optional(&o.gain, 0.0, 100.0);
+        } else if (args.is("--gain-pts")) {
             std::array<float, kGainNodes> pts{};
-            check(parse_float_list_arg(value(), pts.data(), kGainNodes));
+            args.read_list(pts.data(), kGainNodes);
             o.gain_pts = pts;
-        } else if (arg == "--sad") {
-            o.sad = number(0.01, 1.0);
-        } else if (arg == "--kp") {
-            o.kp = number(0.0, 10.0);
-        } else if (arg == "--ki") {
-            o.ki = number(0.0, 2.0);
-        } else if (arg == "--laf") {
-            o.laf = number(0.5, 5.0);
-        } else if (arg == "--driver-high") {
-            o.driver_high = count(0, 10000);
-        } else if (arg == "--driver-low") {
-            o.driver_low = count(0, 10000);
-        } else if (arg == "--driver-release") {
-            o.driver_release = count(0, 100000);
-        } else if (arg == "--steering") {
-            o.steering_path = value();
-        } else if (arg == "--torque") {
+        } else if (args.is("--sad")) {
+            optional(&o.sad, 0.01, 1.0);
+        } else if (args.is("--kp")) {
+            optional(&o.kp, 0.0, 10.0);
+        } else if (args.is("--ki")) {
+            optional(&o.ki, 0.0, 2.0);
+        } else if (args.is("--laf")) {
+            optional(&o.laf, 0.5, 5.0);
+        } else if (args.is("--driver-high")) {
+            args.read(&o.driver_high, 0, 10000);
+        } else if (args.is("--driver-low")) {
+            args.read(&o.driver_low, 0, 10000);
+        } else if (args.is("--driver-release")) {
+            args.read(&o.driver_release, 0, 100000);
+        } else if (args.is("--steering")) {
+            o.steering_path = args.value();
+        } else if (args.is("--torque")) {
             std::array<float, 3> torque{};
-            check(parse_float_list_arg(value(), torque.data(), 3));
+            args.read_list(torque.data(), 3);
             o.torque = torque;
-        } else if (arg == "--camera-shift") {
-            o.camera_shift = number(-kMaxDeviationY, kMaxDeviationY);
-        } else if (arg == "--lane-filter") {
-            o.lane_filter = number(0.0, 1.0);
-            check(*o.lane_filter > 0.0f);
-        } else if (arg == "--lateral-nn") {
-            o.lateral_nn = value();
-        } else if (arg == "--path-lag") {
-            o.path_lag = number(0.0, 1.0);
-        } else if (arg.rfind("--", 0) == 0) {
-            usage(argv[0]);
+        } else if (args.is("--camera-shift")) {
+            args.read(&o.camera_shift, -kMaxDeviationY, kMaxDeviationY);
+        } else if (args.is("--lane-filter")) {
+            optional(&o.lane_filter, 0.0, 1.0);
+            if (*o.lane_filter <= 0.0f) args.fail();
+        } else if (args.is("--lateral-nn")) {
+            o.lateral_nn = args.value();
+        } else if (args.is("--path-lag")) {
+            args.read(&o.path_lag, 0.0, 1.0);
+        } else if (args.is_option()) {
+            args.fail();
         } else {
-            o.positional.push_back(argv[i]);
+            o.positional.push_back(args.arg());
         }
     }
-    if (o.positional.size() < 2) usage(argv[0]);
+    if (args.error() || o.positional.size() < 2) usage(argv[0]);
     return o;
 }
 

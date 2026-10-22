@@ -1,6 +1,5 @@
 // 횡 플래너(LateralPlanner): laneless는 openpilot 메인의 get_curvature_from_plan과, 차선 변경은
-// 상류 desire_helper와 대조한다. path_offset_m의 적용 범위도 본다. MPC 자체의 최적성은
-// gtest_lateral_mpc가 본다.
+// 상류 desire_helper와 대조한다. MPC 자체의 최적성은 gtest_lateral_mpc가 본다.
 #include "car/vehicle_can.h"
 #include "common/ipc_messages.h"
 #include "common/model_output.h"
@@ -29,10 +28,9 @@ LateralPlannerInput steering_pushed_input(float v_ego) {
 }
 
 // laneless 모드는 openpilot 메인의 get_curvature_from_plan이다: 모델 plan의 yaw·yaw rate만 쓰고
-// plan 위치·경로 오프셋·MPC를 쓰지 않는다.
+// plan 위치·MPC를 쓰지 않는다.
 TEST(LateralPlanner, LanelessUsesPlanYawLikeUpstream) {
     SteeringParams steering;
-    steering.path_offset_m = -0.3f;
     steering.laneless_mode = true;
     LateralPlanner planner(steering);
     const float v = 20.0f;
@@ -55,7 +53,7 @@ TEST(LateralPlanner, LanelessUsesPlanYawLikeUpstream) {
     ASSERT_TRUE(turn.mpc_solution_valid);
     EXPECT_NEAR(lag_adjusted_curvature(turn, v, 0.0f, 0.34f), 0.002f, 1e-5f) << "일정 곡률 plan은 그 곡률";
     EXPECT_NEAR(lag_adjusted_curvature(turn, v, 0.1f, 0.34f), 0.002f, 1e-5f) << "plan 나이와 무관";
-    // yaw가 0이면 plan이 옆으로 0.5 m 떨어져 있고 오프셋이 −0.3이어도 목표는 직진이다
+    // yaw가 0이면 plan이 옆으로 0.5 m 떨어져 있어도 목표는 직진이다
     LateralTarget straight = planner.update(model_for(0.0f, 0.5f), vehicle, steering_input(v));
     EXPECT_NEAR(lag_adjusted_curvature(straight, v, 0.05f, 0.34f), 0.0f, 1e-7f)
         << "위치와 경로 오프셋은 laneless 곡률에 들어가지 않는다";
@@ -136,37 +134,6 @@ TEST(LateralPlanner, SlowBlinkerGivesNoDesire) {
     vehicle.driver_torque = 0;
     EXPECT_EQ(changing.update(ms, vehicle, steering_input(25.0f / 3.6f)).desire, Desire::LaneChangeLeft)
         << "시작한 변경은 감속해도 이어진다";
-}
-
-// path_offset_m은 차선 중심에만 적용된다. 차선이 없어 모델 경로로 넘어가면(교차로) 적용하지
-// 않는다: 차 기준인 모델 경로에 더하면 위치 고정점 없이 차가 오프셋 쪽으로 계속 밀린다.
-TEST(LateralPlanner, PathOffsetOnlyShiftsLanePath) {
-    SteeringParams steering;
-    steering.path_offset_m = -0.3f;
-    LateralPlanner planner(steering);
-    const float v = 15.0f;
-    auto model_for = [&](float lane_prob) {
-        ModelState ms{};
-        ms.valid = 1;
-        for (int i = 0; i < kTrajectorySize; ++i) {
-            const float t = model_t_idx(i);
-            ms.plan[i] = {v * t, 0.0f, 0.0f};
-            ms.lanes[1][i] = {-1.75f, 0.0f};
-            ms.lanes[2][i] = {1.75f, 0.0f};
-        }
-        ms.lane_probabilities[1] = ms.lane_probabilities[2] = lane_prob;
-        ms.lane_stds[1] = ms.lane_stds[2] = 0.05f;
-        ms.desire_state[0] = 1.0f;
-        return ms;
-    };
-    VehicleCanState vehicle{};
-    LateralTarget r;
-    for (int i = 0; i < 100; ++i) r = planner.update(model_for(0.99f), vehicle, steering_input(v));
-    ASSERT_FALSE(r.laneless_mode);
-    EXPECT_NEAR(r.target_y_m, -0.3f, 0.03f) << "차선이 보이면 차선 중심에서 오프셋만큼";
-    for (int i = 0; i < 100; ++i) r = planner.update(model_for(0.0f), vehicle, steering_input(v));
-    ASSERT_TRUE(r.laneless_mode);
-    EXPECT_NEAR(r.target_y_m, 0.0f, 0.01f) << "모델 경로로 넘어가면 오프셋을 더하지 않는다";
 }
 
 // Lane 모드에서 차선이 안 보이면(교차로) laneless 모드와 같은 openpilot 메인 계산으로 목표를 낸다:

@@ -21,9 +21,6 @@ public:
     // 디코딩된 프레임이 있으면 dst_phys(width x height NV12 CMM)에 복사하고 그 pts를
     // *pts에 넣는다. 없으면(timeout) false.
     bool receive_to(unsigned long long dst_phys, uint64_t *pts, int timeout_ms);
-    // receive_to와 같되 Y 평면만 CPU로 dst(행 간격 dst_stride)에 복사한다. IVPS를 쓰지 않으므로 edgepilot이
-    // 도는 중에도 된다(그때는 camerad·overlayd·recordd가 TDP/VPP를 쥐고 있어 receive_to가 실패한다).
-    bool receive_luma(uint8_t *dst, int dst_stride, uint64_t *pts, int timeout_ms);
 
 private:
     struct Impl;

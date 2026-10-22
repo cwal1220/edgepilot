@@ -34,10 +34,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import recording_reader as rr  # noqa: E402
-from model_warp import WarpPair, maixcam2_intrinsics  # noqa: E402
+from model_warp import WarpPair  # noqa: E402
 
-# src/common/app_config.h: MaixCAM2 1920x1080 내부 파라미터를 1280x720 AI 스트림에 맞춰 스케일했다
-INTRINSICS = maixcam2_intrinsics(1280, 720)
 FEAT = 1064
 TENSORS = ("input_imgs", "big_input_imgs", "desire", "features_buffer", "traffic_convention")
 
@@ -71,7 +69,7 @@ def run_stream(sess, route_dir: Path, seg_dirs: list[Path]):
     t0 = segments[0].frames["capture_timestamp_ns"][0] * 1e-9 - t_first
     t1 = segments[-1].frames["capture_timestamp_ns"][-1] * 1e-9 - t_first
     sel = (m_t - t_first >= t0 - 30) & (m_t - t_first <= t1)
-    warp = WarpPair(1280, 720, INTRINSICS)
+    warp = WarpPair(1280, 720)
     offset, height = np.median(mount_all[sel], axis=0)
     warp.set_calibration(np.median(rpy_all[sel], axis=0), offset, height)
     zero = np.zeros((6, 128, 256), np.uint8)

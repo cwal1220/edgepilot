@@ -4,7 +4,7 @@
 #  - MaixCDK 헤더: libmaixcam_lib의 C++ 인터페이스 ax_middleware.hpp와 그것이 쓰는
 #    maix_basic/maix_image 헤더, OS04D10을 아는 MSP 샘플 공통 소스 (커밋 고정)
 #  - 보드에서(ABI를 맞추려고 그대로): /opt/lib(AX 런타임: ax_engine·ax_sys·ax_ivps…),
-#    /usr/lib/libmaixcam_lib.so.1.2.5, libsamplerate, OpenCV 4.11 헤더와 core/imgproc/imgcodecs
+#    /usr/lib/libmaixcam_lib.so.1.2.5, libsamplerate
 # 사용: scripts/fetch_maixcam2_sdk.sh root@<보드 IP>   (또는 EDGEPILOT_BOARD=root@<보드 IP>)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -17,7 +17,7 @@ DEPS=deps/ax630
 MSP_VER=v3.0.0_20250319114413
 MSP_SHA=20ab34bded456d8328b825bb2cc842937651596ea43f7075de95be7ced9a953d
 MAIXCDK_COMMIT=30f4b8b
-mkdir -p "$DEPS/maix" "$DEPS/lib" "$DEPS/include" "$DEPS/opencv_lib"
+mkdir -p "$DEPS/maix" "$DEPS/lib"
 
 if [ ! -d "$DEPS/maixcam2_msp" ]; then
   tarball="$DEPS/maixcam2_msp_${MSP_VER}.tar.xz"
@@ -38,8 +38,4 @@ rsync -aL "$BOARD:/usr/lib/aarch64-linux-gnu/libsamplerate.so.0" "$DEPS/maix/" 2
   rsync -aL "$BOARD:/usr/lib/libsamplerate.so.0" "$DEPS/maix/"
 ln -sf libsamplerate.so.0 "$DEPS/maix/libsamplerate.so"
 rsync -a "$BOARD:/opt/lib/" "$DEPS/lib/"
-rsync -a "$BOARD:/usr/include/opencv4" "$DEPS/include/"
-for module in core imgproc imgcodecs; do
-  rsync -a "$BOARD:/usr/lib/libopencv_${module}.so*" "$DEPS/opencv_lib/"
-done
 echo "maixcam2 media deps ready in $DEPS"

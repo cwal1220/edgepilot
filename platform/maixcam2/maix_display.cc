@@ -224,10 +224,9 @@ bool MaixDisplay::show_video_phys(unsigned long long phys, int width, int height
     }
     Frame out(impl_->dst_pool, kWidth, kHeight, nullptr, 0, AX_FORMAT_YUV420_SEMIPLANAR);
     AX_VIDEO_FRAME_T src = nv12_frame(phys, width, height), dst = {};
-    if (!letterbox_) center_crop(&src, width, height);
+    center_crop(&src, width, height);
     out.get_video_frame(&dst);
     AX_IVPS_CROP_RESIZE_ATTR_T attr = stretch_resize();
-    if (letterbox_) attr.tAspectRatio.eMode = AX_IVPS_ASPECT_RATIO_AUTO;
     attr.tAspectRatio.eAligns[0] = AX_IVPS_ASPECT_RATIO_HORIZONTAL_CENTER;
     attr.tAspectRatio.eAligns[1] = AX_IVPS_ASPECT_RATIO_VERTICAL_CENTER;
     attr.tAspectRatio.nBgColor = 0x000000;

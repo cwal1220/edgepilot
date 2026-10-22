@@ -1,6 +1,7 @@
 #include "learners/vehicle_params_learner.h"
 
 #include "car/can_frame.h"
+#include "car/car_specs.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,15 +16,6 @@ namespace {
 constexpr double kGravity = 9.81;
 double rad(double deg) { return deg * kPi / 180.0; }
 double deg(double r) { return r * 180.0 / kPi; }
-
-// opendbc VehicleDynamicsParams(Civic 기준 스케일). 관성과 강성은 이 기준 질량(1326 kg + 짐 136 kg)으로 나눈 값이다.
-constexpr double kCivicMass = 1462.0;
-constexpr double kCivicWheelbase = 2.70;
-constexpr double kCivicCenterToFront = kCivicWheelbase * 0.4;
-constexpr double kCivicCenterToRear = kCivicWheelbase - kCivicCenterToFront;
-constexpr double kCivicInertia = 2500.0;
-constexpr double kCivicStiffnessFront = 192150.0;
-constexpr double kCivicStiffnessRear = 202500.0;
 
 // paramsd.py
 constexpr double kMaxAngleOffsetDelta = 20.0 * kDtMdl;  // deg/출력
@@ -77,10 +69,9 @@ CarKalman::Globals CarKalman::globals_from(const VehicleModelConstants &c) {
     g.center_to_rear = l - c.center_to_front_m;
     // opendbc scale_rot_inertia_per_mass, scale_tire_stiffness_per_mass
     g.inertia = kCivicInertia * l * l / (kCivicMass * kCivicWheelbase * kCivicWheelbase);
-    g.stiffness_front = kCivicStiffnessFront * c.tire_stiffness_factor / kCivicMass * (g.center_to_rear / l) /
-                        (kCivicCenterToRear / kCivicWheelbase);
-    g.stiffness_rear = kCivicStiffnessRear * c.tire_stiffness_factor / kCivicMass * (g.center_to_front / l) /
-                       (kCivicCenterToFront / kCivicWheelbase);
+    const auto stiffness = scale_tire_stiffness_per_mass(l, c.center_to_front_m, c.tire_stiffness_factor);
+    g.stiffness_front = stiffness.first;
+    g.stiffness_rear = stiffness.second;
     return g;
 }
 

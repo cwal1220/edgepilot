@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <stdexcept>
 
@@ -59,15 +58,6 @@ AX_IVE_MEM_INFO_T mem(const Buf &b) {
 }
 // 블록 안의 offset부터 size 바이트
 Buf part(const Buf &b, size_t offset, size_t size) { return Buf{b.phys + offset, b.virt + offset, size}; }
-AX_IVE_DATA_T data(AX_U64 phys, uint8_t *virt, int w, int h, int stride) {
-    AX_IVE_DATA_T d = {};
-    d.u64PhyAddr = phys;
-    d.u64VirAddr = reinterpret_cast<uintptr_t>(virt);
-    d.u32Stride = static_cast<AX_U32>(stride);
-    d.u32Width = static_cast<AX_U32>(w);
-    d.u32Height = static_cast<AX_U32>(h);
-    return d;
-}
 
 // 작업 하나를 넣고 끝날 때까지 기다린다. 블록 질의는 작업이 길면 몇 ms 뒤 시간 초과를 내므로 다시 묻는다
 // (AX_ERR_IVE_QUERY_TIMEOUT은 열거값 0x54가 아니라 AX_DEF_ERR로 다시 정의된 전체 코드다).
@@ -92,14 +82,11 @@ constexpr float kQ20 = 1048576.0f;
 struct IveFlow::Impl {
     struct Frame {
         AX_U64 l0_phys = 0;  // 원본 단: 호출자의 Y 평면(링 슬롯)을 복사하지 않고 그대로 읽는다
-        int l0_stride = 0;
         Buf level[kLevels];  // 1단부터. VPP가 NV12로 내므로 UV까지 잡는다
     };
     int w = 0, h = 0;
     Frame frames[2];
-    int cur = 0;      // 현재 프레임 자리(push가 바꾼다), 이전 프레임은 1 - cur
-    bool vpp = true;  // 축소 단을 VPP로 만든다(실패하면 IVE로 물러나 그대로 간다)
-    Buf blur;         // IVE 축소 단의 가우시안 결과(IVE로 물러날 때 잡는다)
+    int cur = 0;  // 현재 프레임 자리(push가 바꾼다), 이전 프레임은 1 - cur
     Buf gx, gy, resp, corners;
     Buf pts;  // LK 시작점(캐시 없음)
     // LK 출력 한 블록: 끝점(PointQ) kMaxPoints개, 이어서 128바이트 경계에서 상태 kMaxPoints바이트. invalidate가 한
@@ -107,7 +94,6 @@ struct IveFlow::Impl {
     static constexpr size_t kNextBytes = kMaxPoints * sizeof(PointQ);
     static constexpr size_t kStatusOffset = (kNextBytes + 127) / 128 * 128;
     Buf lk_out;
-    AX_IVE_FILTER_CTRL_T gauss{};
     AX_IVE_SOBEL_CTRL_T sobel_x{}, sobel_y{};
     AX_IVE_LK_OPTICAL_FLOW_PYR_CTRL_T lk{};
     bool ive = false;
@@ -115,13 +101,13 @@ struct IveFlow::Impl {
     ~Impl() {
         for (Frame &f : frames)
             for (Buf &b : f.level) free_buf(b);
-        for (Buf *b : {&blur, &gx, &gy, &resp, &corners, &pts, &lk_out}) free_buf(*b);
+        for (Buf *b : {&gx, &gy, &resp, &corners, &pts, &lk_out}) free_buf(*b);
         if (ive) AX_IVE_Exit();
     }
 
     // 축소 단을 VPP 한 번으로(원본에서 1/2, 1/4를 함께) 만든다. modeld는 GDC 워프 때문에 AX_IVPS_Init으로
     // TDP·VPP 작업 큐 한 쌍(보드 전체에 넷)을 이미 쥐고 있지만 쓰지는 않았다.
-    AX_S32 pyramid_vpp(Frame &f) {
+    AX_S32 pyramid(Frame &f) {
         AX_VIDEO_FRAME_T src = nv12_frame(f.l0_phys, w, h);  // 링 슬롯(행 간격 = 폭)
         AX_VIDEO_FRAME_T dst[kLevels - 1];
         AX_IVPS_RECT_T box[kLevels - 1];
@@ -133,39 +119,6 @@ struct IveFlow::Impl {
         }
         AX_IVPS_CROP_RESIZE_ATTR_T attr = stretch_resize();
         return AX_IVPS_CropResizeV2Vpp(&src, kLevels - 1, box, dst, &attr);
-    }
-
-    // VPP를 못 쓸 때: IVE 5x5 가우시안 + 두 화소·두 행마다 하나(원본 단은 호출자 버퍼에서 바로 읽는다)
-    bool pyramid_ive(Frame &f) {
-        if (!blur.virt) blur = alloc_buf(static_cast<size_t>(w) * h);
-        for (int l = 1; l < kLevels; ++l) {
-            const int sw = w >> (l - 1), sh = h >> (l - 1);
-            const AX_U64 src_phys = l == 1 ? f.l0_phys : f.level[l - 1].phys;
-            const int src_stride = l == 1 ? f.l0_stride : sw;
-            AX_IVE_IMAGE_T src = image(src_phys, nullptr, sw, sh, src_stride, AX_IVE_IMAGE_TYPE_U8C1);
-            AX_IVE_IMAGE_T dst = image(blur.phys, blur.virt, sw, sh, sw, AX_IVE_IMAGE_TYPE_U8C1);
-            if (!run([&](AX_IVE_HANDLE *hd) { return AX_IVE_Filter(hd, &src, &dst, &gauss, AX_FALSE); })) return false;
-            AX_IVE_DATA_T ds = data(blur.phys, blur.virt, sw, sh, sw);
-            AX_IVE_DATA_T dd = data(f.level[l].phys, f.level[l].virt, sw / 2, sh / 2, sw / 2);
-            AX_IVE_DMA_CTRL_T dc = {};
-            dc.enMode = AX_IVE_DMA_MODE_INTERVAL_COPY;  // 두 화소·두 행마다 하나
-            dc.u8HorSegSize = 2;
-            dc.u8ElemSize = 1;
-            dc.u8VerSegRows = 2;
-            if (!run([&](AX_IVE_HANDLE *hd) { return AX_IVE_DMA(hd, &ds, &dd, &dc, AX_FALSE); })) return false;
-        }
-        return true;
-    }
-
-    bool pyramid(Frame &f) {
-        if (vpp) {
-            const AX_S32 r = pyramid_vpp(f);
-            if (r == 0) return true;
-            // 처음 실패하면 IVE로 물러난다(다시 오르지는 않는다)
-            std::fprintf(stderr, "ive_flow: VPP pyramid failed 0x%x, falling back to IVE\n", static_cast<unsigned>(r));
-            vpp = false;
-        }
-        return pyramid_ive(f);
     }
 };
 
@@ -186,10 +139,6 @@ IveFlow::IveFlow(int width, int height) : impl_(new Impl), width_(width) {
     m.pts = alloc_buf(kMaxPoints * sizeof(PointQ), false);
     m.lk_out = alloc_buf(Impl::kStatusOffset + kMaxPoints);
 
-    // 5x5 [1 4 6 4 1]² / 256 가우시안(Q10): OpenCV pyrDown과 같은 핵
-    const int k[5] = {1, 4, 6, 4, 1};
-    for (int r = 0; r < 5; ++r)
-        for (int c = 0; c < 5; ++c) m.gauss.as8q10Mask[r * 5 + c] = k[r] * k[c] * 4;
     // 3x3 Sobel / 8(화소 단위): 코너 응답이 대부분 S16 안에 든다
     const int s[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
     for (int r = 0; r < 3; ++r)
@@ -213,18 +162,15 @@ IveFlow::IveFlow(int width, int height) : impl_(new Impl), width_(width) {
 
 IveFlow::~IveFlow() = default;
 
-bool IveFlow::push(unsigned long long y_phys, int stride) {
+bool IveFlow::push(unsigned long long y_phys) {
     Impl &m = *impl_;
     const int next = 1 - m.cur;
     Impl::Frame &f = m.frames[next];
     f.l0_phys = y_phys;
-    f.l0_stride = stride;
-    if (!m.pyramid(f)) return false;
+    if (m.pyramid(f) != 0) return false;
     m.cur = next;
     return true;
 }
-
-const char *IveFlow::pyramid_engine() const { return impl_->vpp ? "vpp" : "ive"; }
 
 // FlowTracker는 push가 된 뒤에만 부른다
 const int16_t *IveFlow::corner_response() {
@@ -263,8 +209,8 @@ bool IveFlow::track(const float *xy, int n, float *out_xy, uint8_t *ok, bool bac
     const int from = backward ? m.cur : 1 - m.cur;  // 점이 있는 프레임(앞으로면 이전, 거꾸로면 현재)
     const Impl::Frame &prev = m.frames[from], &next = m.frames[1 - from];
     AX_IVE_SRC_IMAGE_T a[kLevels], b[kLevels];
-    a[0] = image(prev.l0_phys, nullptr, m.w, m.h, prev.l0_stride, AX_IVE_IMAGE_TYPE_U8C1);
-    b[0] = image(next.l0_phys, nullptr, m.w, m.h, next.l0_stride, AX_IVE_IMAGE_TYPE_U8C1);
+    a[0] = image(prev.l0_phys, nullptr, m.w, m.h, m.w, AX_IVE_IMAGE_TYPE_U8C1);
+    b[0] = image(next.l0_phys, nullptr, m.w, m.h, m.w, AX_IVE_IMAGE_TYPE_U8C1);
     for (int l = 1; l < kLevels; ++l) {
         const int lw = m.w >> l, lh = m.h >> l;
         a[l] = image(prev.level[l].phys, prev.level[l].virt, lw, lh, lw, AX_IVE_IMAGE_TYPE_U8C1);

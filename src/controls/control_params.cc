@@ -5,8 +5,6 @@
 #include <cstdio>
 #include <utility>
 
-float SteeringParams::center_to_front_m() const { return wheelbase_m * center_to_front_ratio; }
-
 namespace {
 
 constexpr JsonBoolField<SteeringParams> kSteeringBools[] = {
@@ -37,9 +35,6 @@ constexpr JsonFloatField<SteeringParams> kSteeringFloats[] = {
     {"avoid_lkas_fault_hold_angle_deg", 0.0f, 84.0f, &SteeringParams::avoid_lkas_fault_hold_angle_deg},
     {"angle_offset_deg", -10.0f, 10.0f, &SteeringParams::angle_offset_deg},
     {"torque_lat_accel_offset", -1.0f, 1.0f, &SteeringParams::torque_lat_accel_offset},
-    {"wheelbase_m", 2.0f, 3.5f, &SteeringParams::wheelbase_m},
-    {"center_to_front_ratio", 0.2f, 0.7f, &SteeringParams::center_to_front_ratio},
-    {"path_offset_m", -1.0f, 1.0f, &SteeringParams::path_offset_m},
     {"lane_path_weight", 0.5f, 10.0f, &SteeringParams::lane_path_weight},
     {"min_steer_speed_mps", 0.0f, 5.0f, &SteeringParams::min_steer_speed_mps},
     {"lane_change_min_speed_kph", 0.0f, 80.0f, &SteeringParams::lane_change_min_speed_kph},
@@ -89,9 +84,9 @@ bool load_control_params(const ControlParamPaths &paths, ControlParams *params, 
 
 std::string control_params_summary(const ControlParams &params) {
     char text[160];
-    std::snprintf(text, sizeof(text), "mdpsSpoof=%.1fkph adaptiveCruise=%u gap=%.1fm/%.1fs decel=%.1fkph/s",
-                  params.steering.mdps_speed_spoof_kph, params.cruise.enabled ? 1U : 0U, params.cruise.standstill_gap_m,
-                  params.cruise.following_time_s, params.cruise.deceleration_rate_kph_per_s);
+    std::snprintf(text, sizeof(text), "adaptiveCruise=%u gap=%.1fm/%.1fs decel=%.1fkph/s",
+                  params.cruise.enabled ? 1U : 0U, params.cruise.standstill_gap_m, params.cruise.following_time_s,
+                  params.cruise.deceleration_rate_kph_per_s);
     return text;
 }
 

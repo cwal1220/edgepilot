@@ -29,7 +29,7 @@ TEST(K7Can, LkasFramesMatchOpendbc) {
         command.right_lane_depart = g.right_lane_depart;
         command.lkas_msg_count = g.lkas_msg_count;
         const std::vector<CanFrame> frames =
-            build_lateral_can_frames(decode_lkas11(g.seed), HyundaiClu11Values{}, {}, command, 60.0f, false, false, 0);
+            build_lateral_can_frames(decode_lkas11(g.seed), HyundaiClu11Values{}, {}, command, false, false, 0);
         ASSERT_GE(frames.size(), 2u);
         for (int bus = 0; bus < 2; ++bus) {
             EXPECT_EQ(frames[bus].address, kHyundaiLkas11Address);
@@ -48,7 +48,7 @@ TEST(K7Can, Clu11AndMdps12MatchOpendbc) {
     }
     for (const Mdps12Golden &g : kMdps12Golden) {
         const std::vector<CanFrame> frames = build_lateral_can_frames(
-            HyundaiLkas11Values{}, HyundaiClu11Values{}, g.seed, HyundaiLkasCommand{}, 60.0f, false, false, g.frame);
+            HyundaiLkas11Values{}, HyundaiClu11Values{}, g.seed, HyundaiLkasCommand{}, false, false, g.frame);
         EXPECT_EQ(frames.back().address, kHyundaiMdps12Address);
         EXPECT_EQ(frames.back().data, g.expected) << "프레임 " << g.frame;
     }
@@ -103,7 +103,7 @@ TEST(K7Can, MdpsSpeedSpoof) {
     const std::array<uint8_t, 8> mdps12_seed{};
     HyundaiLkasCommand command;
     command.steer_req = true;
-    const auto frames = build_lateral_can_frames(lkas, clu, mdps12_seed, command, 60.0f, true, false, 1);
+    const auto frames = build_lateral_can_frames(lkas, clu, mdps12_seed, command, true, false, 1);
     ASSERT_EQ(frames.size(), 4) << "홀수 프레임: LKAS11 두 개, MDPS용 CLU11, MDPS12";
     ASSERT_EQ(frames[0].address, kHyundaiLkas11Address);
     ASSERT_EQ(frames[0].bus, kPowertrainBus);
@@ -119,12 +119,8 @@ TEST(K7Can, MdpsSpeedSpoof) {
     ASSERT_EQ(frames[2].bus, kMdpsBus);
     ASSERT_NEAR(decoded.speed, 60.0f, 0.001f) << "MDPS용 CLU11 속도는 60 km/h로 바꿔 보낸다";
     ASSERT_NEAR(decoded.speed_decimal, 0.375f, 0.001f) << "MDPS용 CLU11의 소수부는 그대로 둔다";
-    ASSERT_EQ(build_lateral_can_frames(lkas, clu, mdps12_seed, command, 60.0f, true, false, 2).size(), 3)
+    ASSERT_EQ(build_lateral_can_frames(lkas, clu, mdps12_seed, command, true, false, 2).size(), 3)
         << "짝수 프레임에는 MDPS용 CLU11이 없다";
-
-    const auto custom_frames = build_lateral_can_frames(lkas, clu, mdps12_seed, command, 72.0f, true, false, 1);
-    std::copy_n(custom_frames[2].data.begin(), bytes.size(), bytes.begin());
-    ASSERT_NEAR(decode_clu11(bytes).speed, 72.0f, 0.001f) << "설정한 MDPS 속도로 바꿔 보낸다";
 }
 
 TEST(K7Can, WhlSpd11) {
@@ -248,21 +244,20 @@ TEST(SpeedFilter, MatchesUpstreamKalman) {
     };
     struct Expected {
         int t;
-        double v, a;
+        double v;
     };
-    const Expected expected[] = {{0, 10.0, 0.0},
-                                 {49, 10.0, 0.0},
-                                 {50, 9.994778188325945, -0.049777691948353464},
-                                 {60, 10.163186164791778, 1.1099879378996782},
-                                 {100, 11.03736443927332, 1.95609838693478},
-                                 {149, 12.024550996758542, 2.0456818688001057},
-                                 {150, 15.0, 0.0}};
+    const Expected expected[] = {{0, 10.0},
+                                 {49, 10.0},
+                                 {50, 9.994778188325945},
+                                 {60, 10.163186164791778},
+                                 {100, 11.03736443927332},
+                                 {149, 12.024550996758542},
+                                 {150, 15.0}};
     size_t next = 0;
     for (int t = 0; t <= 150; ++t) {
         const double v = filter.update(raw_at(t));
         if (next < std::size(expected) && expected[next].t == t) {
             EXPECT_NEAR(v, expected[next].v, 1e-9) << t;
-            EXPECT_NEAR(filter.a_ego(), expected[next].a, 1e-9) << t;
             ++next;
         }
     }
@@ -275,7 +270,7 @@ TEST(SpeedFilter, StaleSpeedRestarts) {
     for (int i = 0; i < 20; ++i) filter.update(10.0 + 0.02 * i);
     ASSERT_TRUE(std::isnan(filter.update(std::nan(""))));
     ASSERT_DOUBLE_EQ(filter.update(10.2), 10.2) << "가까운 값이라도 끊긴 뒤에는 새로 시작한다";
-    ASSERT_NEAR(filter.a_ego(), 0.0, 1e-12);
+    ASSERT_DOUBLE_EQ(filter.update(10.2), 10.2) << "가속도도 0에서 다시 시작해 그대로다";
 }
 
 TEST(K7Can, Ahb1BrakeLights) {

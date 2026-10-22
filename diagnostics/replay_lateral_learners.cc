@@ -40,40 +40,35 @@
 int main(int argc, char **argv) {
     std::string outputs_path, torque_outputs_path, torque_cache_path;
     std::string steering_path, vehicle_json_path;
-    bool usage_error = false;
     std::string source = "steering";
-    size_t metric_from_file = 0;  // 곡률 대조를 이 번호 파일부터만 센다(앞 파일은 학습 수렴용)
+    long metric_from_file = 0;  // 곡률 대조를 이 번호 파일부터만 센다(앞 파일은 학습 수렴용)
     VehicleParamsOptions options;
     std::vector<std::string> events;
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        if (arg == "--metric-from" && i + 1 < argc) {
-            long n = 0;
-            usage_error |= !parse_long_arg(argv[++i], &n, 0);
-            metric_from_file = static_cast<size_t>(n);
-            continue;
-        }
-        if (arg == "--upstream-schedule")
+    ArgReader args(argc, argv);
+    while (args.next()) {
+        if (args.is("--metric-from"))
+            args.read(&metric_from_file, 0);
+        else if (args.is("--upstream-schedule"))
             options.car_state_every_tick = false;
-        else if (arg == "--outputs" && i + 1 < argc)
-            outputs_path = argv[++i];
-        else if (arg == "--torque-outputs" && i + 1 < argc)
-            torque_outputs_path = argv[++i];
-        else if (arg == "--torque-cache" && i + 1 < argc)
-            torque_cache_path = argv[++i];
-        else if (arg == "--steering" && i + 1 < argc)
-            steering_path = argv[++i];
-        else if (arg == "--vehicle-json" && i + 1 < argc)
-            vehicle_json_path = argv[++i];
-        else if (arg == "--source" && i + 1 < argc)
-            source = argv[++i];
-        else if (arg.rfind("--", 0) == 0)
-            usage_error = true;
+        else if (args.is("--outputs"))
+            outputs_path = args.value();
+        else if (args.is("--torque-outputs"))
+            torque_outputs_path = args.value();
+        else if (args.is("--torque-cache"))
+            torque_cache_path = args.value();
+        else if (args.is("--steering"))
+            steering_path = args.value();
+        else if (args.is("--vehicle-json"))
+            vehicle_json_path = args.value();
+        else if (args.is("--source"))
+            source = args.value();
+        else if (args.is_option())
+            args.fail();
         else
-            events.push_back(arg);
+            events.push_back(args.arg());
     }
-    if (source != "steering" && source != "locationd" && source != "esp") usage_error = true;
-    if (events.empty() || usage_error) {
+    if (source != "steering" && source != "locationd" && source != "esp") args.fail();
+    if (events.empty() || args.error()) {
         std::fprintf(stderr,
                      "usage: %s [--upstream-schedule] [--outputs out.csv] [--torque-outputs tout.csv] "
                      "[--torque-cache c.bin] "
@@ -132,7 +127,7 @@ int main(int argc, char **argv) {
     RouteEvents route_events(events);
     TimeOrderedEvents::Record record;
     while (route_events.next(&record)) {
-        const bool count_metric = record.file >= metric_from_file;
+        const bool count_metric = record.file >= static_cast<size_t>(metric_from_file);
         const EventRecordHeader &rh = record.header;
         const RecordType type = record_type(rh);
         const std::vector<char> &buf = record.payload;
@@ -166,8 +161,7 @@ int main(int argc, char **argv) {
         }
         // controlsd처럼 컨트롤러가 거른 vEgo를 준다(상류 carState.vEgo)
         const double v_ego = speed_filter.update(vehicle_speed_kph(vehicle, now_s, kVehicleStateTimeoutS) / 3.6);
-        // 녹화에는 latActive가 없다: 큰 조향각에서 요청을 끈 동안과 MDPS 일시 고장을 빼고 active로 어림한다
-        const bool lat_active = cs.active != 0 && (cs.hud_flags & kHudFlagSteerPaused) == 0 && cs.steering_fault == 0;
+        const bool lat_active = recorded_lat_active(cs);
         // 신선도도 컨트롤러와 같은 판정이다(LateralControlOutput::vehicle_fresh·esp12_fresh)
         learners.update(vehicle, now_s, vehicle_state_fresh(vehicle, now_s, kVehicleStateTimeoutS),
                         signal_time_fresh(vehicle.esp12_time_s, now_s, kVehicleStateTimeoutS), v_ego, lat_active,

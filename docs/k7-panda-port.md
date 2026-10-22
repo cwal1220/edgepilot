@@ -167,35 +167,13 @@ Build and upload as in [Build and deploy](build-and-deploy.md). The build
 container installs `libusb-1.0-0-dev`; the board needs the `libusb-1.0` runtime
 library for `pandad`.
 
-## Offline validation
-
-Export one 60 s chunk of a continuous drive (a `recordd` route) to an
-`EDGECAN1` fixture and replay it through the controller.
-[Host tests](../tests/README.md#modes-with-an-argument) explains why a parked
-chunk fails.
-
-```sh
-python3 tools/control/export_can_fixture.py <route>/events/003.bin drive.can
-./build-host/bin/gtest_lateral_controller drive.can
-```
-
-The exporter keeps only the frames the car sent, as `controlsd` reads them: it
-leaves out the Panda's echoes of edgepilot's own frames, CAN FD lengths and
-virtual buses, since the fixture has no flags to tell them apart. The
-60.001 s K7 YG HEV fixture held 43,273 CAN records with the echoes, before
-2026-10-19. The expected result
-is 5,970 messages each for bus-0 `LKAS11`, bus-1 `LKAS11` and bus-2 `MDPS12`,
-plus 2,985 bus-1 `CLU11` messages. The replay also checks frame lengths, active
-ticks, torque bounds, and the desired curvature against the openpilot
-reference.
-
 ## Shadow run
 
 The steps from the host to the first transmission:
 
 ```mermaid
 flowchart TB
-    offline["1. offline replay<br>CAN fixture"] --> shadow["2. shadow run<br>TX 0, nooutput"]
+    offline["1. offline replay<br>replay_controls"] --> shadow["2. shadow run<br>TX 0, nooutput"]
     shadow --> checks["3. check the logs<br>RX, ignition,<br>safety, CAN,<br>errors"]
     checks --> confirm["4. confirm the K7<br>fingerprint<br>Panda health"]
     confirm --> tx["5. TX test<br>closed course<br>hyundaiCommunity"]
@@ -273,7 +251,7 @@ reports the Panda connected and healthy, TX on, no lost heartbeat, safety mode
 - [Runtime](runtime.md): how the manager starts `pandad` and `controlsd`
 - [Runtime options](runtime-options.md): the environment variables used above
 - [Parameters](../params/README.md): the K7 parameter files
-- [Host tests](../tests/README.md): the CAN fixture replay in
-  `gtest_lateral_controller`
+- [Diagnostics](diagnostics.md#control-tick-replay): `replay_controls`, the
+  offline replay of a recorded drive through the controller
 - [Departure alerts](departure-alerts.md): the alerts at a stop, which read
   the CGW1 blinkers

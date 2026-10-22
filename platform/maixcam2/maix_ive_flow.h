@@ -14,8 +14,7 @@
 //  - AX_IVE_Query(block)는 작업이 안 끝났어도 몇 ms 뒤 AX_ERR_IVE_QUERY_TIMEOUT(0x80150054)을 낸다.
 //    그러면 다시 묻는다. 묻지 않고 넘어가면 다음 작업들이 줄줄이 실패한다.
 //  - IVPS 동기 API는 AX_IVPS_Init을 부른 프로세스마다 TDP·VPP 작업 큐를 한 쌍씩 잡는데 보드 전체에
-//    넷뿐이다(camerad·modeld·recordd·overlayd가 다 쓴다). 다섯째 프로세스(도구)는 BUSY라서, VPP가
-//    실패하면 IVE Filter(5x5 가우시안) + DMA 간격 복사로 물러난다(docs/flow-calibration.md).
+//    넷뿐이다(camerad·modeld·recordd·overlayd가 다 쓴다). 다섯째 프로세스는 BUSY라 축소 단을 만들지 못한다.
 //  - VPP는 YUV400 출력을 받지 않아 축소 단은 NV12로 만든다(Y만 쓴다).
 // AX_SYS_Init·AX_IVPS_Init은 같은 프로세스(modeld의 AxEngineSession·GdcWarp)가 해 둔 뒤에 만든다. AX 헤더는
 // 이 파일 밖으로 새지 않는다.
@@ -38,10 +37,8 @@ public:
     IveFlow(const IveFlow &) = delete;
     IveFlow &operator=(const IveFlow &) = delete;
 
-    // FlowEngine::push. Y 평면 바로 뒤에 UV가 있는 NV12(stride는 폭)다.
-    bool push(unsigned long long y_phys, int stride) override;
-    // 축소 단을 만드는 엔진: "vpp" 또는 "ive"(VPP를 못 쓸 때)
-    const char *pyramid_engine() const override;
+    // FlowEngine::push. Y 평면 바로 뒤에 UV가 있는 NV12(행 간격은 폭)다.
+    bool push(unsigned long long y_phys) override;
     const int16_t *corner_response() override;
     bool track(const float *xy, int n, float *out_xy, uint8_t *ok, bool backward = false) override;
 

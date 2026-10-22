@@ -30,6 +30,15 @@
 
 namespace {
 
+// 지연을 반영한 plan 곡률을 클립한다. plan이 무효면 0. 컨트롤러는 그 사이에 목표 혼합(50 ms)과 85도 묶음도
+// 하므로 이 값은 그 둘을 뺀 근사다.
+float lag_adjusted_desired_curvature(const LateralTarget &target, float speed_mps, float plan_age_s,
+                                     float steer_actuator_delay_s, float prev_curvature, float roll_rad) {
+    if (!target.valid) return 0.0f;
+    return clip_curvature(speed_mps, prev_curvature,
+                          lag_adjusted_curvature(target, speed_mps, plan_age_s, steer_actuator_delay_s), roll_rad);
+}
+
 void write_exact_header(std::FILE *out) {
     std::fprintf(out,
                  "t,valid,capture_ns,mpc_valid,laneless,target_y,heading,curvature,desire,"
@@ -54,30 +63,30 @@ void write_exact_row(std::FILE *out, uint64_t timestamp_ns, const LateralTarget 
 
 int main(int argc, char **argv) {
     SteeringParams steering;
-    bool force_laneless = false, force_lane = false, exact = false, use_vehicle = false, usage_error = false;
+    bool force_laneless = false, force_lane = false, exact = false, use_vehicle = false;
     std::string steering_path;
     float lane_filter = 0.0f;  // 0이면 코드 기본값
     std::vector<const char *> positional;
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        if (arg == "--laneless")
+    ArgReader args(argc, argv);
+    while (args.next()) {
+        if (args.is("--laneless"))
             force_laneless = true;
-        else if (arg == "--lane")
+        else if (args.is("--lane"))
             force_lane = true;
-        else if (arg == "--exact")
+        else if (args.is("--exact"))
             exact = true;
-        else if (arg == "--vehicle")
+        else if (args.is("--vehicle"))
             use_vehicle = true;
-        else if (arg == "--steering" && i + 1 < argc)
-            steering_path = argv[++i];
-        else if (arg == "--lane-filter" && i + 1 < argc)
-            usage_error |= !parse_float_arg(argv[++i], &lane_filter, 0.0, 1.0);
-        else if (arg.rfind("--", 0) == 0)
-            usage_error = true;
+        else if (args.is("--steering"))
+            steering_path = args.value();
+        else if (args.is("--lane-filter"))
+            args.read(&lane_filter, 0.0, 1.0);
+        else if (args.is_option())
+            args.fail();
         else
-            positional.push_back(argv[i]);
+            positional.push_back(args.arg());
     }
-    if (usage_error || (force_laneless && force_lane) || positional.size() < 2) {
+    if (args.error() || (force_laneless && force_lane) || positional.size() < 2) {
         std::fprintf(stderr,
                      "usage: %s [--laneless|--lane] [--exact] [--vehicle] [--steering s.json] "
                      "[--lane-filter W] <out.csv> <events.bin...>\n",
@@ -127,8 +136,7 @@ int main(int argc, char **argv) {
             measured = cs.actual_curvature;
             des_rec = cs.desired_curvature;
             if (use_vehicle) {
-                // 녹화에는 latActive가 없다: 큰 조향각에서 쉬는 동안(HUD 플래그)만 빼고 active로 대신한다
-                active = cs.active != 0 && (cs.hud_flags & kHudFlagSteerPaused) == 0;
+                active = recorded_lat_active(cs);
                 steering_pressed = pressed_filter.update(cs.driver_torque, steering.steering_pressed_threshold);
             }
             have_cs = true;

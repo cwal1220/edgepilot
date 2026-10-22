@@ -9,7 +9,7 @@ board, so the binaries match the board's image exactly.
 ```mermaid
 flowchart TB
     sdk(["MaixCDK release<br>MSP SDK, headers"]) --> fetch["1. fetch_maixcam2_sdk.sh"]
-    boardlibs(["board over SSH<br>/opt/lib, libmaixcam_lib, OpenCV"]) --> fetch
+    boardlibs(["board over SSH<br>/opt/lib, libmaixcam_lib"]) --> fetch
     fetch --> deps["deps/ax630/"]
     deps --> build["2. docker_ax630/build.sh<br>arm64 Ubuntu 22.04"]
     build --> bin["build-ax630/bin<br>and the Panda firmware"]
@@ -31,8 +31,8 @@ directories are generated output and are not tracked:
 | `build-linux-test/` | the same, built with the board's compiler in Docker (`scripts/run_host_tests.sh --linux`) |
 
 The runtime build produces `camerad`, `modeld`, `overlayd`, `controlsd`,
-`pandad`, `panda_flash`, `recordd`, `imud`, `locationd`, `replayd`, and
-`camcal`. `-DEDGEPILOT_BUILD_PANDA=OFF` drops `pandad`, `panda_flash` and the
+`pandad`, `panda_flash`, `recordd`, `imud`, `locationd` and `replayd`.
+`-DEDGEPILOT_BUILD_PANDA=OFF` drops `pandad`, `panda_flash` and the
 libusb dependency; the manager skips a binary that is not installed.
 `-DEDGEPILOT_BUILD_DIAGNOSTICS=ON` adds the tools in
 [diagnostics/](../diagnostics/README.md) without changing the runtime.
@@ -55,9 +55,7 @@ This fills `deps/ax630/` (not tracked):
   of `libmaixcam_lib`), the `maix_basic`/`maix_image` headers it uses, and the
   OS04D10-aware MSP sample sources
 - from the board over SSH, copied as-is so the ABI matches: `/opt/lib` (the AX
-  runtime), `/usr/lib/libmaixcam_lib.so.1.2.5`, `libsamplerate`, and the OpenCV
-  4.11 headers and `core`/`imgproc`/`imgcodecs` libraries (only `camcal` uses
-  them)
+  runtime), `/usr/lib/libmaixcam_lib.so.1.2.5` and `libsamplerate`
 
 The SDK download needs the network and the board copy needs SSH; after that the
 build is offline. Run the script again after a board image update.
@@ -78,8 +76,8 @@ firmware](../firmware/panda/README.md) into `build-ax630/panda/obj/` with the
 image's `gcc-arm-none-eabi`, the 10.3 the board's apt has, so a build on the
 board gives the same bytes.
 
-CMake stops with a clear message if `libax_engine`/`libax_sys`, the MaixCDK
-headers, or the board OpenCV are missing.
+CMake stops with a clear message if `libax_engine`/`libax_sys` or the MaixCDK
+headers are missing.
 
 ### Build version
 

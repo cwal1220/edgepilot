@@ -56,8 +56,6 @@ struct AdaptiveCruiseOutput {
     float maximum_speed_kph = 0.0f;
     float commanded_speed_kph = 0.0f;
     float target_speed_kph = 0.0f;
-    // 학습된 클러스터/휠 속도 비. 1에서 멀어지면 척도 보정이 동작 중이다.
-    float display_scale = 1.0f;
     int command_button = 0;
 };
 

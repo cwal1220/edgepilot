@@ -48,7 +48,7 @@ it runs.
 | `src/learners/` | paramsd and torqued (run inside `controlsd`) | `learners` | |
 | `src/localization/` | locationd and lagd, the board IMU reader (`imud`) | `localization` | `imud`, `locationd` |
 | `src/model/` | `modeld`: NPU session, input warp, online calibration, `ModelState` packing | `model` | `modeld` |
-| `src/camera/` | `camerad` and the `camcal` still capture | | `camerad`, `camcal` |
+| `src/camera/` | `camerad` | | `camerad` |
 | `src/hud/` | the HUD (`overlayd`): state mapping, drawing, alert policy and sounds | `hud_state`, `hud`, `alert_tones`, `alert_sound` (board) | `overlayd` |
 | `src/recording/` | `recordd` and `replayd`, the recording format and its readers | `recording` | `recordd`, `replayd` |
 | `platform/maixcam2/` | AX and MaixCDK wrappers (board build only) | `maixcam2_cmm`, `maixcam2_media`, `maixcam2_gdc`, `maixcam2_ive`, `maixcam2_venc`, `maixcam2_vdec` | |
@@ -145,7 +145,6 @@ through `configure_board_target`, which also links `build_version`, `pthread`,
 ```mermaid
 flowchart LR
     camerad["camerad<br>src/camera"] --> media["maixcam2_media<br>camera, display, touch"]
-    camcal["camcal<br>src/camera"] --> media
     overlayd["overlayd<br>src/hud"] --> media
     modeld["modeld<br>src/model"] --> gdc["maixcam2_gdc<br>input warp"]
     modeld --> ive["maixcam2_ive<br>flow pyramid, LK"]
@@ -157,7 +156,7 @@ flowchart LR
     classDef proc fill:#f6f8fa,stroke:#8b949e,color:#1f2328
     class camerad,overlayd,media,gdc,ive,vdec,venc pixel
     class modeld compute
-    class camcal,replayd,recordd proc
+    class replayd,recordd proc
 ```
 
 What each process links:
@@ -165,7 +164,6 @@ What each process links:
 | Process | Folder | Libraries | Other |
 | --- | --- | --- | --- |
 | `camerad` | `src/camera` | `common` | `maixcam2_media` |
-| `camcal` | `src/camera` | `alert_sound` | `maixcam2_media`, the board OpenCV |
 | `controlsd` | `src/controls` | `common`, `control_core`, `planning`, `controls` | |
 | `imud` | `src/localization` | `common` | |
 | `locationd` | `src/localization` | `common`, `localization` | |
@@ -220,9 +218,7 @@ processes themselves are described in [Runtime](runtime.md).
   file alone. Folders do not strip the prefix. Prefix families (`utils_*`,
   `maix_*`) and one-word programs (`projection`, `manager.py`) are fine.
 - A C++ process's main is `<name>d.cc`, named like its executable; the deploy
-  scripts and `manager.py` start it by that name. `camcal`, the intrinsics
-  capture that `camcal.service` runs while the runtime is stopped, keeps its
-  tool name.
+  scripts and `manager.py` start it by that name.
 - Tests are `tests/gtest_<module>.cc`, or `gtest_<folder>.cc` when they cover a
   folder. A module can be a family of files on one subject: `gtest_calibration`
   covers `calibration_online` and `calibration_service`.
@@ -312,6 +308,10 @@ Libraries `common` and `utils_json`, and the object library `build_version`.
 
 Library `car`.
 
+- `car_specs.h`: the K7 YG HEV's wheelbase and centre of gravity (opendbc
+  `CarSpecs`), the Civic reference values of opendbc `VehicleDynamicsParams`,
+  and `scale_tire_stiffness_per_mass`, which the torque controller, paramsd and
+  the planner share.
 - `can_frame.h`, `vehicle_can.*`, `hyundai_can.*`: `can_frame.h` holds the
   transport type and the K7 YG HEV address/bus table; `vehicle_can` decodes
   received frames into vehicle state, and `hyundai_can` encodes
@@ -535,18 +535,13 @@ Library `model`, process `modeld`.
   times; the planner gets those from `common/model_output.h` (`model_t_idx`,
   `model_x_idx`, and `compute_lane_t`, the openpilot plan→lane time
   mapping).
-- `replay_source.*`: reads `SCNV12R1` replay frames straight into the GDC
-  source buffer (CMM) for `modeld` replay mode. POSIX only; built into `modeld`
-  with its other board-only sources.
 
 ### `src/camera`
 
-Processes `camerad` and `camcal` (board build only).
+Process `camerad` (board build only).
 
 - `camerad.cc`: captures into the frame ring for `modeld`, `overlayd` and
   `recordd`.
-- `camcal.cc`: still capture through the runtime's camera path for the
-  intrinsics measurement ([Camera intrinsics](camera-intrinsics.md)).
 
 ### `src/hud`
 
@@ -586,9 +581,9 @@ Libraries `hud_state`, `hud` and `alert_tones`, and on the board
     copy to fb0 in `maix_display`.
   - **Font.** `hud_font` holds the glyphs that `tools/ui/make_hud_font.py`
     bakes from Pillow's Aileron (CC0).
-  - **Host.** No OpenCV, so `gtest_hud_canvas` and `hud_snapshot` run on the
-    host. The renderer keeps only coverage scratch and the per-buffer tiles;
-    the turn-signal phase and the card toggles come from `hud_policy`.
+  - **Host.** No board library, so `gtest_hud_canvas` and `hud_snapshot` run
+    on the host. The renderer keeps only coverage scratch and the per-buffer
+    tiles; the turn-signal phase and the card toggles come from `hud_policy`.
 - `hud_state.*`: `HudState`, the IPC state (`ControlState`, `ModelState`, …) →
   `HudState` mapping shared by `overlayd` and `hud_snapshot`. It also holds the
   `ModelState` → `ParsedModelOutput`/`ProjectionState` unpacking, the
@@ -612,7 +607,7 @@ Libraries `hud_state`, `hud` and `alert_tones`, and on the board
     attacks and decaying overtones. It is portable, so `alert_sound_preview`
     writes them as WAV and `gtest_alert_tones` checks them on the host.
   - `alert_sound` streams them to one long-lived `aplay` on the board speaker
-    (`overlayd` and `camcal`).
+    (`overlayd`).
 - `system_monitor.*`: `/proc`, thermal-zone, and network sampling (the Wi-Fi
   SSID through the `SIOCGIWESSID` ioctl) into `HudState`, called at 1 Hz by
   `overlayd`. Only a `wlan` link with an address and an associated SSID counts
@@ -719,24 +714,20 @@ only in the board build, against `deps/ax630` from
   uncached block pool that the display, GDC, IVE, encoder and decoder wrappers
   share.
 - `maix_gdc_warp.*`: the model input warp on the IVPS GDC (`AX_IVPS_Dewarp`,
-  perspective): two 512x256 views from a physical source address (a ring slot,
-  or for replay a CMM buffer allocated on first use) into one output block,
-  unpacked to YUV6 at two destinations (the image history and the model
-  input). Uses only MSP SDK headers, not the middleware, so the NPU process
-  initialises AX SYS once.
+  perspective): two 512x256 views from a ring slot's physical address into one
+  output block, unpacked to YUV6 at two destinations (the image history and
+  the model input). Uses only MSP SDK headers, not the middleware, so the NPU
+  process initialises AX SYS once.
 - `maix_ive_flow.*`: the flow calibrator's hardware part.
   - Each frame's 1/2 and 1/4 levels come from one VPP call on `modeld`'s own
-    IVPS queue; a separate tool, which gets no queue, falls back to an IVE
-    pyramid (Filter + DMA). The full level is the ring slot itself.
+    IVPS queue. The full level is the ring slot itself.
   - The IVE computes the Shi-Tomasi response and the pyramidal LK, wrapped
     around its undocumented behaviour (start points in top-level pixels, the
     ±8 px clip with the +16 px wrap, re-polled queries).
 - `maix_venc.*`, `maix_vdec.*`: the hardware H.264 encoder and decoder.
   `recordd` copies a ring slot into the encoder's own pool block with IVPS
   before encoding; `replayd` decodes a recorded frame into a ring slot. Both
-  use only MSP SDK headers. `receive_luma` copies a decoded frame's Y plane
-  with the CPU instead, for tools that run while the runtime holds the IVPS
-  scalers.
+  use only MSP SDK headers.
 - `maix_shim.cc`, `stub/`: the few MaixCDK runtime pieces (log, err, board
   config lookup) and Kconfig stubs that the inline code in
   `ax_middleware.hpp` references but `libmaixcam_lib` does not export.
@@ -802,8 +793,8 @@ only in the board build, against `deps/ax630` from
   - three.js 0.186.1 in `three/`.
 - `scripts/*.service`, `install_autostart.sh`, `install_boot_tuning.sh`: the
   systemd units (`edgepilot.service`, `edgepilot-drivers.service`,
-  `camcal.service`, `wifi-dhcp-renew.service`) and the scripts that install
-  them; the boot tuning is described in [Boot time](boot-time.md).
+  `wifi-dhcp-renew.service`) and the scripts that install them; the boot tuning
+  is described in [Boot time](boot-time.md).
 
 ## Tools and tests
 
@@ -819,22 +810,14 @@ only in the board build, against `deps/ax630` from
   extraction, output split, calibration and evaluation data, the board
   evaluation runner, Pulsar2 config). See
   [axmodel pipeline](../tools/model/axmodel/README.md).
-- `tools/model/`: the recording readers. `recording_reader.py` decodes
-  `recordd` routes (frame index, event log, H.264 video) and mirrors
-  `recording_format.h` / `ipc_messages.h` for the analysis tools;
-  `lane_bias.py`, `lane_benchmark.py` (model lanes against the stock
-  camera's `LKA14`) and `make_replay.py` build on it. `model_warp.py` is a NumPy
+- `tools/model/`: the recording readers. `recording_reader.py` decodes `recordd`
+  routes (frame index, event log, H.264 video) and mirrors `recording_format.h`
+  / `ipc_messages.h` for the analysis tools; `lane_benchmark.py` (model lanes
+  against the stock camera's `LKA14`) builds on it. `model_warp.py` is a NumPy
   port of the CPU input warp. See [Model tools](../tools/model/README.md).
-- `tools/camera/`: intrinsics from `camcal` captures
-  (`calibrate_intrinsics.py`), the TV checkerboard generator and the measured
-  MaixCAM2 intrinsics (see [Camera intrinsics](camera-intrinsics.md)), the
-  IMU-to-camera extrinsic estimate, the model-view preview and the 12x7
-  chessboard image.
-- `tools/control/`: `export_can_fixture.py`
-  (recorded CAN → `gtest_lateral_controller` fixture) and `make_can_golden.py`
-  (the bytes of the frames edgepilot sends and the torque limiter, built with
-  a local opendbc's packer and upstream formulas → `tests/hyundai_can_golden.h`
-  for `gtest_car`).
+- `tools/control/make_can_golden.py`: the bytes of the frames edgepilot sends
+  and the torque limiter, built with a local opendbc's packer and upstream
+  formulas → `tests/hyundai_can_golden.h` for `gtest_car`.
 - `tools/rehearsal/compare_rehearsal.py`: compares a board rehearsal's
   recording with the route it replayed ([Rehearsal](rehearsal.md)).
 - `tools/ui/hud_tools.py`: extracts `hud_snapshot` inputs from a route and
@@ -854,8 +837,8 @@ only in the board build, against `deps/ax630` from
   title, the back link, links and anchors, the wrapping, the language and the
   Mermaid colours of every document.
 - `diagnostics/`: replay and HUD tools (built by `diagnostics/CMakeLists.txt`
-  against the same libraries as the runtime; `flow_calibration_replay` builds
-  only in the board build). See [Diagnostic tools](../diagnostics/README.md).
+  against the same libraries as the runtime). See
+  [Diagnostic tools](../diagnostics/README.md).
 
 ## Related
 

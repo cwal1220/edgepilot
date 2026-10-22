@@ -62,8 +62,11 @@ drift. On the road the car's yaw follows the steering angle's curvature
 from 2026-10-12 to 10-16, linear and learned feed-forward, 30–90 km/h; the
 ESP12 yaw rate is 0–8 ms later than the IMU). A pure delay, a first-order lag
 and the two combined reproduce it equally well (R² 0.94–0.98), so the replay
-uses the delay. Before 2026-10-17 the car travelled along the angle's
-curvature itself.
+uses the delay.
+
+Every model frame (the plan, the lane lines and the road edges) is rotated and
+translated by that pose difference into the simulated car's frame before the
+planner sees it. Real camera output, real model output, closed loop.
 
 ### Inputs from the recording
 
@@ -79,16 +82,6 @@ The controller gets what controlsd gets, apart from the steering angle:
   estimated and under 2 s old (`ControlsTick::on_localization`).
 - **Plan age:** from the frame's capture time, as controlsd measures it. The
   model output is about 64 ms later than the capture.
-
-Before 2026-10-17 the replay had no ESP12 (the bank estimate was 0, so the
-learned model's roll inputs were 0; on the training samples that shifts its
-torque by +10.7 raw, RMS 15.9), forced `live_bank_compensation` off, used
-`steer_actuator_delay` (0.42 s) instead of the lagd estimate (0.55 s), and
-measured the plan age from the model output.
-
-and every model frame (the plan, the lane lines and the road edges) is rotated
-and translated into the simulated car's frame before the planner sees it. Real
-camera output, real model output, closed loop.
 
 This holds while the deviation stays inside what the camera saw. A 2 m clamp
 on `|dy|` (and 0.15 rad on `|dpsi|`) guards against reading the model's lines
@@ -184,23 +177,11 @@ angle follows the controller's request, against the car:
 The gains are the least-squares ones of the same fit; the 3 m/s node has no
 data and keeps its value.
 
-**Identification (2026-10-04).** An earlier attempt to identify the plant by
-fitting recorded torque against recorded angle gave `tau = 2210 ms` at 14%
-explained, and was not usable. The previous default came from scaling an
-earlier gain curve and reading the open-loop R²:
-
-| Lane route | R² peaks at | R² |
-| --- | --- | --- |
-| 2026-10-04 | 1.5× | 0.960 → 0.971 |
-| 2026-10-03 | 1.7-2.0× | 0.956 → 0.977 |
-
-So that default was the 1.5× curve.
-
-**Feedforward factor.** With the earlier curve, raising the controller's
-`lat_accel_factor` to the torqued estimate (3.15) looked like a 12 cm push to
-the outside of left curves. With the re-identified plant the same change is
-neutral (RMS 0.109 → 0.110 m). Before 2026-10-19, `--laf` also scaled the
-plant, so a comparison made with it cancels out or, on a route that uses
+**Feedforward factor.** With the plant used before this identification, raising
+the controller's `lat_accel_factor` to the torqued estimate (3.15) looked like a
+12 cm push to the outside of left curves. With the re-identified plant the same
+change is neutral (RMS 0.109 → 0.110 m). Before 2026-10-19, `--laf` also scaled
+the plant, so a comparison made with it cancels out or, on a route that uses
 torqued, moves only the plant; measure it again before relying on it.
 
 The DC gain is fixed relative to `torque_lat_accel_factor` in the route's
@@ -221,7 +202,7 @@ comparison.
 - Rank configurations with this tool; do not read absolute numbers off it.
   Across plausible plants the absolute gap between two configurations moves,
   while their order holds.
-- Replays before 2026-10-17 ran the earlier plant without the angle-to-path
+- Replays before 2026-10-17 ran an earlier plant without the angle-to-path
   lag, the ESP12 and the lagd delay. Numbers quoted from them elsewhere (the
   lane-line filter weight) are not directly comparable with newer runs.
 - The optimum `SAD` could not be found with the earlier plant: the sweep

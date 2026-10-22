@@ -61,7 +61,7 @@ axmodel rather than misreading it.
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `EDGEPILOT_PROFILE=1` | off | `modeld` prints warp/inputs/NPU/outputs averages every 30 frames; `overlayd` adds HUD draw and video push timing and the model-to-draw lag to its status line. |
-| `EDGEPILOT_CAMERA_INTRINSICS=fx,fy,cx,cy` | `1131.24,1130.85,940.13,552.60`, the calibrated MaixCAM2 camera | Camera intrinsics at 1920x1080, scaled to the capture size. Set it to replay footage from another camera. |
+| `EDGEPILOT_CAMERA_INTRINSICS=fx,fy,cx,cy` | `1131.24,1130.85,940.13,552.60`, the calibrated MaixCAM2 camera | Camera intrinsics at 1920x1080, scaled to the capture size, for another camera module. |
 | `EDGEPILOT_CALIB_AUTO=0` | on | Disables pose-based online calibration and keeps the restored projection (`params/calibration.json`, or zero without one). On, the saved calibration is restored and pose-based online calibration feeds the next frame's input warp, matching openpilot's `cameraOdometry -> liveCalibration -> modeld` loop. |
 | `EDGEPILOT_FLOW_CALIB=0` | on | Turns off the optical-flow calibrator (VPP/IVE). On, it is recorded in `ModelState.flow_calibration` and logged as `flowcal:` lines; the warp uses it only when the device setting `calibration_use_flow` is on ([Flow calibration](flow-calibration.md#using-the-estimate)). Off, nothing new is measured; a stored estimate (`params/flow_calibration.json`) is still recorded and can still be applied, and with none the recorded status stays 0. |
 
@@ -71,14 +71,11 @@ axmodel rather than misreading it.
 | --- | --- | --- |
 | `EDGEPILOT_MAX_SHUTTER_US=N` | `33333`, the 30 fps frame time | Caps the auto-exposure shutter in `camerad`, so the 20 fps sensor does not add motion blur. `0` leaves the sensor default. |
 
-### Storage and replay
+### Storage
 
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `EDGEPILOT_PARAMS_DIR=/path/to/params` | `params/` relative to the runtime working directory | Overrides the shared runtime parameter directory, and is the only way to relocate parameter files; there are no per-file overrides. The web console reads the factory defaults from the directory beside it with `.defaults` added (`params.defaults/`, filled by the upload script). |
-| `EDGEPILOT_REPLAY_NV12=/path/to/replay.scnv12` | unset: the camera ring | When launching `modeld` directly, runs headless from an `SCNV12R1` NV12 replay file instead of the camera ring. Width, height, and frame count are read from the replay header; the warp uses the same GDC path as live. This is for validating inference from collected logs; the online calibration does not update (the replay's speed is 0) and the desire input is always 0. It still runs on the board, since it needs the NPU. |
-| `EDGEPILOT_CAMERA_OFFSET_M=m`, `EDGEPILOT_CAMERA_HEIGHT_M=m` | `0` and the model height, 1.22 m | The camera mount for replay mode, which does not read `params/display.json`. Live capture uses `camera_offset_m` and `camera_height_m` from the device settings. |
-| `EDGEPILOT_RAW_DUMP=/path/to/dump.bin` | unset | During replay, writes every raw model output to an `SCODMP1` file that `gtest_model_output` reads; see [Model swap verification](diagnostics.md#model-swap-verification). |
 | `EDGEPILOT_RECORD_ROOT=dir` | `recordings` under the install directory | Where `recordd` writes its routes. `params/recording.json` `enabled` toggles recording. |
 | `EDGEPILOT_RECORD_STAGING=dir` | `/tmp/record_staging` | The staging directory in RAM that `recordd` writes through. A route left there by a session that died is moved to the record root at start. |
 
@@ -98,8 +95,8 @@ and the one the manager sets before it starts `pandad`.
 | --- | --- | --- | --- |
 | `EDGEPILOT_ENABLE_PANDA=1` | | off; `edgepilot.service` sets it | The manager also starts `pandad` and switches the USB-C port to host mode (restored on exit). The binary must have been built with `-DEDGEPILOT_BUILD_PANDA=ON`. |
 | `EDGEPILOT_USB_ROLE=host\|device` | | unset; `edgepilot.service` sets `host` | Fixes the USB-C role at manager start and leaves it on exit. `host` is for the Panda, which plugs into the USB-C port; set `device` to reach the board from a computer over USB. Unset, the role only changes with `EDGEPILOT_ENABLE_PANDA=1` as above. |
-| `EDGEPILOT_PANDA_SAFETY=nooutput\|silent\|elm327\|hyundai\|hyundaiCommunity\|allOutput` | `nooutput` | `hyundaiCommunity` | Panda safety mode for `pandad`. `hyundai` defaults its parameter to `2` (the Hyundai/Kia hybrid path), every other mode to `0`; an unknown name falls back to `nooutput`. |
-| `EDGEPILOT_PANDA_SAFETY_PARAM=N` | the mode's default | `0` | Numeric safety parameter passed with the safety mode. |
+| `EDGEPILOT_PANDA_SAFETY=nooutput\|hyundaiCommunity` | `nooutput` | `hyundaiCommunity` | Panda safety mode for `pandad`. `controlsd` engages only under `hyundaiCommunity` with parameter 0; any other name means `nooutput`. |
+| `EDGEPILOT_PANDA_SAFETY_PARAM=N` | `0` | `0` | Numeric safety parameter passed with the safety mode. |
 | `EDGEPILOT_PANDA_TX=1` | `0` | `1` | Allows `pandad` to relay ordered `/dev/shm/edgepilot_sendcan` batches to the Panda. |
 | `EDGEPILOT_PANDA_ENGAGED=1` | disengaged | engaged | Sends the Panda heartbeat as engaged; only meaningful with `EDGEPILOT_PANDA_TX=1`. The bundled firmware (`firmware/panda`) ignores the value and only resets its heartbeat timer; newer firmware reads it. |
 | `EDGEPILOT_PANDA_LOG_CAN=1` | off | off | Prints every received CAN frame from `pandad`. This is a bus-bringup aid only; at full bus load it is far too noisy to leave on. |
@@ -129,7 +126,6 @@ Panda's health confirm that configuration
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `EDGEPILOT_ENABLE_WEB_CONSOLE=0\|1` | the value of `EDGEPILOT_ENABLE_CONTROL` | Starts the web console (FastAPI, `web_console/`) with the manager. |
-| `EDGEPILOT_WEB_CONSOLE_HOST=address`, `EDGEPILOT_WEB_CONSOLE_PORT=port` | `0.0.0.0:8080` | The web console's listen address and port. |
 | `EDGEPILOT_CALIBRATION_RESET_PATH` | `/dev/shm/edgepilot_calibration_reset` | The request file behind the web console's calibration reset. `modeld` checks it every second; when it exists, `modeld` deletes it and restarts calibration from the beginning. Both sides read the same variable. |
 
 `overlayd` turns the backlight on at start (`pwmchip0/pwm3`, level from

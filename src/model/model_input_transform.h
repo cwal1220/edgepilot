@@ -23,10 +23,7 @@ public:
     void projection_matrix(float *projection) const;
 
 private:
-    float fx_ = kDefaultInputWarpFx;
-    float fy_ = kDefaultInputWarpFy;
-    float cx_ = kDefaultInputWarpCx;
-    float cy_ = kDefaultInputWarpCy;
+    float fx_, fy_, cx_, cy_;
     float roll_rad_ = 0.0f;
     float pitch_rad_ = 0.0f;
     float yaw_rad_ = 0.0f;

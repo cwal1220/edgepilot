@@ -28,7 +28,6 @@ TEST(DepartureAlert, LeadDeparture) {
         output = detector.update(input);
     }
     ASSERT_EQ(output.type, DepartureAlertType::None) << "멈춘 앞차의 거리 떨림으로는 알림이 뜨지 않는다";
-    ASSERT_TRUE(output.lead_armed) << "안정된 앞차가 검출기를 무장한다";
 
     for (int i = 21; i <= 25; ++i) {
         DepartureAlertInput input = stopped_input(i * 0.1);
@@ -333,7 +332,15 @@ TEST(DepartureAlert, LeadDropoutKeepsArming) {
         input.lead_distance_m = input.lead_valid ? 5.0f : 0.0f;
         output = detector.update(input);
     }
-    ASSERT_TRUE(output.lead_armed) << "짧은 끊김을 넘겨 무장한다";
+    for (int i = 41; i <= 50; ++i) {
+        DepartureAlertInput input = stopped_input(i * 0.05);
+        input.lead_updated = true;
+        input.lead_valid = true;
+        input.lead_distance_m = 5.6f;
+        input.lead_relative_speed_mps = 1.0f;
+        output = detector.update(input);
+    }
+    ASSERT_EQ(output.type, DepartureAlertType::LeadDeparted) << "짧은 끊김을 넘겨 무장했으므로 출발을 알린다";
 }
 
 // controlsd 주기: 100 Hz 틱에 모델은 5틱마다. 무장(짧은 plan 1.5초)과 녹색 확인(열림 0.3초)은 모델

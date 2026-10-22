@@ -81,7 +81,7 @@ class RecordingReaderLayout(unittest.TestCase):
 
     def test_model_state(self):
         self.assertEqual(rr.RECORDING_VERSION, pinned(r"kRecordingVersion = (\d+)", FORMAT))
-        layout = rr.MODEL_STATE_LAYOUT
+        layout = {name: rr.MODEL_STATE.fields[name][1] for name in rr.MODEL_STATE.names}
         self.assertEqual(rr.MODEL_STATE.itemsize, cpp_size("ModelState"))
         offsets = cpp_offsets("MODEL_STATE")
         self.assertGreater(len(offsets), 5)
@@ -97,9 +97,6 @@ class RecordingReaderLayout(unittest.TestCase):
         self.assertEqual(dtype_fields(rr.CALIBRATION_SOURCE_STATE), struct_fields("CalibrationSourceState", IPC))
         self.assertEqual(dtype_fields(rr.LEAD_FLOW_STATE), struct_fields("LeadFlowState", IPC))
         self.assertEqual(dtype_fields(rr.LEAD_TRACK_STATE), struct_fields("LeadTrackState", IPC))
-        flags = {name: 1 << bit for name, bit in cpp_flags("kLeadTrack").items()}
-        self.assertEqual(flags, {"FlowUsed": rr.LEAD_TRACK_FLOW_USED, "FlowRejected": rr.LEAD_TRACK_FLOW_REJECTED,
-                                 "DistanceRejected": rr.LEAD_TRACK_DISTANCE_REJECTED, "Started": rr.LEAD_TRACK_STARTED})
 
     def test_magics(self):
         def magic(name: str) -> bytes:
@@ -140,8 +137,9 @@ class EventFiles(unittest.TestCase):
                                ("type", rr.EVENT_RECORD_HEADER.pack(1, rr.LAST_RECORD_TYPE + 1, 0, 0)),
                                ("long", rr.EVENT_RECORD_HEADER.pack(1, rr.RECORD_CAN_RX, 0, rr.MAX_RECORD_PAYLOAD + 1)
                                 + b"\0" * (rr.MAX_RECORD_PAYLOAD + 1))):
-                records = list(rr.iter_event_records(self.event_file(Path(tmp) / f"{name}.bin", tail=tail)))
-                self.assertEqual([(r.timestamp_ns, r.type) for r in records], [(123, rr.RECORD_CONTROL_STATE)], name)
+                path = self.event_file(Path(tmp) / f"{name}.bin", tail=tail)
+                index = rr.record_index(path, path.read_bytes())
+                self.assertEqual(index[["timestamp_ns", "type"]].tolist(), [(123, rr.RECORD_CONTROL_STATE)], name)
 
     def test_route_without_segments(self):
         """segments/가 없는 route는 영상 세그먼트가 없을 뿐이다(일괄 실행이 멈추지 않는다)."""
@@ -203,22 +201,6 @@ class States(unittest.TestCase):
             route = self.write_route(Path(tmp), [(1, rr.RECORD_MODEL_STATE, bytes(3736))])
             with self.assertRaises(ValueError):
                 list(rr.iter_states(route, rr.RECORD_MODEL_STATE))
-
-
-class CanRecords(unittest.TestCase):
-    def test_can_frames_reads_the_batch(self):
-        """CanRx 레코드: 머리의 count만큼, 잘린 레코드면 들어 있는 만큼 읽는다."""
-        frames = np.zeros(2, rr.RECORDED_CAN_FRAME)
-        frames["address"] = [0x251, 0x4f1]
-        frames["src"] = [0, 2]
-        frames["data_len"] = [8, 4]
-        frames["data"][0, :8] = range(1, 9)
-        payload = rr.RECORDED_CAN_BATCH_HEAD.pack(2, 0) + frames.tobytes()
-        read = rr.can_frames(payload)
-        self.assertEqual(read["address"].tolist(), [0x251, 0x4f1])
-        self.assertEqual(read["data"][0, :8].tolist(), list(range(1, 9)))
-        self.assertEqual(len(rr.can_frames(payload[:-10])), 1)
-
 
 
 class LaneBenchmark(unittest.TestCase):

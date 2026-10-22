@@ -16,10 +16,6 @@
 // 호스트 검사·재생 도구가 실제로 쓰는 값이다.
 struct SteeringParams {
     bool enabled = true;
-
-    // 저속에서도 MDPS가 LKAS 토크를 받도록 MDPS 버스 CLU11에 쓰는 속도. 상류에는 없는 기능이고, 커뮤니티
-    // 포크(openpilot_c2)도 60 km/h(38 mph)를 코드에 박아 둔다. 파일에서 읽지 않는다.
-    float mdps_speed_spoof_kph = 60.0f;
     int steering_pressed_threshold = 150;
 
     // openpilot 토크 튜닝 그대로(횡가속도 공간). 토크 = (FF + P + I) / 배율 + 마찰.
@@ -75,9 +71,6 @@ struct SteeringParams {
     // paramsd·torqued 입력을 상류처럼 locationd 요레이트·롤로 받는다. 끄면 ESP12 요레이트(자체 바이어스
     // 추정)와 ESP12 횡가속 롤. locationd가 없거나 낡으면 ESP12로 돌아간다.
     bool use_locationd_learner_inputs = true;
-    float wheelbase_m = 2.855f;
-    float center_to_front_ratio = 0.4f;
-    float path_offset_m = 0.0f;
     // Lane 모드 MPC의 경로(횡위치) 가중치. 상류 0.9.4 PATH_COST는 1이다. 2026-10-05 폐루프 재생에서
     // 3이면 고속도로 오른쪽 커브의 안쪽 치우침이 13.4 -> 10.6 cm로 줄고 횡저크는 12~19% 는다.
     // laneless 모드에는 쓰지 않는다.
@@ -88,8 +81,6 @@ struct SteeringParams {
     bool laneless_mode = false;
     // 이 속도 미만에서는 깜빡이를 켜도 차선 변경을 시작하지 않는다(상류 LANE_CHANGE_SPEED_MIN은 20 mph).
     float lane_change_min_speed_kph = 30.0f;
-
-    float center_to_front_m() const;
 };
 
 // 제어 타이밍(파일에서 읽지 않는 고정값). 낡음 판정은 상류도 고정 규칙이다(메시지 주기의 10배, CAN 버스는 0.5초).

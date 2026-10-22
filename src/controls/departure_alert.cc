@@ -109,7 +109,6 @@ DepartureAlertOutput DepartureAlertDetector::update(const DepartureAlertInput &i
     return {
         active_type_,
         event_id_,
-        lead_.armed,
         green_light_.armed,
     };
 }

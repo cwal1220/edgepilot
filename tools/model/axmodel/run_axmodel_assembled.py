@@ -3,9 +3,8 @@
 사용: run_axmodel_assembled.py <model.axmodel> <input_dir> <out.bin>
 <input_dir>에는 모델 입력마다 frame-major <input>.npy가 하나씩 있다(make_m2_data.py eval이 쓴다).
 프레임마다 출력을 원래 출력 배치의 float32 2576개로 <out.bin>에 쓴다. 헤드가 나뉜 axmodel
-(split_outputs.py)은 src/model/model_output_assembly.h와 같은 방식으로 다시 합치므로,
-단일 출력 빌드와 분할 빌드를 같은 지표로 비교한다. modeld가 NPU 코어를 쥐고 있으므로
-edgepilot.service를 멈춘 채 돌린다.
+(split_outputs.py)의 출력을 src/model/model_output_assembly.h와 같은 방식으로 다시 합친다. modeld가 NPU 코어를
+쥐고 있으므로 edgepilot.service를 멈춘 채 돌린다.
 """
 import argparse
 import time
@@ -35,14 +34,11 @@ with open(out_path, "wb") as f:
     for k in range(n):
         feed = {i.name: np.ascontiguousarray(data[i.name][k][None], dtype=dtypes[i.name]) for i in ins}
         t0 = time.perf_counter(); res = sess.run(None, feed); times.append(time.perf_counter() - t0)
-        if len(res) == 1:
-            y = np.asarray(res[0], np.float32).reshape(-1)
-        else:
-            r = {name: np.asarray(v, np.float32).reshape(-1) for name, v in zip(outs, res)}
-            y = np.zeros(2576, np.float32)
-            for name, off, cnt in PARTS: y[off:off + cnt] = r[name]
-            y[1576 + MEAN[:, :9].reshape(-1)] = r["out_plan_motion"]
-            y[1576 + MEAN[:, 9:].reshape(-1)] = r["out_plan_orient"]
+        r = {name: np.asarray(v, np.float32).reshape(-1) for name, v in zip(outs, res)}
+        y = np.zeros(2576, np.float32)
+        for name, off, cnt in PARTS: y[off:off + cnt] = r[name]
+        y[1576 + MEAN[:, :9].reshape(-1)] = r["out_plan_motion"]
+        y[1576 + MEAN[:, 9:].reshape(-1)] = r["out_plan_orient"]
         f.write(y.tobytes())
 t = np.array(times) * 1e3
 print(f"done {n} frames, run() mean {t.mean():.2f} ms median {np.median(t):.2f} ms", flush=True)

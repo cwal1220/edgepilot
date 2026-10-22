@@ -14,16 +14,14 @@ public:
 
     virtual ~FlowEngine() = default;
 
-    // NV12 프레임(Y 평면 y_phys, 행 간격 stride)으로 축소 단을 만든다. 성공하면 이 프레임이 '현재', 앞의
+    // NV12 프레임(Y 평면 y_phys, 행 간격은 폭)으로 축소 단을 만든다. 성공하면 이 프레임이 '현재', 앞의
     // 현재 프레임이 '이전'이 된다. 원본 단은 복사하지 않으므로 두 프레임의 버퍼는 다음 track()이 끝날 때까지
     // 그대로여야 한다(링 슬롯이면 호출자가 seqlock으로 확인한다).
-    virtual bool push(unsigned long long y_phys, int stride) = 0;
+    virtual bool push(unsigned long long y_phys) = 0;
     // 현재 프레임 1/2 단 띠(kBandRows행, 폭 width/2)의 코너 응답. 다음 호출까지 유효하다. 실패하면 nullptr.
     virtual const int16_t *corner_response() = 0;
     // 이전 프레임의 점 n개(원본 좌표)를 현재 프레임으로 따라간다. backward면 거꾸로 현재 프레임의 점을 이전
     // 프레임으로 따라간다(앞뒤 검사). ok[i]가 0이면 놓쳤거나 한계를 넘었다. 하드웨어 호출이 실패하면 false.
     virtual bool track(const float *xy, int n, float *out_xy, uint8_t *ok, bool backward = false) = 0;
     virtual int width() const = 0;
-    // 축소 단을 만드는 방법(로그용)
-    virtual const char *pyramid_engine() const = 0;
 };

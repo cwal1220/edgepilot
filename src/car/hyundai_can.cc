@@ -120,9 +120,13 @@ struct HyundaiCluCommand {
     int frame = 0;
 };
 
-// CLU11 속도는 부호 없는 정수 해석이고, 바꿔 쓸 속도는 코드 상수다(SteeringParams::mdps_speed_spoof_kph)
-float mdps_speed_for_lkas(float cluster_speed_raw, bool lkas_active, bool is_mph, float spoof_speed_kph) {
-    const float threshold = is_mph ? spoof_speed_kph / kMphToKph : spoof_speed_kph;
+// 저속에서도 MDPS가 LKAS 토크를 받도록 MDPS 버스 CLU11에 쓰는 속도. 상류에는 없는 기능이고, 커뮤니티 포크
+// (openpilot_c2)도 60 km/h(38 mph)를 코드에 박아 둔다.
+constexpr float kMdpsSpeedSpoofKph = 60.0f;
+
+// CLU11 속도는 부호 없는 정수 해석이다
+float mdps_speed_for_lkas(float cluster_speed_raw, bool lkas_active, bool is_mph) {
+    const float threshold = is_mph ? kMdpsSpeedSpoofKph / kMphToKph : kMdpsSpeedSpoofKph;
     return lkas_active && cluster_speed_raw <= threshold ? threshold : cluster_speed_raw;
 }
 
@@ -173,8 +177,8 @@ CanFrame create_mdps12_frame(const std::array<uint8_t, 8> &seed, int frame_count
 
 std::vector<CanFrame> build_lateral_can_frames(const HyundaiLkas11Values &lkas_seed, const HyundaiClu11Values &clu_seed,
                                                const std::array<uint8_t, 8> &mdps12_seed,
-                                               const HyundaiLkasCommand &lkas_command, float mdps_speed_spoof_kph,
-                                               bool lkas_active, bool is_mph, int frame) {
+                                               const HyundaiLkasCommand &lkas_command, bool lkas_active, bool is_mph,
+                                               int frame) {
     std::vector<CanFrame> frames;
     frames.reserve(4);  // 10 ms마다 만든다: 늘리며 다시 잡지 않게
     // 두 버스의 LKAS11은 바이트가 같다(버스만 다르다)
@@ -184,7 +188,7 @@ std::vector<CanFrame> build_lateral_can_frames(const HyundaiLkas11Values &lkas_s
     if ((frame % 2) != 0) {
         HyundaiCluCommand clu_command;
         clu_command.button = 0;
-        clu_command.speed = mdps_speed_for_lkas(clu_seed.speed, lkas_active, is_mph, mdps_speed_spoof_kph);
+        clu_command.speed = mdps_speed_for_lkas(clu_seed.speed, lkas_active, is_mph);
         clu_command.frame = frame;
         frames.push_back(create_clu11_frame(clu_seed, clu_command, kMdpsBus));
     }

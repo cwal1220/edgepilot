@@ -9,30 +9,18 @@
 #include "car/vehicle_can.h"  // kTpmsUnitBar
 #include "cli_args.h"
 #include "common/ipc_messages.h"
+#include "common/utils_file.h"
+#include "common/utils_time.h"
 #include "hud/hud_renderer.h"
 #include "hud/hud_state.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
 namespace {
-
-uint64_t now_ns() {
-    return static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-            .count());
-}
-
-bool read_file(const std::string &path, void *dst, size_t size) {
-    FILE *file = std::fopen(path.c_str(), "rb");
-    if (!file) return false;
-    const size_t got = std::fread(dst, 1, size, file);
-    std::fclose(file);
-    return got == size;
-}
 
 // EDGEARGB: magic 8 B, u32 width, u32 height, BGRA 픽셀(행 우선). 크기는 버퍼(세로면 480x640)다.
 bool write_frame_file(const std::string &path, const HudTarget &target) {
@@ -99,28 +87,22 @@ int main(int argc, char **argv) {
     std::string out_prefix = "hud_snapshot";
     int iterations = 50;
     bool transpose = false;
-    bool usage_error = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        auto next = [&]() -> const char * {
-            if (i + 1 < argc) return argv[++i];
-            usage_error = true;
-            return "";
-        };
-        if (arg == "--model")
-            model_path = next();
-        else if (arg == "--control")
-            control_path = next();
-        else if (arg == "--iterations")
-            usage_error |= !parse_int_arg(next(), &iterations, 1);
-        else if (arg == "--out")
-            out_prefix = next();
-        else if (arg == "--portrait")
+    ArgReader args(argc, argv);
+    while (args.next()) {
+        if (args.is("--model"))
+            model_path = args.value();
+        else if (args.is("--control"))
+            control_path = args.value();
+        else if (args.is("--iterations"))
+            args.read(&iterations, 1);
+        else if (args.is("--out"))
+            out_prefix = args.value();
+        else if (args.is("--portrait"))
             transpose = true;
         else
-            usage_error = true;
+            args.fail();
     }
-    if (usage_error) {
+    if (args.error()) {
         std::fprintf(stderr,
                      "usage: %s [--model model.bin] [--control control.bin] [--iterations N] "
                      "[--out PREFIX] [--portrait]\n",
@@ -128,10 +110,17 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    // 상태 파일 앞쪽 size 바이트(hud_tools.py가 레코드 페이로드 그대로 쓴다)
+    const auto load = [](const std::string &path, void *dst, size_t size) {
+        const std::string bytes = read_text_file(path);
+        if (bytes.size() < size) return false;
+        std::memcpy(dst, bytes.data(), size);
+        return true;
+    };
     ModelState model_state{};
     ControlState control_state{};
-    const bool have_model = !model_path.empty() && read_file(model_path, &model_state, sizeof(model_state));
-    const bool have_control = !control_path.empty() && read_file(control_path, &control_state, sizeof(control_state));
+    const bool have_model = !model_path.empty() && load(model_path, &model_state, sizeof(model_state));
+    const bool have_control = !control_path.empty() && load(control_path, &control_state, sizeof(control_state));
     if (!model_path.empty() && !have_model) {
         std::fprintf(stderr, "cannot read %s\n", model_path.c_str());
         return 1;
@@ -392,9 +381,9 @@ int main(int argc, char **argv) {
         const ParsedModelOutput &scene = scenario.scene ? *scenario.scene : ParsedModelOutput{};
         std::vector<double> draw_ms;
         for (int i = 0; i < iterations; ++i) {
-            const uint64_t t0 = now_ns();
+            const uint64_t t0 = monotonic_now_ns();
             renderer.draw(target, scene, projection, scenario.hud);
-            draw_ms.push_back((now_ns() - t0) / 1e6);
+            draw_ms.push_back((monotonic_now_ns() - t0) / 1e6);
         }
         std::printf("scenario %s (%d iters)\n", scenario.name, iterations);
         print_stats("draw", draw_ms);

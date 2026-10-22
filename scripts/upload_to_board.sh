@@ -33,7 +33,6 @@ runtime_files=(
   "${BIN_DIR}/overlayd"
   "${BIN_DIR}/controlsd"
   "${BIN_DIR}/recordd"
-  "${BIN_DIR}/camcal"
   "${BIN_DIR}/imud"
   "${BIN_DIR}/locationd"
   scripts/manager.py
@@ -70,10 +69,8 @@ fi
 "${SSH[@]}" "$BOARD" "set -e; cd '$DEST'
   if [ -f .upload/supercombo.axmodel ]; then mv .upload/supercombo.axmodel models/; fi
   mv .upload/lateral_nn/*.json models/lateral_nn/ && rmdir .upload/lateral_nn
-  rm -f models/lateral_nn.json  # 예전 단일 토크 모델(이제 models/lateral_nn/에서 고른다)
   if [ -f .upload/panda.bin.signed ]; then mv .upload/panda.bin.signed firmware/; fi
   rm -rf web_console && mv .upload/web_console .
-  rm -f models/supercombo_npu1.axmodel  # 예전 AI-ISP용 별도 모델(이제 supercombo.axmodel 하나)
   for f in .upload/*; do [ -f \"\$f\" ] && mv \"\$f\" .; done
   for name in ${param_files[*]}; do [ -e params/\$name ] || cp params.defaults/\$name params/; done
   rm -rf .upload; sync"

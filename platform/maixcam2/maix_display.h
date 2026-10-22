@@ -37,9 +37,6 @@ public:
     };
     OverlayBuffer begin_overlay();
     void end_overlay(const uint32_t *dirty = nullptr, int tile_shift = 0);
-    // true면 가운데 4:3 크롭 대신 소스 전체를 비율 그대로 줄여 위아래를 검게 채운다
-    // (camcal 미리보기).
-    void set_letterbox(bool letterbox) { letterbox_ = letterbox; }
     // LCD 백라이트(PWM3). on이 거짓이면 끈다(duty 0). percent(1..100)에 보드 최대치(/boot/board
     // disp_max_backlight)를 곱한다. 시작할 때는 /boot/configs maix_backlight_value로 켜 둔다. sysfs에 쓰지
     // 못하면 false.
@@ -48,5 +45,4 @@ public:
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
-    bool letterbox_ = false;
 };

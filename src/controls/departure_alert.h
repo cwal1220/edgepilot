@@ -35,7 +35,6 @@ struct DepartureAlertInput {
 struct DepartureAlertOutput {
     DepartureAlertType type = DepartureAlertType::None;
     uint32_t event_id = 0;
-    bool lead_armed = false;
     bool green_light_armed = false;
 };
 

@@ -415,7 +415,6 @@ AdaptiveCruiseOutput AdaptiveCruiseController::update(const AdaptiveCruiseInput 
     output.maximum_speed_kph = session_.maximum_speed_kph;
     output.commanded_speed_kph = session_.commanded_speed_kph;
     output.target_speed_kph = target_speed_kph;
-    output.display_scale = display_scale_.scale;
     output.command_button = output_button;
     return output;
 }

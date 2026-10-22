@@ -67,10 +67,12 @@ TEST(ModelInputTransform, AppConfigEnvFeedback) {
     AppConfig fallback = AppConfig::from_env_defaults();
     EXPECT_EQ(fallback.nv12_width, kDefaultAiWidth) << "ISP 출력 폭 기본값은 오버스캔 폭";
     EXPECT_EQ(fallback.nv12_height, kDefaultAiHeight) << "ISP 출력 높이 기본값은 오버스캔 높이";
-    EXPECT_NEAR(fallback.input_warp_fx, kDefaultInputWarpFx, 1e-5) << "ISP 출력 크기로 카메라 fx를 맞춘다";
-    EXPECT_NEAR(fallback.input_warp_fy, kDefaultInputWarpFy, 1e-5) << "ISP 출력 크기로 카메라 fy를 맞춘다";
-    EXPECT_NEAR(fallback.input_warp_cx, kDefaultInputWarpCx, 1e-5) << "ISP 출력 크기로 카메라 cx를 맞춘다";
-    EXPECT_NEAR(fallback.input_warp_cy, kDefaultInputWarpCy, 1e-5) << "ISP 출력 크기로 카메라 cy를 맞춘다";
+    EXPECT_NEAR(fallback.input_warp_fx, kCameraFx * 1280.0f / 1920.0f, 1e-3) << "ISP 출력 크기로 카메라 fx를 맞춘다";
+    EXPECT_NEAR(fallback.input_warp_fy, kCameraFy * 720.0f / 1080.0f, 1e-3) << "ISP 출력 크기로 카메라 fy를 맞춘다";
+    EXPECT_NEAR(fallback.input_warp_cx, kCameraCx * 1280.0f / 1920.0f, 1e-3) << "ISP 출력 크기로 카메라 cx를 맞춘다";
+    EXPECT_NEAR(fallback.input_warp_cy, kCameraCy * 720.0f / 1080.0f, 1e-3) << "ISP 출력 크기로 카메라 cy를 맞춘다";
+    const AppConfig plain;
+    EXPECT_EQ(plain.input_warp_fx, fallback.input_warp_fx) << "기본 생성도 같은 환산";
 
     // 다른 카메라의 1080p 내부 파라미터로 바꾸면 비례 환산된다
     setenv("EDGEPILOT_CAMERA_INTRINSICS", "1583.3981,1583.7622,954.9441,545.1774", 1);

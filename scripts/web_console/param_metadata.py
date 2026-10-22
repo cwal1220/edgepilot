@@ -72,7 +72,7 @@ PARAM_GROUPS: Dict[str, Dict[str, Any]] = {
 # 하나가 함께 내므로 스위치도 하나다. 켜면(자동 학습) 학습값을, 학습이 값을 내기 전과 끄면(수동) 수동값을 제어에
 # 쓴다(controlsd LateralController::live_params, plan_delay_s). 고정 제원은 학습하지 않는 차량 값이다.
 VEHICLE_TAB: Dict[str, Any] = {
-    "sections": ["vehicle_model", "torque_model", "steer_delay", "learner_inputs", "fixed_specs"],
+    "sections": ["vehicle_model", "torque_model", "steer_delay", "learner_inputs"],
     "learners": {
         "vehicle_model": {"learner": "paramsd", "switch": "use_live_vehicle_params"},
         "torque_model": {"learner": "torqued", "switch": "use_live_torque_params"},
@@ -129,10 +129,6 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
         "torque_lat_accel_offset": number("torque_model", "m/s²", 0.01, -1.0, 1.0, tab="vehicle", learned=True,
                                           unused=(STEERING_OFF, NN_ON)),
         "angle_offset_deg": number("vehicle_model", "°", 0.1, -10, 10, tab="vehicle", learned=True),
-        "wheelbase_m": number("fixed_specs", "m", 0.01, 2, 3.5, tab="vehicle", caution="paramsd_restart"),
-        "center_to_front_ratio": number("fixed_specs", "", 0.01, 0.2, 0.7, tab="vehicle",
-                                        caution="paramsd_restart"),
-        "path_offset_m": number("lane_position", "m", 0.01, -1, 1, unused=(STEERING_OFF, LANELESS)),
         "lane_path_weight": number("lane_position", "", 0.1, 0.5, 10, unused=(STEERING_OFF, LANELESS)),
         "min_steer_speed_mps": number("basics", "m/s", 0.1, 0, 5, unused=(STEERING_OFF,)),
         "laneless_mode": toggle("path_mode"),

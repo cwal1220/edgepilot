@@ -14,18 +14,14 @@ Which tool reads which part of a route:
 flowchart LR
     video["segments/NNN/<br>frames.bin, road.h264"]
     events["events/*.bin<br>ModelState, ControlState, CAN"]
-    video --> replay["make_replay.py"]
     video --> m2["axmodel/<br>make_m2_data.py"]
     events --> m2
-    events --> bias["lane_bias.py"]
     events --> bench["lane_benchmark.py"]
     video --> bench
-    replay --> scnv12["replay.scnv12<br>modeld replay mode"]
     m2 --> sets["calibration and<br>evaluation sets"]
-    bias --> terms["translation and<br>rotation terms"]
     bench --> card["scorecard and<br>scene frames"]
     classDef proc fill:#f6f8fa,stroke:#8b949e,color:#1f2328
-    class video,events,replay,m2,bias,bench,scnv12,sets,terms,card proc
+    class video,events,m2,bench,sets,card proc
 ```
 
 All of them decode the route through `recording_reader.py`, and
@@ -69,8 +65,6 @@ GDC, within 1 LSB).
 | File | What it does |
 | --- | --- |
 | `recording_reader.py` | the Python mirror of `src/recording/recording_format.h` and `src/common/ipc_messages.h` for the analysis tools |
-| `make_replay.py` | writes an `SCNV12R1` replay for `modeld` replay mode on the board |
-| `lane_bias.py` | measures the lateral bias of a drive and splits it into a translation term and a rotation term |
 | `lane_benchmark.py` | compares the model's ego lanes with the stock camera's (K7 `LKA14`) per drive, and draws both on the video frames where they disagree |
 | `model_warp.py` | the device warp in numpy, and the MaixCAM2 intrinsics in one place |
 
@@ -84,23 +78,6 @@ keyframe before it (`lane_benchmark.py` and `tools/ui/hud_tools.py`).
 shows, checked by `tests/check_web_console.py`. ControlState's field at offset
 56 is `cluster_speed_kph`, the cluster's display speed; `ego_speed_kph` is the
 wheel speed the controller uses.
-
-### `make_replay.py`
-
-```sh
-python make_replay.py --route ROUTE --out DIR --frames 100 --skip 400
-```
-
-It decodes the route's frames into `DIR/replay.scnv12` (with
-`replay_meta.json`), which `modeld` reads instead of the camera ring
-(`EDGEPILOT_REPLAY_NV12`). The board side is in
-[NV12 replay](../../docs/diagnostics.md#nv12-replay).
-
-### `lane_bias.py`
-
-Splitting the bias is what tells you whether a lane-hugging complaint is a
-camera-calibration problem or not. See
-[Lateral bias](../../docs/diagnostics.md#lateral-bias).
 
 ### `lane_benchmark.py`
 
@@ -126,10 +103,9 @@ are there to tell which one is on the paint. See
 
 ### `model_warp.py`
 
-It is also used by `tools/camera/warp_preview.py` to show the MaixCAM2 model
-views. It holds the MaixCAM2 intrinsics once (`maixcam2_intrinsics`, the
-`src/common/app_config.h` values) for the preview, the calibration report and
-the axmodel calibration data; the warp uses them unless given others.
+It holds the MaixCAM2 intrinsics once (`maixcam2_intrinsics`, the
+`src/common/app_config.h` values) for `lane_benchmark.py` and the axmodel
+calibration data, and the warp uses them.
 
 It copies the 12-bit fixed-point sampling of the CPU warp earlier builds used
 (the board's GDC matched it to about 1 LSB) and the runtime's projection:

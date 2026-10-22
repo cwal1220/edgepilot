@@ -46,18 +46,11 @@ constexpr char kFirmwareStatusPath[] = "/dev/shm/edgepilot_panda_status.json";
 constexpr char kFlashRequestPath[] = "/dev/shm/edgepilot_panda_flash";
 constexpr char kDefaultFirmwarePath[] = "firmware/panda.bin.signed";
 
-uint16_t parse_safety_model(const char *name, uint16_t *default_param) {
+// controlsd가 결합하는 모드는 hyundaiCommunity뿐이다(control_holds.h). 그 밖에는 송신하지 않는 nooutput.
+uint16_t parse_safety_model(const char *name) {
     const char *value = std::getenv(name);
     const std::string mode = value && value[0] ? value : "nooutput";
-    *default_param = 0;
-    if (mode == "silent") return kPandaSafetySilent;
-    if (mode == "elm327") return kPandaSafetyElm327;
-    if (mode == "hyundai") {
-        *default_param = 2;  // KIA K7 YG HEV는 현대·기아 하이브리드 safety param 경로다.
-        return kPandaSafetyHyundai;
-    }
     if (mode == "hyundaiCommunity") return kPandaSafetyHyundaiCommunity;
-    if (mode == "allOutput") return kPandaSafetyAllOutput;
     return kPandaSafetyNoOutput;
 }
 
@@ -437,10 +430,8 @@ int main() {
         // 동봉한 펌웨어(firmware/panda)는 하트비트의 결합 값을 읽지 않고 타이머만 되돌린다. 새 펌웨어가 읽는다
         const bool heartbeat_engaged = env_flag("EDGEPILOT_PANDA_ENGAGED", false);
         const bool log_can = env_flag("EDGEPILOT_PANDA_LOG_CAN", false);
-        uint16_t default_safety_param = 0;
-        const uint16_t safety_model = parse_safety_model("EDGEPILOT_PANDA_SAFETY", &default_safety_param);
-        const uint16_t safety_param =
-            static_cast<uint16_t>(env_unsigned("EDGEPILOT_PANDA_SAFETY_PARAM", default_safety_param));
+        const uint16_t safety_model = parse_safety_model("EDGEPILOT_PANDA_SAFETY");
+        const uint16_t safety_param = static_cast<uint16_t>(env_unsigned("EDGEPILOT_PANDA_SAFETY_PARAM", 0));
 
         if (tx_enabled) {
             std::fprintf(stderr, "pandad: TX enabled safety=%u param=%u engaged=%u\n", safety_model, safety_param,

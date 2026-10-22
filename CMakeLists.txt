@@ -40,24 +40,6 @@ set(PROJECT_LOCAL_INCLUDES
   "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
-# 카메라 보정 캡처(camcal)만 쓴다. 보드 빌드는 보드의 OpenCV 4.11을
-# deps/ax630(include/opencv4, opencv_lib)에 받아 그대로 링크한다(ABI를 맞춘다).
-set(AX_OPENCV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/ax630" CACHE PATH
-    "board OpenCV copy: include/opencv4 and opencv_lib/libopencv_*.so")
-find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
-# 보드 OpenCV는 aarch64 Linux 바이너리라 macOS 호스트 빌드에서는 링크할 수 없다.
-if(NOT OpenCV_FOUND AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-   EXISTS "${AX_OPENCV_DIR}/include/opencv4/opencv2/core.hpp")
-  set(OpenCV_FOUND TRUE)
-  set(OpenCV_INCLUDE_DIRS "${AX_OPENCV_DIR}/include/opencv4")
-  set(OpenCV_LIBS
-    "${AX_OPENCV_DIR}/opencv_lib/libopencv_imgcodecs.so"
-    "${AX_OPENCV_DIR}/opencv_lib/libopencv_imgproc.so"
-    "${AX_OPENCV_DIR}/opencv_lib/libopencv_core.so")
-  message(STATUS "OpenCV from ${AX_OPENCV_DIR}")
-endif()
-
-
 # 라이브러리: 로컬 헤더(src/ 기준 경로로 부른다)와 경고. 폴더마다 src/<폴더>/CMakeLists.txt가 정의한다.
 function(add_edgepilot_library target)
   add_library(${target} STATIC ${ARGN})
@@ -73,10 +55,6 @@ function(add_host_tool target)
 endfunction()
 
 if(EDGEPILOT_BUILD_RUNTIME)
-  if(NOT OpenCV_FOUND)
-    message(FATAL_ERROR "camcal needs the board OpenCV in ${AX_OPENCV_DIR} "
-                        "(scripts/fetch_maixcam2_sdk.sh copies it)")
-  endif()
   find_package(PkgConfig QUIET)
   if(EDGEPILOT_BUILD_PANDA)
     if(PkgConfig_FOUND)

@@ -1,5 +1,4 @@
-// hud_state: 공유 상태 스냅샷 → HUD 상태 매핑과 알림 카드 선택(우선순위). 보드 없이, OpenCV 없이
-// 돈다.
+// hud_state: 공유 상태 스냅샷 → HUD 상태 매핑과 알림 카드 선택(우선순위). 보드 없이 돈다.
 #include "car/hyundai_can.h"
 #include "controls/control_block.h"
 #include "hud/hud_state.h"
@@ -195,7 +194,7 @@ TEST(HudState, LearnerAndLaneMapping) {
     output.lanes[1].probability = output.lanes[2].probability = 0.9f;
     output.lanes[1].points[0].y = -1.70f;  // 왼쪽 선
     output.lanes[2].points[0].y = 1.86f;   // 오른쪽 선
-    // 차선 중앙이 0.08 m 오른쪽 = 차가 왼쪽에 있다(lane_bias.py offset과 같은 부호)
+    // 차선 중앙이 0.08 m 오른쪽 = 차가 왼쪽에 있다
     ASSERT_NEAR(lane_center_offset_m(output), 0.08f, 1e-6f);
     output.lanes[2].probability = 0.3f;
     ASSERT_TRUE(std::isnan(lane_center_offset_m(output))) << "한쪽 선이 불확실하면 모른다";

@@ -188,9 +188,9 @@ flowchart LR
 
 ### Expansion rate
 
-`diagnostics/flow_calibration_replay --leads leads.txt` feeds the recorded leads
-through the same `FlowTracker` on the board. Against the reference above,
-correlation / slope / residual (m/s):
+A board replay tool (removed on 2026-10-22) fed the recorded leads through the
+same `FlowTracker` on the board. Against the reference above, correlation /
+slope / residual (m/s):
 
 | Range | Model lead velocity | Board, first version | Board, now | OpenCV prototype |
 | --- | --- | --- | --- | --- |
@@ -280,8 +280,8 @@ Before the switch, the real `controlsd` code was replayed on 9 segments where
 the vision cruise had pressed buttons behind a lead (2026-10-10 18:34: 042, 066,
 069, 075; 19:32: 034, 039-042, 082):
 
-- `diagnostics/replay_controls --lead-track` fed in the track, computed offline
-  with the emulated flow.
+- `diagnostics/replay_controls` fed in the track, computed offline with the
+  emulated flow (an option removed on 2026-10-22).
 - Each replay starts before its cruise session, because `controlsd` estimates
   the cruise state from the driver's SET/RES presses.
 - The replay is open loop: the recorded car does not answer the replayed
@@ -349,6 +349,4 @@ follow.
 - [Runtime options](runtime-options.md#bev-tab): the web console's BEV and its
   lead card
 - [Recording](recording.md): `lead_flow` and `lead_track` in the event log
-- [Diagnostic tools](../diagnostics/README.md#tools):
-  `flow_calibration_replay --leads` and `replay_controls --lead-track`
 - [Runtime](runtime.md): `controlsd` and the vision cruise

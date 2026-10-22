@@ -5,13 +5,11 @@
 // 실제 출력과의 대조에 쓴다. 보드와 틱 경계(10 ms 격자의 위상)가 다르므로 녹화 출력과 틱마다 같지는 않다. 2026-10-13
 // 전 녹화에서는 보드가 새 플랜을 한 틱 늦게 썼으므로(플래너 작업 스레드) 모델 프레임의 첫 틱이 그만큼 더 다르다.
 // 사용: replay_controls [--steering s.json] [--cruise c.json] [--vehicle-json j] [--torque-cache c.bin]
-//                       [--force-engaged] [--lead-track track.txt] [--lane-filter W] [--lateral-nn m.json]
+//                       [--force-engaged] [--lane-filter W] [--lateral-nn m.json]
 //                       [--nn-inputs out.csv [--nn-inputs-every N]] [--dump out.txt] <events.bin...>
 //   --vehicle-json과 --torque-cache는 controlsd가 시작할 때 복원하는 paramsd·torqued 저장값이다(route/params의
 //   live_parameters.json, live_torque_parameters.bin). 없으면 학습기는 사전값에서 새로 시작한다(보드와 다르다).
 //   --force-engaged는 EDGEPILOT_FORCE_ENGAGED처럼 버튼 없이 결합한다(녹화 전에 결합해 둔 route용).
-//   --lead-track은 녹화 v13 전 route의 ModelState.lead_track을 프레임 번호로 채운다(오프라인으로 만든 앞차
-//   추적, 줄마다 "frame_id valid flags distance relative_speed distance_std speed_std"). 없는 프레임은 0이다.
 //   --lane-filter는 차선선 시간 필터의 새 측정 가중이다(planning/lane_line_filter, 1이면 끈다).
 //   --lateral-nn은 학습한 토크 모델 파일이다(docs/lateral-nn.md, 녹화 route의 models/lateral_nn.json이 그 주행의
 //   모델이다). 쓰려면 --steering의 nn_feedforward도 켠다. 켜져 있는데 모델을 주지 않으면 경고하고 선형으로 돈다.
@@ -37,7 +35,6 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -77,51 +74,43 @@ struct Digest {
 
 int main(int argc, char **argv) {
     std::string steering_path, cruise_path, vehicle_json_path, torque_cache_path, dump_path;
-    bool force_engaged = false, usage_error = false;
-    std::string lead_track_path, lateral_nn_path, nn_inputs_path;
+    bool force_engaged = false;
+    std::string lateral_nn_path, nn_inputs_path;
     long nn_inputs_every = 1;
     double lane_filter = 0.0;  // 0이면 코드 기본값
     std::vector<std::string> events;
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        // 값이 없는 옵션(마지막 인자)은 사용법 오류다. 예전에는 빈 값으로 읽어 기본값으로 돌았다.
-        auto next = [&]() -> std::string {
-            if (i + 1 < argc) return argv[++i];
-            usage_error = true;
-            return std::string();
-        };
-        if (arg == "--steering")
-            steering_path = next();
-        else if (arg == "--cruise")
-            cruise_path = next();
-        else if (arg == "--vehicle-json")
-            vehicle_json_path = next();
-        else if (arg == "--torque-cache")
-            torque_cache_path = next();
-        else if (arg == "--dump")
-            dump_path = next();
-        else if (arg == "--force-engaged")
+    ArgReader args(argc, argv);
+    while (args.next()) {
+        if (args.is("--steering"))
+            steering_path = args.value();
+        else if (args.is("--cruise"))
+            cruise_path = args.value();
+        else if (args.is("--vehicle-json"))
+            vehicle_json_path = args.value();
+        else if (args.is("--torque-cache"))
+            torque_cache_path = args.value();
+        else if (args.is("--dump"))
+            dump_path = args.value();
+        else if (args.is("--force-engaged"))
             force_engaged = true;
-        else if (arg == "--lead-track")
-            lead_track_path = next();
-        else if (arg == "--lane-filter")
-            usage_error |= !parse_double_arg(next().c_str(), &lane_filter, 0.0, 1.0);
-        else if (arg == "--lateral-nn")
-            lateral_nn_path = next();
-        else if (arg == "--nn-inputs")
-            nn_inputs_path = next();
-        else if (arg == "--nn-inputs-every")
-            usage_error |= !parse_long_arg(next().c_str(), &nn_inputs_every, 1);
-        else if (arg.rfind("--", 0) == 0)
-            usage_error = true;
+        else if (args.is("--lane-filter"))
+            args.read(&lane_filter, 0.0, 1.0);
+        else if (args.is("--lateral-nn"))
+            lateral_nn_path = args.value();
+        else if (args.is("--nn-inputs"))
+            nn_inputs_path = args.value();
+        else if (args.is("--nn-inputs-every"))
+            args.read(&nn_inputs_every, 1);
+        else if (args.is_option())
+            args.fail();
         else
-            events.push_back(arg);
+            events.push_back(args.arg());
     }
-    if (usage_error || events.empty() || (!nn_inputs_path.empty() && lateral_nn_path.empty())) {
+    if (args.error() || events.empty() || (!nn_inputs_path.empty() && lateral_nn_path.empty())) {
         std::fprintf(stderr,
                      "usage: %s [--steering s.json] [--cruise c.json] [--vehicle-json live_parameters.json] "
                      "[--torque-cache live_torque_parameters.bin] "
-                     "[--force-engaged] [--lead-track track.txt] [--lane-filter W] [--lateral-nn m.json] "
+                     "[--force-engaged] [--lane-filter W] [--lateral-nn m.json] "
                      "[--nn-inputs out.csv [--nn-inputs-every N]] [--dump out.txt] <events.bin...>\n",
                      argv[0]);
         return 2;
@@ -144,20 +133,6 @@ int main(int argc, char **argv) {
     if (!torque_cache_path.empty() && torque_cache.empty()) {
         std::fprintf(stderr, "cannot read %s\n", torque_cache_path.c_str());
         return 1;
-    }
-    std::unordered_map<uint64_t, LeadTrackState> lead_tracks;
-    if (!lead_track_path.empty()) {
-        std::FILE *f = std::fopen(lead_track_path.c_str(), "r");
-        if (!f) {
-            std::fprintf(stderr, "cannot read %s\n", lead_track_path.c_str());
-            return 1;
-        }
-        unsigned long long id = 0;
-        LeadTrackState t;
-        while (std::fscanf(f, "%llu %u %u %f %f %f %f", &id, &t.valid, &t.flags, &t.distance_m, &t.relative_speed_mps,
-                           &t.distance_std_m, &t.relative_speed_std_mps) == 7)
-            lead_tracks[id] = t;
-        std::fclose(f);
     }
 
     // 레코드는 기록 시각 순으로 흘려 읽는다(RouteEvents: recordd는 쌓인 CAN을 먼저 쓰고 상태 스냅샷을 그 뒤에 쓴다). 첫
@@ -238,13 +213,7 @@ int main(int argc, char **argv) {
                     break;
                 case RecordType::ModelState: {
                     ModelState model{};
-                    if (read_record(r.payload, &model)) {
-                        if (!lead_track_path.empty()) {
-                            const auto it = lead_tracks.find(model.frame_id);
-                            model.lead_track = it != lead_tracks.end() ? it->second : LeadTrackState{};
-                        }
-                        tick.on_model(model);
-                    }
+                    if (read_record(r.payload, &model)) tick.on_model(model);
                     break;
                 }
                 case RecordType::PandaState: {

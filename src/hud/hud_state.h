@@ -153,7 +153,7 @@ struct HudAlertCard {
 HudAlertCard hud_select_alert(const HudState &hud, bool model_ok);
 
 // 모델이 본 가까운 차선 중앙: x=0에서 왼쪽·오른쪽 자기 차선선의 가운데(+y = 오른쪽). 두 선이
-// 다 확실하지 않으면 NaN. tools/model/lane_bias.py의 offset(x=0)과 같은 값이다.
+// 다 확실하지 않으면 NaN. 차선 중앙이 오른쪽(+)이면 차가 차선 왼쪽에 있다.
 float lane_center_offset_m(const ParsedModelOutput &output);
 // model_ok: 유효하고 신선한 모델 출력이 있는지. services_healthy의 조건 중 하나.
 void hud_apply_manager_state(const ManagerState &manager, bool fresh, bool model_ok, HudState *hud);

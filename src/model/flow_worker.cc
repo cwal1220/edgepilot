@@ -145,18 +145,17 @@ void FlowWorker::run() {
             std::fprintf(stderr, "flowcal: mount change detected (%u so far), kept the last %u blocks\n",
                          st.mount_changes, st.estimate_blocks);
         }
-        std::fprintf(
-            stderr,
-            "flowcal: block %u windows %u yaw %+.3f pitch %+.3f deg (sd %.3f/%.3f, %u blocks, %s) | "
-            "last yaw %+.3f pitch %+.3f rot %.3f deg tracks %u inliers %u parallax %.1f px | frames %llu "
-            "done %llu lost %llu rejected %llu dropped %llu | %.1f ms wall %.2f ms cpu per frame, pyramid %s\n",
-            st.blocks, st.windows, st.yaw * kRadToDeg, st.pitch * kRadToDeg, st.sd_yaw * kRadToDeg,
-            st.sd_pitch * kRadToDeg, st.estimate_blocks,
-            st.status == static_cast<uint32_t>(FlowCalibrationStatus::Estimate) ? "estimate" : "collecting",
-            st.window_yaw * kRadToDeg, st.window_pitch * kRadToDeg, st.window_rotation * kRadToDeg, st.window_tracks,
-            st.window_inliers, st.window_parallax, static_cast<unsigned long long>(s.frames),
-            static_cast<unsigned long long>(s.windows_done), static_cast<unsigned long long>(s.windows_lost),
-            static_cast<unsigned long long>(s.rejected), static_cast<unsigned long long>(dropped), s.wall_ms / frames,
-            s.cpu_ms / frames, tracker_.pyramid_engine());
+        std::fprintf(stderr,
+                     "flowcal: block %u windows %u yaw %+.3f pitch %+.3f deg (sd %.3f/%.3f, %u blocks, %s) | "
+                     "last yaw %+.3f pitch %+.3f rot %.3f deg tracks %u inliers %u parallax %.1f px | frames %llu "
+                     "done %llu lost %llu rejected %llu dropped %llu | %.1f ms wall %.2f ms cpu per frame\n",
+                     st.blocks, st.windows, st.yaw * kRadToDeg, st.pitch * kRadToDeg, st.sd_yaw * kRadToDeg,
+                     st.sd_pitch * kRadToDeg, st.estimate_blocks,
+                     st.status == static_cast<uint32_t>(FlowCalibrationStatus::Estimate) ? "estimate" : "collecting",
+                     st.window_yaw * kRadToDeg, st.window_pitch * kRadToDeg, st.window_rotation * kRadToDeg,
+                     st.window_tracks, st.window_inliers, st.window_parallax, static_cast<unsigned long long>(s.frames),
+                     static_cast<unsigned long long>(s.windows_done), static_cast<unsigned long long>(s.windows_lost),
+                     static_cast<unsigned long long>(s.rejected), static_cast<unsigned long long>(dropped),
+                     s.wall_ms / frames, s.cpu_ms / frames);
     }
 }

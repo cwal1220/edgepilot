@@ -87,9 +87,6 @@ def cmd_inputs(args: argparse.Namespace) -> int:
     print(f"moment t={seconds:.1f}s frame_id={frame_id} speed={control['cluster_speed_kph']:.1f} "
           f"active={control['active']} lanes={np.round(lanes, 2)} lead={lead_valid}")
 
-    if not (args.route / "segments").is_dir():
-        print("no segments/ in this route copy: camera frame skipped", file=sys.stderr)
-        return 0
     video = RouteVideo(args.route)
     rgb = video.frame_rgb(frame_id)
     if rgb is None:

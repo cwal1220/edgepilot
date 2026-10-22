@@ -1,8 +1,8 @@
 """모델 입력 워프의 Numpy 구현. 행렬은 src/model/model_input_transform.cc와 같다.
 
 샘플링은 고정소수점 bilinear(가중치 12비트)다. 보드의 GDC 워프와 바이트 단위로 같지는 않지만 Y 1 LSB, U/V 평균
-0.4 LSB 안이라(docs/verification.md) axmodel 보정·평가 데이터(axmodel/make_m2_data.py)와 미리보기가 런타임과 같은
-픽셀 분포를 갖는다. 출력은 supercombo 모델이 받는 YUV6
+0.4 LSB 안이라(docs/verification.md) axmodel 보정·평가 데이터(axmodel/make_m2_data.py)가 런타임과 같은 픽셀
+분포를 갖는다. 출력은 supercombo 모델이 받는 YUV6
 텐서 배치다: 128x256에서 채널 [Y(2x,2y), Y(2x,2y+1), Y(2x+1,2y), Y(2x+1,2y+1), U, V].
 """
 
@@ -124,9 +124,8 @@ class ModelInputWarp:
     """보정을 고정한 모델 프레임 워프 하나(medmodel 또는 sbigmodel)."""
 
     def __init__(self, src_w: int, src_h: int, rpy: np.ndarray, sbig: bool,
-                 intrinsics: tuple[float, float, float, float] | None = None,
                  camera_offset_m: float = 0.0, camera_height_m: float = CAMERA_HEIGHT_M):
-        fx, fy, cx, cy = intrinsics or maixcam2_intrinsics(src_w, src_h)
+        fx, fy, cx, cy = maixcam2_intrinsics(src_w, src_h)
         proj_y = projection_matrix(fx, fy, cx, cy, rpy, sbig, camera_offset_m, camera_height_m)
         proj_uv = _scale_transform(proj_y, 0.5)
         self.src_w, self.src_h = src_w, src_h
@@ -151,10 +150,8 @@ class ModelInputWarp:
 class WarpPair:
     """보정이 바뀔 때까지 캐시해 두는 med + sbig 워프."""
 
-    def __init__(self, src_w: int, src_h: int,
-                 intrinsics: tuple[float, float, float, float] | None = None):
+    def __init__(self, src_w: int, src_h: int):
         self.src_w, self.src_h = src_w, src_h
-        self.intrinsics = intrinsics
         self._med: ModelInputWarp | None = None
         self._sbig: ModelInputWarp | None = None
 
@@ -165,9 +162,9 @@ class WarpPair:
         mount = (float(camera_offset_m), float(camera_height_m))
         if (self._med is None or not np.allclose(self._med.rpy, rpy, atol=1e-7)
                 or not np.allclose(self._med.mount, mount, atol=1e-5)):
-            self._med = ModelInputWarp(self.src_w, self.src_h, rpy, sbig=False, intrinsics=self.intrinsics,
+            self._med = ModelInputWarp(self.src_w, self.src_h, rpy, sbig=False,
                                        camera_offset_m=mount[0], camera_height_m=mount[1])
-            self._sbig = ModelInputWarp(self.src_w, self.src_h, rpy, sbig=True, intrinsics=self.intrinsics,
+            self._sbig = ModelInputWarp(self.src_w, self.src_h, rpy, sbig=True,
                                         camera_offset_m=mount[0], camera_height_m=mount[1])
 
     def warp(self, y, u, v) -> tuple[np.ndarray, np.ndarray]:

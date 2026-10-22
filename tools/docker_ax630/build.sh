@@ -4,7 +4,7 @@
 # 펌웨어도 같이 빌드한다(build-ax630/panda/obj/panda.bin.signed, upload_to_board.sh가 올린다).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-for dep in lib/libax_engine.so maix/libmaixcam_lib.so opencv_lib/libopencv_core.so; do
+for dep in lib/libax_engine.so maix/libmaixcam_lib.so; do
   [ -e "deps/ax630/$dep" ] || { echo "deps/ax630/$dep missing (run scripts/fetch_maixcam2_sdk.sh)"; exit 1; }
 done
 docker build -q -t edgepilot-ax630-build tools/docker_ax630 >/dev/null

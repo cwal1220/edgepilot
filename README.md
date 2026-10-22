@@ -356,8 +356,6 @@ source.
 - [Diagnostic tools](diagnostics/README.md): replay, dataset, and HUD tools
 - [Rehearsal](docs/rehearsal.md): replay a recorded drive through the whole runtime
   on the board (hardware H.264 decode into the frame ring, CAN on the same timeline)
-- [Camera intrinsics](docs/camera-intrinsics.md): measure the camera with a TV
-  checkerboard and the Func button
 - [Closed-loop replay](docs/closed-loop-replay.md): rank control changes against
   a recorded drive before driving them
 - [Scripts](scripts/README.md): build, deploy, and the board-side Python
@@ -385,8 +383,7 @@ The [documentation index](docs/README.md) maps each part of the system to the
 document that covers it and gives a reading order.
 
 - **Get started:** [Board setup](docs/board-setup.md) · [Build and deploy](docs/build-and-deploy.md) ·
-  [Boot time](docs/boot-time.md) · [Camera intrinsics](docs/camera-intrinsics.md) ·
-  [Rehearsal](docs/rehearsal.md)
+  [Boot time](docs/boot-time.md) · [Rehearsal](docs/rehearsal.md)
 - **How it works:** [Runtime](docs/runtime.md) · [Model pipeline](docs/model-pipeline.md) ·
   [HUD](docs/hud.md) · [Recording](docs/recording.md) · [Source layout](docs/source-layout.md)
 - **Operate and tune:** [Runtime options](docs/runtime-options.md) · [Parameters](params/README.md) ·

@@ -7,7 +7,9 @@
 #include <cerrno>
 #include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 
 inline bool parse_double_arg(const char *text, double *out, double lo = -std::numeric_limits<double>::max(),
@@ -66,3 +68,55 @@ inline bool parse_float_list_arg(const char *text, float *out, int n) {
     for (int i = 0; i < n; ++i) out[i] = values[i];
     return true;
 }
+
+// 도구들의 옵션 읽기. while (args.next())로 인자를 하나씩 보고, is()로 이름을 맞춘 뒤 value()나 read()로 값을 받는다.
+// 값이 없거나(마지막 인자) 수가 틀리면 error()가 켜진다. 모르는 --옵션은 도구가 fail()을 부르고, 나머지는 위치
+// 인자(arg())다. error()면 도구는 사용법을 찍고 2로 끝낸다.
+class ArgReader {
+public:
+    ArgReader(int argc, char **argv) : argc_(argc), argv_(argv) {}
+
+    bool next() { return ++index_ < argc_; }
+    const char *arg() const { return argv_[index_]; }
+    bool is(const char *name) const { return std::strcmp(argv_[index_], name) == 0; }
+    bool is_option() const { return std::strncmp(argv_[index_], "--", 2) == 0; }
+    void fail() { error_ = true; }
+    bool error() const { return error_; }
+
+    // 옵션 값(다음 인자). 없으면 오류를 켜고 ""를 돌려준다.
+    const char *value() { return has_value() ? argv_[++index_] : ""; }
+    void read(double *out, double lo = -std::numeric_limits<double>::max(),
+              double hi = std::numeric_limits<double>::max()) {
+        if (has_value()) check(parse_double_arg(argv_[++index_], out, lo, hi));
+    }
+    void read(float *out, double lo = -std::numeric_limits<float>::max(),
+              double hi = std::numeric_limits<float>::max()) {
+        if (has_value()) check(parse_float_arg(argv_[++index_], out, lo, hi));
+    }
+    void read(long *out, long lo = LONG_MIN, long hi = LONG_MAX) {
+        if (has_value()) check(parse_long_arg(argv_[++index_], out, lo, hi));
+    }
+    void read(int *out, int lo = INT_MIN, int hi = INT_MAX) {
+        if (has_value()) check(parse_int_arg(argv_[++index_], out, lo, hi));
+    }
+    void read_list(float *out, int n) {
+        if (has_value()) check(parse_float_list_arg(argv_[++index_], out, n));
+    }
+
+private:
+    bool has_value() {
+        if (index_ + 1 < argc_) return true;
+        error_ = true;
+        return false;
+    }
+    void check(bool ok) {
+        if (ok) return;
+        std::fprintf(stderr, "bad value for %s: %s\n", argv_[index_ - 1], argv_[index_]);
+        error_ = true;
+    }
+
+    int argc_;
+    char **argv_;
+    int index_ = 0;
+    bool error_ = false;
+};

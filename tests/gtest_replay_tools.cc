@@ -149,11 +149,54 @@ TEST(ReplayTools, RunOnASyntheticRoute) {
           "replay_closed_loop --wn 16x " + root + "/closed.csv " + events,
           "replay_closed_loop --gain-pts 1,2,3 " + root + "/closed.csv " + events,
           "replay_closed_loop --delay -1 " + root + "/closed.csv " + events,
-          "replay_lateral_learners --metric-from 1e3 " + events}) {
+          "replay_lateral_learners --metric-from 1e3 " + events,
+          "replay_planner " + root + "/planner.csv " + events + " --steering",
+          "replay_localization --lag " + root + "/loc.csv " + events}) {
         EXPECT_EQ(run_tool(args, &out), 2) << args << "\n" << out;
     }
 
     std::filesystem::remove_all(root);
+}
+
+// 옵션은 어디에 와도 되고, 값이 없거나 틀리면 error()다. 위치 인자는 순서대로 남는다.
+TEST(CliArgs, ArgReaderReadsOptionsAndPositionals) {
+    const char *argv_ok[] = {"tool", "a.csv", "--gain", "0.5", "--open", "b.bin", "--name", "x"};
+    ArgReader ok(8, const_cast<char **>(argv_ok));
+    double gain = 0.0;
+    bool open = false;
+    std::string name;
+    std::vector<std::string> positional;
+    while (ok.next()) {
+        if (ok.is("--gain"))
+            ok.read(&gain, 0.0, 1.0);
+        else if (ok.is("--open"))
+            open = true;
+        else if (ok.is("--name"))
+            name = ok.value();
+        else if (ok.is_option())
+            ok.fail();
+        else
+            positional.push_back(ok.arg());
+    }
+    EXPECT_FALSE(ok.error());
+    EXPECT_DOUBLE_EQ(gain, 0.5);
+    EXPECT_TRUE(open);
+    EXPECT_EQ(name, "x");
+    EXPECT_EQ(positional, (std::vector<std::string>{"a.csv", "b.bin"}));
+
+    const char *argv_missing[] = {"tool", "--name"};
+    ArgReader missing(2, const_cast<char **>(argv_missing));
+    while (missing.next())
+        if (missing.is("--name")) EXPECT_STREQ(missing.value(), "");
+    EXPECT_TRUE(missing.error()) << "값이 없는 옵션";
+
+    const char *argv_bad[] = {"tool", "--gain", "2"};
+    ArgReader bad(3, const_cast<char **>(argv_bad));
+    double kept = 0.25;
+    while (bad.next())
+        if (bad.is("--gain")) bad.read(&kept, 0.0, 1.0);
+    EXPECT_TRUE(bad.error()) << "범위 밖";
+    EXPECT_DOUBLE_EQ(kept, 0.25) << "틀린 값은 담지 않는다";
 }
 
 TEST(CliArgs, WholeFiniteNumbersInRange) {

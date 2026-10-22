@@ -1,6 +1,6 @@
 // modeld: 카메라 프레임 링의 최신 프레임마다 supercombo를 NPU에서 돌려 ModelState를 낸다(20 Hz). 입력 워프는 GDC,
 // 보정은 CalibrationService(포즈 또는 광류), 광류 보정과 앞차 확대율은 광류 워커 스레드(IVE)가 맡는다. 녹화할
-// 프레임은 recordFrame으로 알린다. EDGEPILOT_REPLAY_NV12를 주면 그 SCNV12R1 파일로 헤드리스 재생한다.
+// 프레임은 recordFrame으로 알린다.
 
 #include "common/app_config.h"
 #include "common/build_version.h"
@@ -15,7 +15,6 @@
 #include "model/flow_worker.h"
 #include "model/lead_tracker.h"
 #include "model/model_state_fill.h"
-#include "model/replay_source.h"
 #include "model/supercombo_model.h"
 
 #include <signal.h>
@@ -40,46 +39,6 @@ CalibrationSource requested_calibration_source(const DeviceSettings &settings) {
 }
 
 volatile sig_atomic_t g_stop = 0;
-
-// EDGEPILOT_RAW_DUMP: replay 중 모델 raw 출력을 SCODMP1로 남긴다.
-// tests/gtest_model_output가 이 포맷을 읽어 보드 출력과 호스트
-// 기준을 프레임 단위로 비교할 수 있다(모델 교체 검증용).
-class RawOutputDump {
-public:
-    explicit RawOutputDump(const char *path) {
-        if (!path || !path[0]) return;
-        file_ = std::fopen(path, "wb");
-        if (!file_) {
-            std::fprintf(stderr, "modeld: cannot open raw dump %s\n", path);
-            return;
-        }
-        std::fwrite("SCODMP1\0", 1, 8, file_);
-        const uint32_t placeholder = 0;
-        std::fwrite(&placeholder, sizeof(placeholder), 1, file_);  // 원시 float 값
-        std::fwrite(&placeholder, sizeof(placeholder), 1, file_);  // frames
-    }
-
-    ~RawOutputDump() {
-        if (!file_) return;
-        std::fseek(file_, 8, SEEK_SET);
-        std::fwrite(&raw_size_, sizeof(raw_size_), 1, file_);
-        std::fwrite(&frames_, sizeof(frames_), 1, file_);
-        std::fclose(file_);
-        std::fprintf(stderr, "modeld: raw dump wrote %u frames x %u floats\n", frames_, raw_size_);
-    }
-
-    void append(const std::vector<float> &raw) {
-        if (!file_) return;
-        raw_size_ = static_cast<uint32_t>(raw.size());  // 늘 모델 출력 하나(2576)
-        std::fwrite(raw.data(), sizeof(float), raw.size(), file_);
-        ++frames_;
-    }
-
-private:
-    std::FILE *file_ = nullptr;
-    uint32_t raw_size_ = 0;
-    uint32_t frames_ = 0;
-};
 
 // controlsd 스냅샷에서 모델 입력용 자차 속도와 desire, 광류 보정기의 직진 조건(곡률·깜빡이), 결합 상태(보정
 // 출처 설정을 해제까지 미룬다)를 읽는다. controlsd가 아직 없으면 열릴 때까지 마지막 값을 유지한다. 스냅샷이
@@ -129,36 +88,27 @@ private:
 };
 
 // 웹 기기 설정(display.json). modeld에서는 이것만 파일을 읽어(1초에 한 번 stat) 카메라 장착과 보정 출처가 같은
-// 값을 받는다. 재생은 보드 설정을 읽지 않고 EDGEPILOT_CAMERA_OFFSET_M·EDGEPILOT_CAMERA_HEIGHT_M(기본 0, 모델
-// 높이)만 쓰며, 보정 출처는 포즈다.
+// 값을 받는다.
 class ModeldSettings {
 public:
-    explicit ModeldSettings(bool live) : live_(live) {
-        if (live_) {
-            file_.poll(monotonic_now_ns(), &settings_);
-        } else {
-            settings_.camera_offset_m = clamp_device_setting(
-                &DeviceSettings::camera_offset_m, env_float("EDGEPILOT_CAMERA_OFFSET_M", settings_.camera_offset_m));
-            settings_.camera_height_m = clamp_device_setting(
-                &DeviceSettings::camera_height_m, env_float("EDGEPILOT_CAMERA_HEIGHT_M", settings_.camera_height_m));
-        }
+    ModeldSettings() {
+        file_.poll(monotonic_now_ns(), &settings_);
         log();
     }
 
     // 프레임마다 한 번
     void poll() {
-        if (live_ && file_.poll(monotonic_now_ns(), &settings_)) log();
+        if (file_.poll(monotonic_now_ns(), &settings_)) log();
     }
     const DeviceSettings &get() const { return settings_; }
 
 private:
     void log() const {
-        std::fprintf(stderr, "modeld: settings camera offset=%+.3f m height=%.2f m, calibration source %s (%s)\n",
+        std::fprintf(stderr, "modeld: settings camera offset=%+.3f m height=%.2f m, calibration source %s\n",
                      settings_.camera_offset_m, settings_.camera_height_m,
-                     settings_.calibration_use_flow ? "flow" : "pose", live_ ? "display.json" : "replay env");
+                     settings_.calibration_use_flow ? "flow" : "pose");
     }
 
-    bool live_ = false;
     DeviceSettingsFile file_;
     DeviceSettings settings_;
 };
@@ -197,7 +147,7 @@ struct LeadIo {
     float ego_mps = std::numeric_limits<float>::quiet_NaN();  // 자차 속도, 모르면 NaN(추적 시작에만 쓴다)
 };
 
-// 두 루프(라이브·재생)가 같이 쓰는 모델 쪽: 모델, 기기 설정, 보정, 카메라 장착(이 순서로 만든다. 모델의 세션이
+// 모델 쪽: 모델, 기기 설정, 보정, 카메라 장착(이 순서로 만든다. 모델의 세션이
 // AX_SYS_Init을 한다). 프레임마다 prepare_frame → 실행 → publish.
 struct ModelLoop {
     SupercomboModel model;
@@ -205,9 +155,8 @@ struct ModelLoop {
     CalibrationService calibration;
     CameraMount mount;
 
-    ModelLoop(const AppConfig &config, bool live)
+    explicit ModelLoop(const AppConfig &config)
         : model(config.axmodel_path.c_str(), config),
-          settings(live),
           calibration(config, requested_calibration_source(settings.get())),
           mount(settings.get()) {}
 
@@ -265,56 +214,6 @@ void ModelLoop::publish(LatestChannel &model_pub, const ParsedModelOutput &parse
     model_pub.publish(&state, sizeof(state));
 }
 
-int run_replay(const AppConfig &config, LatestChannel &model_pub) {
-    ReplayNv12Source source(config.replay_nv12_path);
-    // 재생 소스 해상도에 맞춘 기본 워프. GDC 워프도 이 크기로 만들어져야
-    // 라이브와 같은 경로를 탄다.
-    AppConfig replay_config = config;
-    replay_config.nv12_width = source.width();
-    replay_config.nv12_height = source.height();
-    replay_config.set_warp_source(source.width(), source.height());
-    std::fprintf(stderr, "modeld replay input format=NV12 frames=%u file=%s\n", source.frame_count(),
-                 config.replay_nv12_path.c_str());
-
-    ModelLoop loop(replay_config, false);
-    std::vector<float> raw;
-    RawOutputDump raw_dump(std::getenv("EDGEPILOT_RAW_DUMP"));
-    unsigned processed = 0;
-    unsigned errors = 0;
-    StatsWindow window(monotonic_now_ns());
-
-    // 프레임은 GDC 소스 CMM에 바로 읽는다
-    while (!g_stop && source.read(loop.model.replay_frame())) {
-        loop.prepare_frame();
-        const uint64_t t0 = monotonic_now_ns();
-        const bool ok = loop.model.run_replay_frame(raw);
-        const uint64_t t1 = monotonic_now_ns();
-        if (ok) {
-            raw_dump.append(raw);
-            ParsedModelOutput parsed = ModelOutputParser::parse(raw.data());
-            const float model_ms = static_cast<float>((t1 - t0) / 1000000.0);
-            // 재생은 처리 시각으로 찍으므로 앞차 추적(시간 간격이 필요하다)은 돌리지 않는다
-            const LeadIo lead;
-            loop.publish(model_pub, parsed, processed, monotonic_now_ns(), model_ms, 0.0f, false, lead);
-            ++processed;
-            window.count();
-        } else {
-            ++errors;
-        }
-
-        const uint64_t now_ns = monotonic_now_ns();
-        if (window.close_if_due(now_ns)) {
-            std::fprintf(stderr, "modeld replay: frames=%u/%u fps=%.2f errors=%u\n", processed, source.frame_count(),
-                         window.total_rate(processed, now_ns), errors);
-            std::fflush(stderr);
-        }
-    }
-
-    std::fprintf(stderr, "modeld replay done frames=%u errors=%u fps=%.2f\n", processed, errors,
-                 window.total_rate(processed, monotonic_now_ns()));
-    return processed > 0 && errors == 0 ? 0 : 1;
-}
-
 // 광류 작업이 앞차 점을 고를 때 읽는 링 슬롯의 CPU 매핑(캐시, 읽을 행만 비운다). camerad가 다시 떠서 물리 주소가
 // 바뀌면 다시 매핑한다.
 struct RingSlotMaps {
@@ -347,7 +246,7 @@ int run_live(const AppConfig &config, LatestChannel &model_pub, LatestChannel &r
     }
     if (!frame_ring.valid()) return 1;
 
-    ModelLoop loop(config, true);
+    ModelLoop loop(config);
     EgoStateReader ego;
     // 링 슬롯의 CPU 매핑(광류 작업의 앞차 점 고르기). 광류 작업보다 먼저 선언해 나중에 없앤다.
     RingSlotMaps slot_maps;
@@ -367,7 +266,7 @@ int run_live(const AppConfig &config, LatestChannel &model_pub, LatestChannel &r
             // 보정 서비스가 상태를 읽고 블록을 저장하고 초기화를 보낸다. 워커는 loop보다 늦게 선언돼 먼저
             // 없어지지만, 그 뒤에는 update를 부르지 않고 서비스의 소멸자도 측정원을 건드리지 않는다.
             loop.calibration.attach_flow(flow.get());
-            std::fprintf(stderr, "modeld: flow calibration and lead flow on (VPP/IVE pyramid, IVE LK)\n");
+            std::fprintf(stderr, "modeld: flow calibration and lead flow on (VPP pyramid, IVE LK)\n");
         } catch (const std::exception &e) {
             std::fprintf(stderr, "modeld: flow calibration and lead flow off: %s\n", e.what());
         }
@@ -483,7 +382,6 @@ int main(int argc, char *argv[]) {
         if (!record_frame_pub.open(kRecordFrameTopic, sizeof(RoadAiFrame), true))
             throw std::runtime_error("open recordFrame ipc failed");
 
-        if (config.replay_enabled()) return run_replay(config, model_pub);
         return run_live(config, model_pub, record_frame_pub);
     } catch (const std::exception &e) {
         std::fprintf(stderr, "modeld error: %s\n", e.what());

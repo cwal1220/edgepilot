@@ -2,6 +2,7 @@
 
 #include "common/utils_time.h"  // kDtMdl
 
+#include "car/car_specs.h"
 #include "common/ipc_messages.h"
 #include "controls/control_params.h"
 #include "planning/desire_helper.h"
@@ -75,10 +76,6 @@ private:
 
 class LanePlanner {
 public:
-    explicit LanePlanner(double path_offset_m) : path_offset_m_(path_offset_m) {}
-
-    void update_offsets(double path_offset_m) { path_offset_m_ = path_offset_m; }
-
     void set_filter_weight(double weight) {
         left_filter_.set_measurement_weight(weight);
         right_filter_.set_measurement_weight(weight);
@@ -191,17 +188,11 @@ public:
         const double half_width = std::min(4.0, lane_width_) * 0.5;
         const double denominator = left_prob_eff_ + right_prob_eff_ + 0.0001;
 
-        // 경로 오프셋은 차선 중심에만 더한다(openpilot이 camera_offset을 차선선에만 더하듯).
-        // 모델 경로는 차 기준이라 거기에 더하면 매 프레임 "지금 가려는 곳의 8 cm 옆"이 목표가
-        // 되어 위치 고정점이 없다. 모델의 중앙 복원력이 약해(차선 1 m 벗어날 때 plan 0.28 m)
-        // 교차로 랜리스 인계 때 차가 오프셋의 몇 배만큼 계속 밀렸다(2026-09-29 실차: 좌측 쏠림).
-        // 이렇게 하면 실제 적용량은 차선 가중치 d_prob를 따르고, 모델 경로 구간으로 넘어가는 동안
-        // 출력 블렌드(1 - plan_mix)만큼 더 줄어든다.
         std::array<double, kTrajectorySize> lane_path_y{};
         for (int i = 0; i < kTrajectorySize; ++i) {
             const double from_left = left_y_[i] + half_width;
             const double from_right = right_y_[i] - half_width;
-            lane_path_y[i] = (left_prob_eff_ * from_left + right_prob_eff_ * from_right) / denominator + path_offset_m_;
+            lane_path_y[i] = (left_prob_eff_ * from_left + right_prob_eff_ * from_right) / denominator;
         }
 
         std::array<double, kTrajectorySize> valid_t{};
@@ -276,7 +267,6 @@ private:
     double right_std_ = 0.0;
     double lane_width_ = 3.7;
     double d_prob_ = 0.0;
-    double path_offset_m_ = 0.0;
     LaneLineFilter left_filter_, right_filter_;
 };
 
@@ -324,10 +314,9 @@ MpcReferences mpc_references(const std::array<std::array<double, 3>, kTrajectory
 }  // namespace
 
 struct LateralPlanner::Impl {
-    explicit Impl(const SteeringParams &steering) : lane_planner(steering.path_offset_m) { update_params(steering); }
+    explicit Impl(const SteeringParams &steering) { update_params(steering); }
 
     void update_params(const SteeringParams &steering) {
-        lane_planner.update_offsets(steering.path_offset_m);
         lane_path_weight = steering.lane_path_weight;
         DesireHelperParams desire_params;
         // desire_helper의 torque_applied는 carstate.steeringPressed에서 나오므로
@@ -336,15 +325,12 @@ struct LateralPlanner::Impl {
         desire_params.lane_change_min_speed_mps = steering.lane_change_min_speed_kph / 3.6;
         desire_helper.update_params(desire_params);
         laneless_mode = steering.laneless_mode;
-        const double center_to_front = steering.center_to_front_m();
-        // 뒷바퀴 강성은 질량당 값이다(opendbc scale_tire_stiffness_per_mass). 상류 식 aF·m / (L·cR)에서 질량이 약분된다.
-        constexpr double civic_mass = 1462.0;
-        constexpr double civic_wheelbase = 2.70;
-        constexpr double civic_center_to_front = civic_wheelbase * 0.4;
-        double tire_rear_per_mass = 202500.0 * steering.tire_stiffness_factor / civic_mass;
-        tire_rear_per_mass *= (center_to_front / steering.wheelbase_m) / (civic_center_to_front / civic_wheelbase);
-        factor1 = steering.wheelbase_m - center_to_front;
-        factor2 = center_to_front / (steering.wheelbase_m * tire_rear_per_mass);
+        constexpr double wheelbase = kWheelbaseM, center_to_front = kCenterToFrontM;
+        // 뒷바퀴 강성은 질량당 값이다. 상류 식 aF·m / (L·cR)에서 질량이 약분된다.
+        const double tire_rear_per_mass =
+            scale_tire_stiffness_per_mass(wheelbase, center_to_front, double{steering.tire_stiffness_factor}).second;
+        factor1 = wheelbase - center_to_front;
+        factor2 = center_to_front / (wheelbase * tire_rear_per_mass);
     }
 
     LateralTarget update(const ModelState &model, const VehicleCanState &vehicle, const LateralPlannerInput &in) {

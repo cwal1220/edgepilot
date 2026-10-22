@@ -382,9 +382,6 @@ TEST(AdaptiveCruise, SteadyFollowingIssuesNoCommands) {
     }
     ASSERT_NEAR(vehicle.set_speed_kph, 80.0f, 0.001f) << "안정적으로 따라갈 때는 차의 설정 속도를 건드리지 않는다";
     ASSERT_EQ(commands, 0) << "안정적으로 따라갈 때는 버튼 명령을 내지 않는다";
-    // 두 속도 입력에서 클러스터/휠 배율을 학습한다
-    ASSERT_GT(output.display_scale, 1.03f);
-    ASSERT_LT(output.display_scale, 1.10f);
 }
 
 // 해제 뒤 재설정: 이전 주행의 천장이 남으면 앞차가 없는데도 RES+로 속도를

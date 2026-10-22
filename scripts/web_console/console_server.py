@@ -1,8 +1,7 @@
 """웹 콘솔 서버(FastAPI): 파라미터 편집, 런타임 상태, 학습 상태·카메라 보정, Panda 펌웨어, 주행 기록, BEV 스트림을
 내고 페이지(static/)를 서빙한다. 매니저가 함께 띄운다.
 
-사용: python3 -m web_console [--host 주소] [--port 포트]   (기본 0.0.0.0:8080,
-EDGEPILOT_WEB_CONSOLE_HOST·EDGEPILOT_WEB_CONSOLE_PORT로도 바꿀 수 있다)
+사용: python3 -m web_console [--host 주소] [--port 포트]   (기본 0.0.0.0:8080)
 
 API(받지 않는 요청은 상태 코드와 {"detail": {"code": 문구 키, 자리 값...}}, refusal.py)
   GET   /api/status              매니저의 프로세스 상태와 백라이트(?versions=1이면 실행 파일의 빌드 버전도)
@@ -26,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import os
 from typing import Any, Callable, Dict, List
 
 # 이 모듈은 서버를 띄울 때(__main__)만 import된다. tests/check_web_console.py는 나머지 모듈만 stdlib으로 쓴다.
@@ -191,8 +189,8 @@ def create_app(stopping: Callable[[], bool]) -> FastAPI:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python3 -m web_console")
-    parser.add_argument("--host", default=os.environ.get("EDGEPILOT_WEB_CONSOLE_HOST", "0.0.0.0"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("EDGEPILOT_WEB_CONSOLE_PORT", "8080")))
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
     server: uvicorn.Server | None = None
     application = create_app(stopping=lambda: server is not None and server.should_exit)

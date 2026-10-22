@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <utility>
 
+#include "car/car_specs.h"
 #include "car/hyundai_can.h"
 #include "common/utils_math.h"
 #include "common/utils_time.h"  // kDtCtrlF
@@ -49,14 +49,6 @@ constexpr float kStraightKpOffSpeedMps = 15.0f;
 // 저속 회전은 P항이 토크 대부분을 낸다(10~30 km/h 회전에서 |P| 평균 312~646, FF 78~103).
 constexpr float kStraightCurvature = 0.003f;
 constexpr float kTurnCurvature = 0.008f;
-// opendbc VehicleDynamicsParams: 강성과 관성은 이 기준 차(시빅 1326 kg + 짐 136 kg)의 질량으로 나눈 값으로 쓴다.
-// 강성이 질량에 비례해 차량 모델에서 질량이 약분되므로 상류처럼 단위 질량으로 계산한다.
-constexpr float kCivicMass = 1462.0f;
-constexpr float kCivicWheelbase = 2.70f;
-constexpr float kCivicCenterToFront = kCivicWheelbase * 0.4f;
-constexpr float kCivicCenterToRear = kCivicWheelbase - kCivicCenterToFront;
-constexpr float kCivicTireStiffnessFront = 192150.0f;
-constexpr float kCivicTireStiffnessRear = 202500.0f;
 constexpr float kGravity = 9.81f;
 
 // openpilot KP_INTERP. 마지막 점만 파라미터라 interp를 펼쳐 쓴다.
@@ -78,17 +70,6 @@ float apply_deadzone(float error, float deadzone) {
     if (error > deadzone) return error - deadzone;
     if (error < -deadzone) return error + deadzone;
     return 0.0f;
-}
-
-// opendbc scale_tire_stiffness_per_mass
-std::pair<float, float> scale_tire_stiffness_per_mass(float wheelbase, float center_to_front,
-                                                      float tire_stiffness_factor) {
-    const float center_to_rear = wheelbase - center_to_front;
-    float front = kCivicTireStiffnessFront * tire_stiffness_factor / kCivicMass;
-    front *= (center_to_rear / wheelbase) / (kCivicCenterToRear / kCivicWheelbase);
-    float rear = kCivicTireStiffnessRear * tire_stiffness_factor / kCivicMass;
-    rear *= (center_to_front / wheelbase) / (kCivicCenterToFront / kCivicWheelbase);
-    return {front, rear};
 }
 
 }  // namespace
@@ -293,20 +274,13 @@ TorqueController::TorqueTuning TorqueController::torque_tuning(const SteeringPar
 
 // 차량 모델 slip factor를 파라미터에 맞춰 갱신한다.
 void TorqueController::update_vehicle_model(const SteeringParams &params) {
-    const float center_to_front = params.center_to_front_m();
     // 학습 SR·강성은 매 틱 조금씩 바뀌므로 정확히 같을 때만 건너뛴다(상류는 매번 계산)
-    if (last_wheelbase_m_ == params.wheelbase_m && last_center_to_front_m_ == center_to_front &&
-        last_tire_stiffness_factor_ == params.tire_stiffness_factor && last_steer_ratio_ == params.steer_ratio) {
-        return;
-    }
-    const float center_to_rear = params.wheelbase_m - center_to_front;
-    const auto stiffness =
-        scale_tire_stiffness_per_mass(params.wheelbase_m, center_to_front, params.tire_stiffness_factor);
+    if (last_tire_stiffness_factor_ == params.tire_stiffness_factor && last_steer_ratio_ == params.steer_ratio) return;
+    constexpr float center_to_rear = kWheelbaseM - kCenterToFrontM;
+    const auto stiffness = scale_tire_stiffness_per_mass(kWheelbaseM, kCenterToFrontM, params.tire_stiffness_factor);
     // 앞뒤 강성이 양수라 slip factor는 늘 음수다(아래 분모들이 0에 가까워지지 않는다). 상류 calc_slip_factor(단위 질량)
-    slip_factor_ = (stiffness.first * center_to_front - stiffness.second * center_to_rear) /
-                   (params.wheelbase_m * params.wheelbase_m * stiffness.first * stiffness.second);
-    last_wheelbase_m_ = params.wheelbase_m;
-    last_center_to_front_m_ = center_to_front;
+    slip_factor_ = (stiffness.first * kCenterToFrontM - stiffness.second * center_to_rear) /
+                   (kWheelbaseM * kWheelbaseM * stiffness.first * stiffness.second);
     last_tire_stiffness_factor_ = params.tire_stiffness_factor;
     last_steer_ratio_ = params.steer_ratio;
 }
@@ -317,7 +291,7 @@ float TorqueController::vehicle_model_curvature(float steering_angle_rad, float 
     update_vehicle_model(params);
     const float denom = 1.0f - slip_factor_ * speed_mps * speed_mps;
     // 상류 curvature_factor의 (1 - steerRatioRear)는 1이다: 후륜 조향이 있는 차를 다루지 않는다(상류도 모두 0)
-    const float curvature_factor = 1.0f / denom / params.wheelbase_m;
+    const float curvature_factor = 1.0f / denom / kWheelbaseM;
     return curvature_factor * steering_angle_rad / params.steer_ratio;
 }
 
