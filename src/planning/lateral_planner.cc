@@ -32,6 +32,16 @@ constexpr double kFallbackImmediateProbability = 0.15;
 constexpr int kFallbackEnterFrames = 6;  // 0.3초
 constexpr double kFallbackExitProbability = 0.4;
 
+// 차선 점의 앞 거리(openpilot X_IDXS 격자, 모델이 쓰는 float 값)
+const std::array<double, kTrajectorySize> &lane_x_grid() {
+    static const std::array<double, kTrajectorySize> grid = [] {
+        std::array<double, kTrajectorySize> x{};
+        for (int i = 0; i < kTrajectorySize; ++i) x[i] = model_x_idx(i);
+        return x;
+    }();
+    return grid;
+}
+
 double interp(double x, const double *xp, const double *fp, size_t count) {
     if (count == 0) return 0.0;
     if (x <= xp[0]) return fp[0];
@@ -100,10 +110,7 @@ public:
             right[i] = model.lanes[2][i].y;
         }
         compute_lane_t(plan_x.data(), lane_t.data());
-        for (int i = 0; i < kTrajectorySize; ++i) {
-            lane_t_[i] = lane_t[i];
-            lane_x_[i] = lane_x[i];
-        }
+        for (int i = 0; i < kTrajectorySize; ++i) lane_t_[i] = lane_t[i];
         left_filter_.update(t_s, lane_x.data(), left.data(), v_ego, curvature, left.data());
         right_filter_.update(t_s, lane_x.data(), right.data(), v_ego, curvature, right.data());
         for (int i = 0; i < kTrajectorySize; ++i) {
@@ -132,7 +139,7 @@ public:
         // 5.5 m 위는 여전히 막는다.
         double width_mod = 1.0;
         for (double t : {0.0, 1.5, 3.0}) {
-            const double lane_width = interp(t * (v_ego + 7.0), lane_x_.data(), width.data(), width.size());
+            const double lane_width = interp(t * (v_ego + 7.0), lane_x_grid().data(), width.data(), width.size());
             const double candidate = lane_width <= 4.5 ? 1.0 : lane_width >= 5.5 ? 0.0 : 5.5 - lane_width;
             width_mod = std::min(width_mod, candidate);
         }
@@ -268,7 +275,6 @@ private:
         return history;
     }
     std::array<double, kTrajectorySize> lane_t_{};
-    std::array<double, kTrajectorySize> lane_x_{};
     std::array<double, kTrajectorySize> left_y_{};
     std::array<double, kTrajectorySize> right_y_{};
     FirstOrderFilter lane_width_estimate_{3.7, 9.95};
@@ -392,14 +398,8 @@ struct LateralPlanner::Impl {
                                 model_weight * interp(kDtMdl, times.data(), model_curvatures.data(), times.size());
         }
 
-        target.valid = true;
-        target.capture_timestamp_ns = model.capture_timestamp_ns;
-        target.mpc_solution_valid = model_weight >= 1.0 || invalid_count < 2;
-        target.laneless_mode = use_model_path;
-        fill_lane_observations(&target);
-        target.lane_d_prob = static_cast<float>(use_model_path ? 0.0 : lane_planner.d_prob());
-        target.target_y_m = static_cast<float>(references.y[1]);
-        fill_desire(&target);
+        finish_target(model, model_weight >= 1.0 || invalid_count < 2, use_model_path,
+                      use_model_path ? 0.0 : lane_planner.d_prob(), references.y[1], &target);
         for (int i = 0; i < kLateralControlN; ++i) {
             target.psis[i] = static_cast<float>(mpc.nodes()[i].psi);
             target.curvatures[i] = static_cast<float>(mpc.nodes()[i].curvature);
@@ -503,8 +503,14 @@ struct LateralPlanner::Impl {
         invalid_count = (mpc.cost() > 20000.0 || solver_failed) ? invalid_count + 1 : 0;
     }
 
-    // 차선 관측값(로그·HUD용): 가까운 좌우 차선, 폭, 모델 원 확률과 std.
-    void fill_lane_observations(LateralTarget *target) const {
+    // 목표의 메타데이터: 근거 프레임, MPC 유효, 경로 출처, 차선 관측(로그·HUD용: 가까운 좌우 차선, 폭, 모델 원 확률과
+    // std), 차선 가중치, 목표 위치, 이번 프레임의 desire와 차선 변경 단계.
+    void finish_target(const ModelState &model, bool mpc_valid, bool use_model_path, double d_prob, double target_y,
+                       LateralTarget *target) const {
+        target->valid = true;
+        target->capture_timestamp_ns = model.capture_timestamp_ns;
+        target->mpc_solution_valid = mpc_valid;
+        target->laneless_mode = use_model_path;
         target->lane_left_y_m = static_cast<float>(lane_planner.near_left_y());
         target->lane_right_y_m = static_cast<float>(lane_planner.near_right_y());
         target->lane_width_m = static_cast<float>(lane_planner.lane_width());
@@ -512,6 +518,11 @@ struct LateralPlanner::Impl {
         target->lane_right_prob = static_cast<float>(lane_planner.right_prob());
         target->lane_left_std = static_cast<float>(lane_planner.left_std());
         target->lane_right_std = static_cast<float>(lane_planner.right_std());
+        target->lane_d_prob = static_cast<float>(d_prob);
+        target->target_y_m = static_cast<float>(target_y);
+        target->desire = desire_helper.desire();
+        target->lane_change_state = desire_helper.lane_change_state();
+        target->lane_change_direction = desire_helper.direction();
     }
 
     // laneless 모드 = openpilot 메인의 get_curvature_from_plan. 차선·MPC·경로 오프셋 없이
@@ -548,22 +559,9 @@ struct LateralPlanner::Impl {
             target.psis[i] = static_cast<float>(interp(ti, t.data(), yaw.data(), t.size()));
             target.curvatures[i] = static_cast<float>(interp(ti, t.data(), yaw_rate.data(), t.size()) / speed);
         }
-        target.valid = true;
-        target.capture_timestamp_ns = model.capture_timestamp_ns;
-        target.mpc_solution_valid = true;  // MPC를 쓰지 않는다
-        target.laneless_mode = true;
-        fill_lane_observations(&target);
-        target.lane_d_prob = 0.0f;
-        target.target_y_m = static_cast<float>(interp(model_t_idx_double(1), t.data(), y.data(), t.size()));
-        fill_desire(&target);
+        // MPC를 쓰지 않는다
+        finish_target(model, true, true, 0.0, interp(model_t_idx_double(1), t.data(), y.data(), t.size()), &target);
         return target;
-    }
-
-    // 이번 프레임의 desire와 차선 변경 단계(LateralTarget의 정수 필드로).
-    void fill_desire(LateralTarget *target) const {
-        target->desire = desire_helper.desire();
-        target->lane_change_state = desire_helper.lane_change_state();
-        target->lane_change_direction = desire_helper.direction();
     }
 
     LanePlanner lane_planner;

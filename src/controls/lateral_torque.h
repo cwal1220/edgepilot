@@ -26,6 +26,34 @@ struct LiveLateralParams {
     float friction = 0.0f;
 };
 
+// 조향각(도, MDPS 부호) = gain·곡률 + offset. 속도와 차량 모델이 같으면 곡률 → 조향각이 이 일차식이라, 학습한 토크 모델의
+// 목표 조향각 입력은 틱마다 한 번 만들어 여러 시점에 쓴다.
+struct AngleMap {
+    float gain = 0.0f;
+    float offset = 0.0f;
+    float operator()(float curvature) const { return gain * curvature + offset; }
+};
+
+// 단일 트랙 차량 모델(opendbc VehicleModel, 단위 질량). 학습값을 쓰면(live.use_vehicle) paramsd의 SR·강성 배율·조향각
+// 영점 합계·롤, 아니면 SteeringParams의 사전값이다. 값이라 상태도 호출 순서도 없다.
+struct VehicleModel {
+    float steer_ratio = 1.0f;
+    float slip_factor = 0.0f;  // 상류 calc_slip_factor(단위 질량), 늘 음수
+    float angle_offset_deg = 0.0f;
+    bool use_roll = false;  // 학습 롤을 곡률에 넣는다(use_vehicle)
+    float roll_rad = 0.0f;
+
+    static VehicleModel make(const SteeringParams &params, const LiveLateralParams &live = LiveLateralParams{});
+    // 조향각(rad, 영점 뺀 값)이 만드는 곡률(상류 calc_curvature 부호, 롤 없음)
+    float curvature(float steering_angle_rad, float speed_mps) const;
+    // opendbc VehicleModel.roll_compensation
+    float roll_compensation(float speed_mps) const;
+    // 조향각(도, MDPS 부호)이 만드는 곡률(영점·롤 포함, 제어 부호). 컨트롤러의 실제 곡률과 조향각 상한이 쓴다.
+    float curvature_at_angle(float speed_mps, float steering_angle_deg) const;
+    // curvature_at_angle의 역
+    AngleMap angle_map(float speed_mps) const;
+};
+
 class TorqueController {
 public:
     // update의 측정과 요청(틱마다). 기본값은 학습값·편경사가 없고 운전자가 핸들을 잡지 않은 상태다.
@@ -66,25 +94,9 @@ public:
     int update(const Input &in, const SteeringParams &params, const NnFeedforward &nn);
     int update(const Input &in, const SteeringParams &params) { return update(in, params, NnFeedforward()); }
 
-    // 조향각이 만드는 곡률(차량 모델: 학습 SR·강성·오프셋·롤 포함, 제어 부호). estimate_actual_curvature의
-    // 각도 경로와 같은 식이고 로그용 값을 건드리지 않는다. 컨트롤러의 조향각 상한이 쓴다.
-    float curvature_at_angle(float speed_mps, float steering_angle_deg, const SteeringParams &params,
-                             const LiveLateralParams &live = LiveLateralParams{});
-
-    // curvature_at_angle의 역. 속도와 차량 모델이 같으면 조향각(도, MDPS 부호) = gain·곡률 + offset이라, 학습한 토크
-    // 모델의 목표 조향각 입력은 틱마다 한 번 만들어 여러 시점에 쓴다.
-    struct AngleMap {
-        float gain = 0.0f;
-        float offset = 0.0f;
-        float operator()(float curvature) const { return gain * curvature + offset; }
-    };
-    AngleMap angle_map(float speed_mps, const SteeringParams &params,
-                       const LiveLateralParams &live = LiveLateralParams{});
-
-    // 현재 조향각/속도에서 차량 모델 기반 실제 curvature를 추정한다.
-    float estimate_actual_curvature(float speed_mps, float steering_angle_deg, const SteeringParams &params,
-                                    float yaw_rate_rad_s = 0.0f, bool yaw_rate_valid = false,
-                                    const LiveLateralParams &live = LiveLateralParams{});
+    // 현재 조향각/속도에서 차량 모델로 실제 곡률을 내고, 로그용 조향각·요레이트 곡률을 남긴다.
+    float estimate_actual_curvature(float speed_mps, float steering_angle_deg, const VehicleModel &model,
+                                    float yaw_rate_rad_s = 0.0f, bool yaw_rate_valid = false);
 
     float normalized_output() const { return normalized_output_; }
     float error() const { return error_; }
@@ -112,18 +124,6 @@ private:
     };
     static TorqueTuning torque_tuning(const SteeringParams &params, const LiveLateralParams &live);
 
-    // 차량 모델 slip factor를 파라미터에 맞춰 갱신한다.
-    void update_vehicle_model(const SteeringParams &params);
-    // 차량 모델 값(학습을 쓰면 학습 SR·강성을 넣은 사본 live_vehicle_params_)과 조향각 영점. 곡률↔조향각 변환이 같이 쓴다.
-    const SteeringParams &vehicle_model_params(const SteeringParams &params, const LiveLateralParams &live,
-                                               float *angle_offset_deg);
-
-    // 조향각과 속도에서 실제 curvature를 계산한다.
-    float vehicle_model_curvature(float steering_angle_rad, float speed_mps, const SteeringParams &params);
-
-    // opendbc VehicleModel.roll_compensation. vehicle_model_curvature 뒤에 부른다.
-    float roll_compensation(float roll_rad, float speed_mps) const;
-
     // 상류 common/pid.py PIDController.update(k_d 0). 횡가속도 공간에서 돌고 출력과 적분기는
     // ±limit(= latAccelFactor, 상류 update_limits)로 묶인다. kp는 속도별 곡선에 저속 직선 배율을 곱한 값이다.
     float pid_update(float error, float feedforward, bool freeze_integrator, float kp, float ki, float limit);
@@ -132,9 +132,6 @@ private:
     float p_ = 0.0f;
     float i_ = 0.0f;
     float f_ = 0.0f;
-    float slip_factor_ = 0.0f;
-    float last_tire_stiffness_factor_ = -1.0f;
-    float last_steer_ratio_ = -1.0f;
     float normalized_output_ = 0.0f;
     float error_ = 0.0f;
     float feedforward_ = 0.0f;
@@ -144,7 +141,6 @@ private:
     float actual_curvature_ = 0.0f;
     float actual_curvature_vm_ = 0.0f;
     float actual_curvature_yaw_ = 0.0f;
-    SteeringParams live_vehicle_params_{};  // 학습 SR·강성을 넣은 사본
 
     // 지연 보정 링버퍼(100Hz 1초): 오차 = delay 전 요청 - 지금 측정.
     static constexpr int kRequestBufferLen = 100;

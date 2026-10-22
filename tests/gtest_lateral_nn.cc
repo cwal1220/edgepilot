@@ -322,8 +322,7 @@ TEST(LateralNnInputs, MatchTheTrainingCode) {
     }
 }
 
-TEST(TorqueController, AngleAtCurvatureInvertsCurvatureAtAngle) {
-    TorqueController controller;
+TEST(VehicleModel, AngleMapInvertsCurvatureAtAngle) {
     const SteeringParams params;
     LiveLateralParams live;
     for (bool use_vehicle : {false, true}) {
@@ -334,8 +333,9 @@ TEST(TorqueController, AngleAtCurvatureInvertsCurvatureAtAngle) {
         live.roll_rad = 0.02f;
         for (float speed : {5.0f, 15.0f, 30.0f}) {
             for (float curvature : {-0.02f, -0.002f, 0.0f, 0.002f, 0.02f}) {
-                const float angle = controller.angle_map(speed, params, live)(curvature);
-                EXPECT_NEAR(controller.curvature_at_angle(speed, angle, params, live), curvature, 1e-6f)
+                const VehicleModel model = VehicleModel::make(params, live);
+                const float angle = model.angle_map(speed)(curvature);
+                EXPECT_NEAR(model.curvature_at_angle(speed, angle), curvature, 1e-6f)
                     << "use_vehicle " << use_vehicle << " v " << speed << " c " << curvature;
             }
         }
@@ -420,8 +420,7 @@ TEST(LateralController, ModelInputsKeepTheHoldAngleLimit) {
     // 피드포워드가 커지지 않는다(그대로 두면 80도 너머를 위한 토크로 85도 고장 각도 쪽으로 민다).
     const auto model = repository_model();
     const float speed_kph = 14.4f;  // 4 m/s: 횡가속 한계(0.19 1/m)보다 80도(약 0.03 1/m)가 좁다
-    TorqueController vehicle_model;
-    const float cap = std::fabs(vehicle_model.curvature_at_angle(speed_kph / 3.6f, 80.0f, SteeringParams{}));
+    const float cap = std::fabs(VehicleModel::make(SteeringParams{}).curvature_at_angle(speed_kph / 3.6f, 80.0f));
     const LateralControlOutput at_cap = drive(model, curve_target(cap, speed_kph), speed_kph, 150);
     const LateralControlOutput beyond = drive(model, curve_target(3.0f * cap, speed_kph), speed_kph, 150);
     const LateralControlOutput inside = drive(model, curve_target(0.5f * cap, speed_kph), speed_kph, 150);

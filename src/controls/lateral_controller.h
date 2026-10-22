@@ -12,6 +12,7 @@
 #include "car/speed_filter.h"
 #include "car/vehicle_can.h"
 #include "common/ipc_messages.h"  // CalibrationStatus
+#include "controls/angle_fault_guard.h"
 #include "controls/control_block.h"
 #include "controls/control_holds.h"  // PandaGateOutput
 #include "controls/control_params.h"
@@ -190,8 +191,8 @@ private:
     float lateral_nn_feedforward(const LateralTarget &target, const VehicleCanState &vehicle_state, float speed_mps,
                                  float plan_age_s, bool steering, const LiveLateralParams &live,
                                  const CurvatureBounds &hold);
-    bool update_saturation(const LateralControlOutput &result, float plan_curvature, float speed_mps, double now_s,
-                           bool steering_pressed, bool curvature_limited);
+    void update_saturation(float plan_curvature, float speed_mps, double now_s, bool steering_pressed,
+                           bool curvature_limited, LateralControlOutput *result);
     void copy_torque_state(LateralControlOutput *result) const;
 
     // active를 막는 현재 gate reason을 계산한다. 앞선 사유가 없으면 soft_reason이다.
@@ -207,13 +208,6 @@ private:
     // 경고이거나 경고 없음(운전자가 넘겨받는 중, 최근에 넘겨받음, 정차).
     bool update_steer_fault_alert(bool steer_fault, bool steering_pressed, bool standstill);
 
-    // avoid_lkas_fault를 끈 경우: 상류 common_fault_avoidance로 85도 위에서 요청을 잠깐 끊는다.
-    bool update_cut_steer_state(bool steer_request, float steering_angle_deg);
-
-    // 큰 조향각 고장 회피: 85도 위 체류를 세고 요청을 끌지 정한다. plan_matches_wheel은 운전자가 넘겨받은 정지를
-    // 계획 곡률로 풀지 볼 때 쓴다(plan_matches_wheel()).
-    bool update_large_angle_hold(bool steer_requested, float steering_angle_deg, bool steering_pressed,
-                                 bool plan_matches_wheel);
     // 계획 곡률(조향하면 낼 목표)이 지금 핸들이 내는 곡률과 같은 쪽이고 kHeldTurnPlanTolerance 안인가. 그러면 다시
     // 조향해도 핸들을 끌지 않고 운전자가 붙잡은 커브를 이어 간다.
     bool plan_matches_wheel(const LateralTarget &target, float speed_mps, float plan_age_s, float steering_angle_deg,
@@ -252,7 +246,6 @@ private:
     SpeedFilter v_ego_filter_;
     // openpilot LatControl.sat_time와 selfdrived의 최근 핸들 조작 시각
     float sat_time_ = 0.0f;
-    bool lac_saturated_ = false;  // sat_time_이 한계에 닿았다(lateralControlState.saturated)
     double last_steering_pressed_s_ = -1000.0;
     // openpilot car_events의 조향 고장 경고 상태
     int steering_unpressed_frames_ = 0;
@@ -273,19 +266,9 @@ private:
     int last_torque_ = 0;
     bool steer_limited_by_safety_ = false;
     double last_disengage_s_ = -1000.0;
-    // steer 요청을 낸 채 85도 위에 머문 연속 프레임(요청을 끄면 멈춘다)
-    int fault_angle_frames_ = 0;
-    // 85도 위에서 요청을 끈 상태. 85도 아래로 와야 풀린다(운전자가 넘겨받았으면 15도 아래에서 손을 떼거나, 80도
-    // 아래에서 계획이 지금 핸들과 같은 커브를 가리켜야).
-    bool large_angle_hold_ = false;
-    // 이번 85도 위 체류 중 운전자가 핸들을 돌렸다(steering pressed)
-    bool driver_took_wheel_ = false;
-    // 운전자가 넘겨받은 정지에서 80도 아래이고 계획이 핸들과 맞은 연속 프레임
-    int held_turn_frames_ = 0;
+    AngleFaultGuard angle_guard_;  // 큰 조향각 고장 회피(85도 규칙)
     // 지난 프레임에 steer 요청 비트를 실제로 보냈다(85도 위에서 새로 켜지 않기 위해)
     bool steer_req_sent_ = false;
-    // 상류 CarController.angle_limit_counter(avoid_lkas_fault를 끈 경우만)
-    int angle_limit_counter_ = 0;
     SteeringPressedFilter steering_pressed_;  // 운전자 조향 판정(openpilot 방식 카운터 필터)
     RoadBankEstimator road_bank_;             // 라이브 편경사 추정(직선에서만 갱신, 2초 저역통과)
     bool lkas11_counter_valid_ = false;

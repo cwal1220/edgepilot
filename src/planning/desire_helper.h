@@ -43,6 +43,12 @@ public:
 
 private:
     double record_speed(float v_ego);
+    // 깜빡이 쪽으로 크게 돌린 회전의 시작과 끝(turn_direction_)
+    void update_turn(float steering_angle_deg, bool one_blinker, int blinker_direction);
+    // 조향 중이고 막히지 않았을 때 차선 변경 단계 하나(Off → PreLaneChange → Starting → Finishing)
+    void step_lane_change(const VehicleCanState &vehicle, float v_ego, bool steering_pressed,
+                          const DesireModelInput &model, bool one_blinker, int blinker_direction, bool below_speed,
+                          double decel);
 
     DesireHelperParams params_;
     LaneChangeState lane_change_state_ = LaneChangeState::Off;

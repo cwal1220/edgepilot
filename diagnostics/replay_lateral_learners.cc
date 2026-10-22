@@ -94,7 +94,6 @@ int main(int argc, char **argv) {
     if (!vehicle_json.empty())
         std::printf("paramsd saved values: %s\n", learners.vehicle_restored() ? "restored" : "rejected");
     // 결합 직진 구간의 곡률 대조: 학습값 차량 모델(조향각) − 요레이트(바이어스 제거)
-    TorqueController curvature_model;
     struct CurvatureSums {  // 출처(ESP12·locationd)별
         double diff = 0.0, angle = 0.0, yaw = 0.0, roll = 0.0;
         long n = 0;
@@ -171,8 +170,8 @@ int main(int argc, char **argv) {
         const LiveLateralParams live = learners.live();
         if (count_metric && cs.active && in.inputs_fresh && in.yaw_rate_valid && in.speed_mps > 12.0 &&
             std::fabs(cs.desired_curvature) < 3e-4f && live.use_vehicle) {
-            const double angle_curv = curvature_model.estimate_actual_curvature(
-                static_cast<float>(in.speed_mps), static_cast<float>(in.steering_angle_deg), sp, 0.0f, false, live);
+            const double angle_curv = VehicleModel::make(sp, live).curvature_at_angle(
+                static_cast<float>(in.speed_mps), static_cast<float>(in.steering_angle_deg));
             const double yaw_curv = -in.yaw_rate_rad_s / in.speed_mps;  // 좌측 양수 → 우측 양수
             CurvatureSums &c = curv[in.localizer_roll_given ? 1 : 0];   // 이 틱에 넣은 요레이트의 출처
             c.diff += angle_curv - yaw_curv;

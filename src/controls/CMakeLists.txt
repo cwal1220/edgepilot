@@ -2,6 +2,7 @@
 # 그 둘을 한 틱으로 묶는 ControlsTick(controls)은 위에 있다.
 add_edgepilot_library(control_core
   adaptive_cruise.cc
+  angle_fault_guard.cc
   control_holds.cc
   control_params.cc
   departure_alert.cc

@@ -83,7 +83,7 @@ TEST(LateralTorque, RestartUsesFeedforwardOnlyForTheDelay) {
     float angle = 45.0f;
     for (int i = 0; i < 150; ++i) {
         if (i >= 100) angle = 45.0f - 30.0f * static_cast<float>(i - 99) / 50.0f;  // 마지막 0.5초에 15도까지 푼다
-        const float measured = a.curvature_at_angle(v, angle, params);
+        const float measured = VehicleModel::make(params).curvature_at_angle(v, angle);
         a.update(torque_in(false, v, measured, angle, delay), params);
         b.update(torque_in(false, v, measured, angle, delay), params);
     }
@@ -241,7 +241,7 @@ TEST(LateralTorque, LiveVehicleParamsFollowVehicleModel) {
     for (float u : {3.0f, 12.0f, 27.0f}) {
         for (float angle : {-30.0f, 0.0f, 4.0f}) {
             TorqueController torque;
-            const float got = torque.estimate_actual_curvature(u, angle, params, 0.0f, false, live);
+            const float got = torque.estimate_actual_curvature(u, angle, VehicleModel::make(params, live));
             const double want = upstream_measured_curvature(params, live, angle, u);
             ASSERT_NEAR(got, want, 2e-6 * std::fabs(want) + 1e-9)
                 << "실시간 SR·강성·오프셋·롤이 opendbc calc_curvature를 따른다";

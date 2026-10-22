@@ -345,7 +345,14 @@ Libraries `control_core` and `controls`, process `controlsd`.
   (`car/hyundai_can`). A new plan is blended in over 50 ms (five ticks)
   from what the previous plan gives, for the desired curvature and the
   learned model's inputs alike, but not from a plan whose MPC failed (that
-  plan stopped steering).
+  plan stopped steering). `lateral_torque.h` also holds `VehicleModel`, the
+  single-track model (learned or manual steering ratio, stiffness, angle
+  offset and roll) as a plain value that the controller and the replay tools
+  build where they need it.
+- `angle_fault_guard.*`: the 85° rule's state: counts the time above 85°,
+  turns the steer request off before the MDPS fault and decides when a
+  driver-held turn may be steered again; the upstream two-frame cut when the
+  avoidance is off.
 - `lateral_nn.*`: the learned torque feed-forward: the model file loader,
   the network and the inputs built from the plan and a 1 s history
   ([Lateral NN](lateral-nn.md)).

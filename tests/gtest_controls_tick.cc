@@ -294,10 +294,9 @@ TEST(ControlsTick, TornLocalizationReadKeepsTheLastLagEstimate) {
     tick.on_localization(torn, 10.01);
     ASSERT_FLOAT_EQ(tick.controller().plan_delay_s(), 0.3f) << "못 읽은 틱은 마지막 값을 쓴다";
 
-    torn.read_ns = good.state.timestamp_ns + 2'100'000'000ULL;
-    tick.on_localization(torn, 12.1);
-    ASSERT_FLOAT_EQ(tick.controller().plan_delay_s(), params.steering.steer_actuator_delay)
-        << "마지막 값도 2초가 지나면 낡았다";
+    torn.read_ns = good.state.timestamp_ns + 10'000'000'000ULL;
+    tick.on_localization(torn, 20.0);
+    ASSERT_FLOAT_EQ(tick.controller().plan_delay_s(), 0.3f) << "상류처럼 locationd가 멈춰도 마지막 값을 쓴다";
 }
 
 // 모델 앞차는 openpilot radard처럼 고정한 확률(0.5) 밑이면 쓰지 않는다. 출발 알림과 비전 크루즈가 같은

@@ -67,8 +67,6 @@ constexpr float kMaxDeviationPsi = 0.15f;
 constexpr float kDefaultPathLagS = 0.11f;
 // 녹화 ESP12가 이보다 낡으면 시뮬 차의 ESP12 값을 무효로 둔다(50 Hz 메시지)
 constexpr double kEsp12MaxAgeS = 0.1;
-// controlsd처럼 lagd 추정은 이 안의 것만 쓴다(ControlsTick::on_localization)
-constexpr double kLocalizationMaxAgeS = 2.0;
 
 // 이득 곡선의 속도 노드(m/s). 일정한 kf 가정이 저속에서 깨져 노드가 필요하다.
 constexpr float kGainSpeedsMps[] = {3.0f, 8.0f, 15.0f, 25.0f};
@@ -336,7 +334,6 @@ int main(int argc, char **argv) {
     }
     PathHoldGate path_gate;
     long laf_ignored_learner_states = 0;  // --laf를 줬는데 녹화가 torqued를 써 컨트롤러가 학습 배율을 쓴 LearnerState
-    TorqueController inverse_model;
 
     const char *out_path = opt.positional[0];
     const bool want_csv = std::strcmp(out_path, "-") != 0;
@@ -426,12 +423,10 @@ int main(int argc, char **argv) {
             vehicle.lat_accel_mps2 = recorded_vehicle.lat_accel_mps2 + path_deviation * v_mps * v_mps;
             vehicle.long_accel_mps2 = recorded_vehicle.long_accel_mps2;
         }
-        // lagd 지연: controlsd처럼 확정이고 2초 안의 추정만 쓴다(ControlsTick::on_localization)
-        const bool delay_fresh =
-            have_localization &&
-            sim_t - static_cast<double>(localization.timestamp_ns) * 1e-9 <= kLocalizationMaxAgeS &&
-            localization.lag_status == static_cast<uint32_t>(LateralLagStatus::Estimated);
-        controller.set_live_delay(localization.lateral_delay_s, delay_fresh);
+        // lagd 지연: controlsd처럼 확정인 추정을 쓰고, locationd가 멈추면 마지막 값을 쓴다(ControlsTick::on_localization)
+        controller.set_live_delay(
+            localization.lateral_delay_s,
+            have_localization && localization.lag_status == static_cast<uint32_t>(LateralLagStatus::Estimated));
 
         // 경로 게이트와 plan 나이의 시각: 녹화 시각(sim_t)으로 잰 나이만큼 캡처 시각 뒤(호스트 시간과 무관하다)
         const uint64_t path_now_ns = ms_sim.capture_timestamp_ns + static_cast<uint64_t>(age_s * 1e9);
@@ -453,9 +448,13 @@ int main(int argc, char **argv) {
         // 써서, 컨트롤러가 재는 곡률이 시뮬 곡률과 같다.
         const LiveLateralParams live_vm = steering.use_live_vehicle_params ? live_now : LiveLateralParams{};
         const float offset_deg = live_vm.use_vehicle ? live_vm.angle_offset_deg : steering.angle_offset_deg;
-        const float k0 = inverse_model.estimate_actual_curvature(v_mps, offset_deg, steering, 0.0f, false, live_vm);
-        const float per_deg =
-            inverse_model.estimate_actual_curvature(v_mps, offset_deg + 1.0f, steering, 0.0f, false, live_vm) - k0;
+        const VehicleModel model = VehicleModel::make(steering, live_vm);
+        // 바퀴 속도가 끊긴 틱은 곡률 0(컨트롤러의 estimate_actual_curvature와 같다)
+        const auto curvature_at = [&](float angle_deg) {
+            return std::isfinite(v_mps) ? model.curvature_at_angle(v_mps, angle_deg) : 0.0f;
+        };
+        const float k0 = curvature_at(offset_deg);
+        const float per_deg = curvature_at(offset_deg + 1.0f) - k0;
         if (std::fabs(per_deg) > 1e-9f) angle_sim = (k_sim - k0) / per_deg + offset_deg;
 
         // 운전자 토크나 비활성은 시뮬이 못 재현하는 외란이다. 그 구간은 실측으로

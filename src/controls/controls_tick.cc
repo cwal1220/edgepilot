@@ -15,7 +15,6 @@ namespace {
 
 constexpr uint64_t kAlertModelTimeoutNs = 500'000'000ULL;
 constexpr uint64_t kMaxCanRxAgeNs = 100'000'000ULL;
-constexpr uint64_t kLocalizationFreshNs = 2'000'000'000ULL;  // lagd 지연 추정을 쓰는 locationd 상태의 나이 한도
 constexpr double kRadarLeadTimeoutS = 0.5;                   // SCC11 레이더 앞차
 
 // 배치는 신선함(valid 포함)을 본 뒤에 들어오고, 프레임 수는 큐에서 꺼낼 때 이미 묶였다.
@@ -333,7 +332,7 @@ void ControlsTick::on_model(const ModelState &model) {
 }
 
 void ControlsTick::on_localization(const LocalizationRead &localization, double now_s) {
-    // lagd(locationd) 추정 지연. 확정(5블록)이고 2초 안의 값만 쓴다.
+    // lagd(locationd) 추정 지연. 확정(5블록)인 값을 쓴다. 상류처럼 locationd가 멈춰도 마지막 값을 쓴다.
     if (!localization.open) {
         learners_.set_localizer(false, LocalizerSample{});
         return;
@@ -346,10 +345,8 @@ void ControlsTick::on_localization(const LocalizationRead &localization, double 
     }
     if (!localization_seen_) return;
     const LocalizationState &state = localization_;
-    const uint64_t age_ns = localization.read_ns - state.timestamp_ns;
-    const bool fresh = age_ns < kLocalizationFreshNs;
     controller_.set_live_delay(state.lateral_delay_s,
-                               fresh && state.lag_status == static_cast<uint32_t>(LateralLagStatus::Estimated));
+                               state.lag_status == static_cast<uint32_t>(LateralLagStatus::Estimated));
     // 상류 paramsd·torqued 입력(localizer_sample_from). 표본 시각은 학습기 시계(now_s)로
     // 옮긴다. 새로 읽은 틱에만 넘기고, 못 읽은 틱은 학습기가 직전 표본을 그대로 쓴다.
     if (localization.read) {

@@ -50,6 +50,40 @@ double DesireHelper::record_speed(float v_ego) {
 // 중 4번). 회전으로 보면 차선 변경 대신 회전 desire를 줘 모델 경로가 회전을 따르게 한다. 2026-10-15 좌회전
 // 출구에서 커브 쪽으로 이어진 토크가 안정적이었는데, 잘못 시작한 차선 변경 desire가 경로를 회전 쪽으로 휘게
 // 만든 우연이었다.
+// 깜빡이 쪽으로 크게 돌리면 회전이다(조향각은 왼쪽이 +). 도중에 깜빡이를 꺼도 회전은 이어지므로 각도로만 끝낸다.
+void DesireHelper::update_turn(float steering_angle_deg, bool one_blinker, int blinker_direction) {
+    if (turn_direction_ == 0) {
+        if (turn_expired_ && (!one_blinker || std::fabs(steering_angle_deg) < kTurnEndAngleDeg)) turn_expired_ = false;
+        if (!turn_expired_ && one_blinker && -blinker_direction * steering_angle_deg >= kTurnAngleDeg) {
+            turn_direction_ = blinker_direction;
+            turn_frames_ = 0;
+        }
+    } else {
+        ++turn_frames_;
+        if (std::fabs(steering_angle_deg) < kTurnEndAngleDeg) {
+            turn_direction_ = 0;
+        } else if (turn_frames_ * kDtMdl > kTurnMaxS) {
+            turn_direction_ = 0;
+            turn_expired_ = true;
+        }
+    }
+}
+
+namespace {
+
+// 도로 경계가 붙은 쪽(-1 왼쪽, 1 오른쪽, 0 없음): 경계는 또렷하고 그 너머 차선선은 없다(dragonpilot의 도로 경계 판정)
+int road_edge_side(const DesireModelInput &model) {
+    const double left_edge_prob = std::clamp(1.0 - model.road_edge_stds[0], 0.0, 1.0);
+    const double right_edge_prob = std::clamp(1.0 - model.road_edge_stds[1], 0.0, 1.0);
+    const double left_nearside_prob = model.lane_probabilities[0];
+    const double right_nearside_prob = model.lane_probabilities[3];
+    return right_edge_prob > 0.35 && right_nearside_prob < 0.2 && left_nearside_prob >= right_nearside_prob ? 1
+           : left_edge_prob > 0.35 && left_nearside_prob < 0.2 && right_nearside_prob >= left_nearside_prob ? -1
+                                                                                                            : 0;
+}
+
+}  // namespace
+
 void DesireHelper::update(const VehicleCanState &vehicle, float v_ego, bool lat_active, bool steering_pressed,
                           const DesireModelInput &model) {
     const bool one_blinker = vehicle.left_blinker != vehicle.right_blinker;
@@ -61,104 +95,21 @@ void DesireHelper::update(const VehicleCanState &vehicle, float v_ego, bool lat_
     if (!one_blinker || used_blinker_ != blinker_direction) used_blinker_ = 0;
     if (one_blinker && std::fabs(vehicle.steering_angle_deg) >= kTurnAngleDeg) used_blinker_ = blinker_direction;
     const bool blinker_used = used_blinker_ != 0;
-    // 깜빡이 쪽으로 크게 돌리면 회전이다(조향각은 왼쪽이 +). 도중에 깜빡이를 꺼도 회전은 이어지므로 각도로만 끝낸다.
-    if (turn_direction_ == 0) {
-        if (turn_expired_ && (!one_blinker || std::fabs(vehicle.steering_angle_deg) < kTurnEndAngleDeg))
-            turn_expired_ = false;
-        if (!turn_expired_ && one_blinker && -blinker_direction * vehicle.steering_angle_deg >= kTurnAngleDeg) {
-            turn_direction_ = blinker_direction;
-            turn_frames_ = 0;
-        }
-    } else {
-        ++turn_frames_;
-        if (std::fabs(vehicle.steering_angle_deg) < kTurnEndAngleDeg) {
-            turn_direction_ = 0;
-        } else if (turn_frames_ * kDtMdl > kTurnMaxS) {
-            turn_direction_ = 0;
-            turn_expired_ = true;
-        }
-    }
+    update_turn(vehicle.steering_angle_deg, one_blinker, blinker_direction);
 
-    // 깜빡이 쪽이 도로 경계(경계는 또렷하고 그 너머 차선선은 없음)면 차선 변경을 시작하지 않는다
-    // (dragonpilot의 도로 경계 판정). 막힌 동안 깜빡이를 꺼진 것으로 두므로, 경계가 사라지면 깜빡이를
-    // 켠 채로도 그 틱에 시작한다. 기다리는 동안(PreLaneChange)에도 본다: 경계가 한 프레임 끊겨 기다림에 들어간
+    // 깜빡이 쪽이 도로 경계면 차선 변경을 시작하지 않는다. 막힌 동안 깜빡이를 꺼진 것으로 두므로, 경계가 사라지면
+    // 깜빡이를 켠 채로도 그 틱에 시작한다. 기다리는 동안(PreLaneChange)에도 본다: 경계가 한 프레임 끊겨 기다림에 들어간
     // 뒤 경계가 돌아와도 밀면 경계 쪽으로 시작했다.
-    const double left_edge_prob = std::clamp(1.0 - model.road_edge_stds[0], 0.0, 1.0);
-    const double right_edge_prob = std::clamp(1.0 - model.road_edge_stds[1], 0.0, 1.0);
-    const double left_nearside_prob = model.lane_probabilities[0];
-    const double right_nearside_prob = model.lane_probabilities[3];
-    const int road_edge =
-        right_edge_prob > 0.35 && right_nearside_prob < 0.2 && left_nearside_prob >= right_nearside_prob ? 1
-        : left_edge_prob > 0.35 && left_nearside_prob < 0.2 && right_nearside_prob >= left_nearside_prob ? -1
-                                                                                                         : 0;
     const int lane_direction = vehicle.left_blinker ? -1 : vehicle.right_blinker ? 1 : 2;
     const bool road_edge_blocked =
         (lane_change_state_ == LaneChangeState::Off || lane_change_state_ == LaneChangeState::PreLaneChange) &&
-        road_edge == lane_direction;
+        road_edge_side(model) == lane_direction;
 
-    if (road_edge_blocked) {
-        lane_change_state_ = LaneChangeState::Off;
-        direction_ = 0;
-    } else if (!lat_active || lane_change_timer_ > 10.0 || blinker_used) {
+    if (road_edge_blocked || !lat_active || lane_change_timer_ > 10.0 || blinker_used) {
         lane_change_state_ = LaneChangeState::Off;
         direction_ = 0;
     } else {
-        const bool toward =
-            (vehicle.driver_torque > 0 && direction_ == -1) || (vehicle.driver_torque < 0 && direction_ == 1);
-        const bool against =
-            (vehicle.driver_torque > 0 && direction_ == 1) || (vehicle.driver_torque < 0 && direction_ == -1);
-        // 시작 넛지는 이 틱의 토크로 본다. 상류의 거른 steeringPressed(6틱 연속)를 쓰면 짧게 툭 친 넛지(30~40 ms)가
-        // 시작하지 않았다(녹화 재생 130번 중 4번). 취소는 거른 값으로 본다.
-        const bool torque_applied = std::abs(vehicle.driver_torque) > params_.steering_pressed_threshold && toward;
-        // 상류의 사각지대(LCA11) 막음은 없다: K7은 Panda 버스에 LCA11을 내지 않는다
-        const bool slowing_for_turn = v_ego < kTurnApproachSpeedMps && decel > kTurnApproachDecelMps2;
-        if (lane_change_state_ == LaneChangeState::Off && one_blinker && !previous_one_blinker_ && !below_speed) {
-            lane_change_state_ = LaneChangeState::PreLaneChange;
-            direction_ = blinker_direction;
-            lane_change_lane_prob_ = 1.0;
-        } else if (lane_change_state_ == LaneChangeState::PreLaneChange) {
-            if (!one_blinker || below_speed) {
-                lane_change_state_ = LaneChangeState::Off;
-            } else {
-                direction_ = blinker_direction;  // 상류: 기다리는 동안 깜빡이 방향을 다시 읽는다
-                if (!slowing_for_turn && torque_applied) {
-                    lane_change_state_ = LaneChangeState::Starting;
-                    change_activation_ = blinker_activation_;
-                }
-            }
-        } else if (lane_change_state_ == LaneChangeState::Starting) {
-            against_frames_ = steering_pressed && against ? against_frames_ + 1 : 0;
-            if (against_frames_ >= kAgainstFrames) {
-                used_blinker_ = one_blinker ? blinker_direction : 0;
-                lane_change_state_ = LaneChangeState::Off;
-                direction_ = 0;
-            } else {
-                // 0.5초에 걸쳐 차선선을 뺀다(openpilot "fade out over .5s").
-                lane_change_lane_prob_ = std::max(0.0, lane_change_lane_prob_ - 2.0 * kDtMdl);
-                if (model.lane_change_prob < 0.02 && lane_change_lane_prob_ < 0.01)
-                    lane_change_state_ = LaneChangeState::Finishing;
-            }
-        } else if (lane_change_state_ == LaneChangeState::Finishing) {
-            // 복구 0.5초 (openpilot 기본 1.0초). 변경 직후 새 차선 적응을 당긴다.
-            lane_change_lane_prob_ = std::min(1.0, lane_change_lane_prob_ + 2.0 * kDtMdl);
-            if (lane_change_lane_prob_ > 0.99) {
-                // 상류는 깜빡이가 켜져 있으면 다음 변경을 기다린다. 여기서는 깜빡이를 껐다 켜야 다시 한다:
-                // 램프나 회전 출구에서 켜 둔 깜빡이가 4.5초마다 차선 변경을 다시 시작했다(2026-10-05, 10-15).
-                // 마친 쪽 깜빡이를 켜 둔 채면 막는다. 끝나 가는 동안 반대쪽으로 바꿨으면 상류처럼 그쪽으로 기다린다
-                // (깜빡이가 꺼진 틈이 없어 새로 켠 것으로 잡히지 않는다).
-                if (one_blinker && blinker_direction != direction_) {
-                    lane_change_state_ = LaneChangeState::PreLaneChange;
-                    direction_ = blinker_direction;
-                } else {
-                    // 변경 중 깜빡이를 껐다 다시 켰으면 한 번 더 바꾸라는 신호라 막지 않는다(상류처럼 기다린다)
-                    const bool same_signal = one_blinker && blinker_activation_ == change_activation_;
-                    if (same_signal) used_blinker_ = blinker_direction;
-                    lane_change_state_ =
-                        one_blinker && !same_signal ? LaneChangeState::PreLaneChange : LaneChangeState::Off;
-                    direction_ = lane_change_state_ == LaneChangeState::PreLaneChange ? blinker_direction : 0;
-                }
-            }
-        }
+        step_lane_change(vehicle, v_ego, steering_pressed, model, one_blinker, blinker_direction, below_speed, decel);
     }
     if (lane_change_state_ != LaneChangeState::Starting) against_frames_ = 0;
 
@@ -173,5 +124,66 @@ void DesireHelper::update(const VehicleCanState &vehicle, float v_ego, bool lat_
     if (turn_direction_ != 0) {
         const bool repulse = turn_frames_ % kTurnRepulseFrames == kTurnRepulseFrames - 1;
         desire_ = repulse ? Desire::None : turn_direction_ < 0 ? Desire::TurnLeft : Desire::TurnRight;
+    }
+}
+
+void DesireHelper::step_lane_change(const VehicleCanState &vehicle, float v_ego, bool steering_pressed,
+                                    const DesireModelInput &model, bool one_blinker, int blinker_direction,
+                                    bool below_speed, double decel) {
+    const bool toward =
+        (vehicle.driver_torque > 0 && direction_ == -1) || (vehicle.driver_torque < 0 && direction_ == 1);
+    const bool against =
+        (vehicle.driver_torque > 0 && direction_ == 1) || (vehicle.driver_torque < 0 && direction_ == -1);
+    // 시작 넛지는 이 틱의 토크로 본다. 상류의 거른 steeringPressed(6틱 연속)를 쓰면 짧게 툭 친 넛지(30~40 ms)가
+    // 시작하지 않았다(녹화 재생 130번 중 4번). 취소는 거른 값으로 본다.
+    const bool torque_applied = std::abs(vehicle.driver_torque) > params_.steering_pressed_threshold && toward;
+    // 상류의 사각지대(LCA11) 막음은 없다: K7은 Panda 버스에 LCA11을 내지 않는다
+    const bool slowing_for_turn = v_ego < kTurnApproachSpeedMps && decel > kTurnApproachDecelMps2;
+    if (lane_change_state_ == LaneChangeState::Off && one_blinker && !previous_one_blinker_ && !below_speed) {
+        lane_change_state_ = LaneChangeState::PreLaneChange;
+        direction_ = blinker_direction;
+        lane_change_lane_prob_ = 1.0;
+    } else if (lane_change_state_ == LaneChangeState::PreLaneChange) {
+        if (!one_blinker || below_speed) {
+            lane_change_state_ = LaneChangeState::Off;
+        } else {
+            direction_ = blinker_direction;  // 상류: 기다리는 동안 깜빡이 방향을 다시 읽는다
+            if (!slowing_for_turn && torque_applied) {
+                lane_change_state_ = LaneChangeState::Starting;
+                change_activation_ = blinker_activation_;
+            }
+        }
+    } else if (lane_change_state_ == LaneChangeState::Starting) {
+        against_frames_ = steering_pressed && against ? against_frames_ + 1 : 0;
+        if (against_frames_ >= kAgainstFrames) {
+            used_blinker_ = one_blinker ? blinker_direction : 0;
+            lane_change_state_ = LaneChangeState::Off;
+            direction_ = 0;
+        } else {
+            // 0.5초에 걸쳐 차선선을 뺀다(openpilot "fade out over .5s").
+            lane_change_lane_prob_ = std::max(0.0, lane_change_lane_prob_ - 2.0 * kDtMdl);
+            if (model.lane_change_prob < 0.02 && lane_change_lane_prob_ < 0.01)
+                lane_change_state_ = LaneChangeState::Finishing;
+        }
+    } else if (lane_change_state_ == LaneChangeState::Finishing) {
+        // 복구 0.5초 (openpilot 기본 1.0초). 변경 직후 새 차선 적응을 당긴다.
+        lane_change_lane_prob_ = std::min(1.0, lane_change_lane_prob_ + 2.0 * kDtMdl);
+        if (lane_change_lane_prob_ > 0.99) {
+            // 상류는 깜빡이가 켜져 있으면 다음 변경을 기다린다. 여기서는 깜빡이를 껐다 켜야 다시 한다:
+            // 램프나 회전 출구에서 켜 둔 깜빡이가 4.5초마다 차선 변경을 다시 시작했다(2026-10-05, 10-15).
+            // 마친 쪽 깜빡이를 켜 둔 채면 막는다. 끝나 가는 동안 반대쪽으로 바꿨으면 상류처럼 그쪽으로 기다린다
+            // (깜빡이가 꺼진 틈이 없어 새로 켠 것으로 잡히지 않는다).
+            if (one_blinker && blinker_direction != direction_) {
+                lane_change_state_ = LaneChangeState::PreLaneChange;
+                direction_ = blinker_direction;
+            } else {
+                // 변경 중 깜빡이를 껐다 다시 켰으면 한 번 더 바꾸라는 신호라 막지 않는다(상류처럼 기다린다)
+                const bool same_signal = one_blinker && blinker_activation_ == change_activation_;
+                if (same_signal) used_blinker_ = blinker_direction;
+                lane_change_state_ =
+                    one_blinker && !same_signal ? LaneChangeState::PreLaneChange : LaneChangeState::Off;
+                direction_ = lane_change_state_ == LaneChangeState::PreLaneChange ? blinker_direction : 0;
+            }
+        }
     }
 }

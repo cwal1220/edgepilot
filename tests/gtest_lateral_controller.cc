@@ -1108,8 +1108,7 @@ TEST(LateralController, DriverHoldingThePlannedCurveResumes) {
     const SteeringParams &sp = config.steering_params;
     constexpr float kSpeedKph = 35.0f;
     // 오른쪽 70도가 내는 곡률을 그대로 이어 가는 계획(곡률 일정: psi = k·v·t)
-    TorqueController model;
-    const float held_curvature = model.curvature_at_angle(kSpeedKph / 3.6f, -70.0f, sp);
+    const float held_curvature = VehicleModel::make(sp).curvature_at_angle(kSpeedKph / 3.6f, -70.0f);
     ASSERT_GT(held_curvature, 0.0f) << "오른쪽 = 양의 곡률(제어 부호)";
     const auto curve_target = [](float curvature) {
         LateralTarget target;
@@ -1198,9 +1197,9 @@ TEST(LateralController, HoldAngleCapsOwnSteeringOnly) {
         EXPECT_TRUE(r.active);
         return r.desired_curvature;
     };
-    TorqueController model;
-    const float right_cap = model.curvature_at_angle(v, -80.0f, config.steering_params);
-    const float left_cap = model.curvature_at_angle(v, 80.0f, config.steering_params);
+    const VehicleModel model = VehicleModel::make(config.steering_params);
+    const float right_cap = model.curvature_at_angle(v, -80.0f);
+    const float left_cap = model.curvature_at_angle(v, 80.0f);
     // 80도가 내는 곡률은 반경 30 m 남짓이다(오른쪽 +, 왼쪽 −)
     ASSERT_GT(right_cap, 0.02f);
     ASSERT_LT(right_cap, 0.05f);
