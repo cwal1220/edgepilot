@@ -271,8 +271,7 @@ xychart-beta
   model distance alone, and halves its jitter. So the gain is more than
   smoothing.
 - The flow for 138/139 came from the OpenCV emulation of the board algorithm,
-  which matched the board. The scripts are in `eval/lead_flow_20261011/fusion`
-  (outside the repository).
+  which matched the board.
 
 ### Vision cruise replay
 
