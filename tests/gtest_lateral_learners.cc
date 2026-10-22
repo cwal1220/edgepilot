@@ -277,6 +277,11 @@ TEST(LateralLearners, Persistence) {
     VehicleModelConstants other = c;
     other.wheelbase_m += 0.05;
     ASSERT_FALSE(restore_vehicle_params(saved, other).restored) << "다른 차의 저장값은 복원하지 않는다";
+    VehicleModelConstants tuned = c;
+    tuned.tire_stiffness_factor = c.tire_stiffness_factor * 0.8;
+    const VehicleParamsInit retuned = restore_vehicle_params(saved, tuned);
+    ASSERT_TRUE(retuned.restored) << "타이어 강성 계수를 바꿔도 같은 차다(상류는 차종 지문만 본다)";
+    ASSERT_NEAR(static_cast<float>(retuned.angle_offset_deg), -1.62f, 1e-4f);
     // 2026-10-22까지 쓴 파일에는 질량(mass_kg)이 있다. 질량은 차량 모델에서 약분돼 대조하지 않고 그대로 복원한다
     const std::string with_mass =
         "{\n  \"version\": 1,\n  \"mass_kg\": 1816,\n" + saved.substr(saved.find("  \"wheelbase_m\""));
@@ -967,6 +972,24 @@ TEST(LateralLearners, LocalizerRollThroughParamsd) {
     }
     EXPECT_TRUE(always_valid);
     EXPECT_NEAR(d.l.vehicle_params().roll_rad, esp_roll, rad(0.2)) << "ESP12 횡가속 롤";
+}
+
+// ESP12 요레이트가 무효면 구심 가속을 뺄 수 없다: 코너링 횡가속을 롤로 읽지 않는다
+TEST(LateralLearners, EspRollNeedsAValidYawRate) {
+    const SteeringParams sp;
+    LocalizerDrive d(sp);
+    d.esp_yaw_left = 0.0;
+    for (double now = 1.0; now < 21.0 - 1e-9; now += 0.01) d.tick(now, false);
+    ASSERT_NEAR(deg(d.l.vehicle_params().roll_rad), 0.0, 0.1);
+
+    // 요레이트 무효 10초 동안 좌회전(좌측 비력 1 m/s², 반전 저장). 그대로 쓰면 롤 5.9°를 관측한다.
+    for (double now = 21.0; now < 31.0 - 1e-9; now += 0.01) {
+        d.tick(now, false, true, [](VehicleCanState *v) {
+            v->yaw_rate_valid = false;
+            v->lat_accel_mps2 = -1.0f;
+        });
+    }
+    EXPECT_NEAR(deg(d.l.vehicle_params().roll_rad), 0.0, 0.3);
 }
 
 // torqued lag는 조향 지연을 따른다(상류 lateralDelay). 줄어도 이력 시각이 거꾸로 가지 않는다.

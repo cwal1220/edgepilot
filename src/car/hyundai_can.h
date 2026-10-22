@@ -77,9 +77,10 @@ struct HyundaiLkasCommand {
 HyundaiLkas11Values decode_lkas11(const std::array<uint8_t, 8> &data);
 HyundaiClu11Values decode_clu11(const std::array<uint8_t, 4> &data);
 
-// K7 커뮤니티 하네스(MDPS가 버스 1)의 횡제어 프레임을 송신 순서대로: LKAS11(파워트레인 버스),
-// LKAS11(MDPS 버스), 홀수 프레임이면 MDPS가 보는 CLU11 속도 바꿔치기(MDPS 버스), MDPS12 오류 회피
-// 프레임(카메라 버스).
+// K7 커뮤니티 하네스(MDPS가 버스 1)의 횡제어 프레임을 송신 순서대로: LKAS11(MDPS 버스), LKAS11(파워트레인
+// 버스), 홀수 프레임이면 MDPS가 보는 CLU11 속도 바꿔치기(MDPS 버스), MDPS12 오류 회피 프레임(카메라 버스).
+// Panda safety는 버스와 상관없이 LKAS11마다 직전 LKAS11과 토크 변화를 대조한다. 운전자가 반대로 잡아 토크를
+// 프레임마다 줄여야 할 때는 같은 값의 두 번째 사본이 거절되므로, MDPS가 받는 사본을 먼저 보낸다.
 std::vector<CanFrame> build_lateral_can_frames(const HyundaiLkas11Values &lkas_seed, const HyundaiClu11Values &clu_seed,
                                                const std::array<uint8_t, 8> &mdps12_seed,
                                                const HyundaiLkasCommand &lkas_command, bool lkas_active, bool is_mph,

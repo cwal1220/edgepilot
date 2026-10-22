@@ -439,6 +439,49 @@ TEST(LateralController, EngageAllowedWithUnavailablePath) {
     ASSERT_FALSE(door.engaged);
 }
 
+// 신호 대기(정차, 경로 무효)에서도 SoftDisable 사유는 결합을 막는다. 앞선 사유가 Stopped(가용성 대기)라 예전에는
+// 결합을 받아들인 뒤 3초 해제 예고로 풀었다(상류는 NO_ENTRY로 거부한다).
+TEST(LateralController, SoftReasonRejectsEngageWhileStopped) {
+    LateralControllerConfig config;
+    LateralController controller(config);
+    controller.set_calibration_status(CalibrationStatus::Uncalibrated);
+    LateralPath stopped_path = replay_path();
+    stopped_path.usable_for_steering = false;
+    VehicleCanState vehicle = ready_vehicle(1.0);
+    vehicle.wheel_speed_fl_kph = vehicle.wheel_speed_fr_kph = vehicle.wheel_speed_rl_kph = vehicle.wheel_speed_rr_kph =
+        0.0f;
+    vehicle.clu_button = 2;
+    controller.update(stopped_path, replay_target(), vehicle, 1.0, 0, panda_allows_control());
+    vehicle.clu_button = 0;
+    const auto stopped = controller.update(stopped_path, replay_target(), vehicle, 1.01, 1, panda_allows_control());
+    EXPECT_EQ(stopped.active_block, BlockReason::CalibrationIncomplete) << "거부 알림은 정차가 아니라 보정";
+    EXPECT_TRUE(stopped.engage_rejected) << "정차 중에도 보정 미완료면 결합하지 않는다";
+    EXPECT_FALSE(stopped.engaged);
+    const auto after = controller.update(stopped_path, replay_target(), vehicle, 1.02, 2, panda_allows_control());
+    EXPECT_FALSE(after.engage_rejected) << "한 번만 거부한다";
+
+    // Panda 허가를 기다리는 동안(SET 직후)에도 기다리지 않고 보정으로 거부한다. 거부는 한 번이다.
+    LateralController waiting(config);
+    waiting.set_calibration_status(CalibrationStatus::Uncalibrated);
+    VehicleCanState moving = ready_vehicle(1.0);
+    moving.clu_button = 2;
+    waiting.update(replay_path(), replay_target(), moving, 1.0, 0, panda_without_controls());
+    moving.clu_button = 0;
+    int rejections = 0;
+    for (int i = 1; i <= 150; ++i) {
+        const double t = 1.0 + 0.01 * i;
+        stamp_can_times(&moving, t);
+        const auto r = waiting.update(replay_path(), replay_target(), moving, t, i, panda_without_controls());
+        if (i == 1) {
+            EXPECT_TRUE(r.engage_rejected);
+            EXPECT_EQ(r.active_block, BlockReason::CalibrationIncomplete);
+        }
+        EXPECT_FALSE(r.engaged);
+        rejections += r.engage_rejected ? 1 : 0;
+    }
+    EXPECT_EQ(rejections, 1);
+}
+
 // openpilot의 calibrationIncomplete/Recalibrating/Invalid 이벤트(SOFT_DISABLE + NO_ENTRY).
 TEST(LateralController, CalibrationGatesEngageAndSoftDisables) {
     LateralControllerConfig config;
@@ -938,6 +981,43 @@ TEST(LateralController, NewPlanIsBlendedInOverFiveTicks) {
         const float weight = switched ? std::min(1.0f, static_cast<float>(frame - 99) / 5.0f) : 0.0f;
         EXPECT_NEAR(result.desired_curvature, from + weight * (to - from), 1e-6f) << "frame " << frame;
     }
+}
+
+// MPC가 무효인 계획은 조향을 막는다(LateralPlanInvalid). 다음 계획으로 조향을 다시 시작할 때 그 계획에서 섞어 오지
+// 않는다: 무효 계획의 곡률만 다른 두 컨트롤러의 출력이 같다. 한쪽 무효 계획은 반대쪽으로 굽어, 섞으면 곡률 변화율
+// 한계 안에서도 다시 시작하는 방향이 갈린다.
+TEST(LateralController, InvalidMpcPlanIsNotBlendedFrom) {
+    const auto plan = [](float scale, uint64_t capture_ns, bool mpc_valid) {
+        LateralTarget target = replay_target();
+        for (int i = 0; i < kLateralControlN; ++i) {
+            target.psis[i] *= scale;
+            target.curvatures[i] *= scale;
+        }
+        target.capture_timestamp_ns = capture_ns;
+        target.mpc_solution_valid = mpc_valid;
+        return target;
+    };
+    const LateralTarget before = plan(1.0f, 1'000'000'000ULL, true);
+    const LateralTarget invalid_a = plan(1.0f, 1'050'000'000ULL, false);
+    const LateralTarget invalid_b = plan(-12.5f, 1'050'000'000ULL, false);
+    const LateralTarget after = plan(1.25f, 1'100'000'000ULL, true);
+    LateralControllerConfig config;
+    config.force_engaged = true;
+    LateralController a(config), b(config);
+    double t = 1.0;
+    int active_after = 0;
+    for (int frame = 0; frame < 120; ++frame, t += 0.01) {
+        const VehicleCanState vehicle = ready_vehicle(t);
+        const bool invalid = frame >= 100 && frame < 105;
+        const LateralTarget &first = frame < 100 ? before : invalid ? invalid_a : after;
+        const LateralTarget &second = frame < 100 ? before : invalid ? invalid_b : after;
+        const LateralControlOutput ra = a.update(replay_path(), first, vehicle, t, frame);
+        const LateralControlOutput rb = b.update(replay_path(), second, vehicle, t, frame);
+        if (invalid) ASSERT_FALSE(ra.lat_active);
+        if (frame >= 105 && ra.lat_active) ++active_after;
+        ASSERT_NEAR(ra.desired_curvature, rb.desired_curvature, 1e-7f) << "frame " << frame;
+    }
+    EXPECT_GE(active_after, 10) << "조향을 다시 시작한다";
 }
 
 TEST(LateralController, InactiveDesiredTracksActual) {

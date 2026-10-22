@@ -344,7 +344,8 @@ Libraries `control_core` and `controls`, process `controlsd`.
   lag-adjusted curvature through the validated K7 torque/CAN path
   (`car/hyundai_can`). A new plan is blended in over 50 ms (five ticks)
   from what the previous plan gives, for the desired curvature and the
-  learned model's inputs alike.
+  learned model's inputs alike, but not from a plan whose MPC failed (that
+  plan stopped steering).
 - `lateral_nn.*`: the learned torque feed-forward: the model file loader,
   the network and the inputs built from the plan and a 1 s history
   ([Lateral NN](lateral-nn.md)).

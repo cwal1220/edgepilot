@@ -106,6 +106,7 @@ public:
         }
         left_prob_ = model.lane_probabilities[1];
         right_prob_ = model.lane_probabilities[2];
+        lane_change_scale_ = 1.0;
         left_std_ = model.lane_stds[1];
         right_std_ = model.lane_stds[2];
     }
@@ -164,10 +165,19 @@ public:
         // 그대로 쓰면 블렌드 가중치와 랜리스 전환이 같은 프레임에 통째로 뒤집힌다.
         // 둘의 입력을 늦춘다. 평균 가중치는 바뀌지 않는다.
         const double prob_step = kProbRatePerS * kDtMdl;
-        left_prob_eff_ = std::clamp(left_prob, left_prob_eff_ - prob_step, left_prob_eff_ + prob_step);
-        right_prob_eff_ = std::clamp(right_prob, right_prob_eff_ - prob_step, right_prob_eff_ + prob_step);
-        left_switch_prob_ = std::clamp(left_switch, left_switch_prob_ - prob_step, left_switch_prob_ + prob_step);
-        right_switch_prob_ = std::clamp(right_switch, right_switch_prob_ - prob_step, right_switch_prob_ + prob_step);
+        left_prob_limited_ = std::clamp(left_prob, left_prob_limited_ - prob_step, left_prob_limited_ + prob_step);
+        right_prob_limited_ = std::clamp(right_prob, right_prob_limited_ - prob_step, right_prob_limited_ + prob_step);
+        left_switch_limited_ =
+            std::clamp(left_switch, left_switch_limited_ - prob_step, left_switch_limited_ + prob_step);
+        right_switch_limited_ =
+            std::clamp(right_switch, right_switch_limited_ - prob_step, right_switch_limited_ + prob_step);
+        // 차선 변경 페이드는 변화율 제한 뒤에 곱한다(상류처럼 바로 적용, 페이드는 desire_helper가 이미 2/s로 바꾼다).
+        // 앞에서 곱하면 변경이 Starting에서 취소돼 페이드가 1로 돌아와도 판정 확률이 2/s로만 올라와, 0.3 밑에 머무는
+        // 몇 프레임 동안 모델 경로로 빠졌다(10월 주행: Starting에서 끝난 변경 13번 중 11번).
+        left_prob_eff_ = left_prob_limited_ * lane_change_scale_;
+        right_prob_eff_ = right_prob_limited_ * lane_change_scale_;
+        left_switch_prob_ = left_switch_limited_ * lane_change_scale_;
+        right_switch_prob_ = right_switch_limited_ * lane_change_scale_;
         left_prob = left_prob_eff_;
         right_prob = right_prob_eff_;
 
@@ -216,19 +226,22 @@ public:
 
     // 모델 경로 대체 판정값: 블렌드와 같은 보정이되 std는 최근 0.5초의 최솟값이다(update_probabilities).
     double mean_switch_probability() const { return (left_switch_prob_ + right_switch_prob_) * 0.5; }
-    // 로그/분석용 관측값 노출. left_prob()/right_prob()는 폭·std 보정 전의 값이다: 모델 확률에 차선 변경·회전
-    // 페이드(scale_near_probability)를 곱한 것.
+    // 로그/분석용 관측값 노출. left_prob()/right_prob()는 폭·std 보정 전의 값이다: 모델 확률에 차선 변경 페이드와
+    // 회전 중 0을 곱한 것.
     double near_left_y() const { return left_y_[0]; }
     double near_right_y() const { return right_y_[0]; }
     double lane_width() const { return lane_width_; }
-    double left_prob() const { return left_prob_; }
-    double right_prob() const { return right_prob_; }
+    double left_prob() const { return left_prob_ * lane_change_scale_; }
+    double right_prob() const { return right_prob_ * lane_change_scale_; }
     double left_std() const { return left_std_; }
     double right_std() const { return right_std_; }
     double d_prob() const { return d_prob_; }
-    void scale_near_probability(double scale) {
-        left_prob_ *= scale;
-        right_prob_ *= scale;
+    // 차선 변경 중 가까운 차선의 페이드(변화율 제한 뒤에 곱한다)
+    void fade_for_lane_change(double scale) { lane_change_scale_ = scale; }
+    // 회전 중에는 차선을 뺀다. 변화율 제한 앞에서 0으로 두어 0.5초에 걸쳐 빠진다.
+    void drop_for_turn() {
+        left_prob_ = 0.0;
+        right_prob_ = 0.0;
     }
 
 private:
@@ -256,6 +269,12 @@ private:
     FirstOrderFilter lane_width_certainty_{1.0, 0.95};
     double left_prob_ = 0.0;
     double right_prob_ = 0.0;
+    double lane_change_scale_ = 1.0;  // 이번 프레임의 차선 변경 페이드(fade_for_lane_change)
+    // 변화율 제한의 상태(페이드 전)와, 페이드를 곱한 출력
+    double left_prob_limited_ = 0.0;
+    double right_prob_limited_ = 0.0;
+    double left_switch_limited_ = 0.0;
+    double right_switch_limited_ = 0.0;
     double left_prob_eff_ = 0.0;
     double right_prob_eff_ = 0.0;
     double left_switch_prob_ = 0.0;
@@ -403,9 +422,9 @@ struct LateralPlanner::Impl {
         for (size_t i = 0; i < desire_inputs.road_edge_stds.size(); ++i)
             desire_inputs.road_edge_stds[i] = model.road_edge_stds[i];
         desire_helper.update(vehicle, v_ego, lat_active, steering_pressed, desire_inputs);
-        if (desire_helper.changing_lanes()) lane_planner.scale_near_probability(desire_helper.lane_change_lane_prob());
+        if (desire_helper.changing_lanes()) lane_planner.fade_for_lane_change(desire_helper.lane_change_lane_prob());
         // 회전 중에는 차선선을 빼 Lane 모드에서도 회전 desire를 받은 모델 경로를 따른다(교차로는 원래 차선이 흐리다)
-        if (desire_helper.turning()) lane_planner.scale_near_probability(0.0);
+        if (desire_helper.turning()) lane_planner.drop_for_turn();
     }
 
     // Lane 모드에서 이번 프레임에 모델 경로를 따를지(차선이 안 보일 때) 정하고, 출력 인계 비율 plan_mix를

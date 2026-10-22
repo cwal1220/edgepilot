@@ -111,7 +111,7 @@ LateralControlOutput LateralController::update(const LateralPath &path, const La
         active_block_reason(gated_path, target, vehicle_state, result.seeds_ready, result.vehicle_fresh, panda,
                             result.control_speed_kph, plan_age, soft_reason);
     const BlockKind kind = block_kind(result.active_block);
-    resolve_engagement(kind, soft_reason != BlockReason::None, logical_engaged, engage_requested, now_s, &result);
+    resolve_engagement(kind, soft_reason, logical_engaged, engage_requested, now_s, &result);
     // 가용성 대기와 입력 끊김 동안에는 토크만 0으로 하고 steer_req/MDPS 속도 스푸프는
     // 유지한다 — 매 정차마다 끊기면 MDPS/클러스터가 천이 경보를 낸다.
     // 결함/해제는 즉시 끊는다.
@@ -223,10 +223,11 @@ void LateralController::disengage(double now_s) {
     last_disengage_s_ = now_s;
 }
 
-// 이번 틱의 차단 사유(kind)와 SoftDisable 사유(soft_condition)로 해제·결합 거부·Panda 유예를 정하고, result의
+// 이번 틱의 차단 사유(kind)와 SoftDisable 사유(soft_reason)로 해제·결합 거부·Panda 유예를 정하고, result의
 // engaged, soft_disabling, engage_rejected, active를 채운다.
-void LateralController::resolve_engagement(BlockKind kind, bool soft_condition, bool logical_engaged,
+void LateralController::resolve_engagement(BlockKind kind, BlockReason soft_reason, bool logical_engaged,
                                            bool engage_requested, double now_s, LateralControlOutput *result) {
+    const bool soft_condition = soft_reason != BlockReason::None;
     // SoftDisable: 결합 중 사유가 이어지는 동안 3초를 세며 경고하고, 그 뒤에는 Hard처럼 해제한다. 정차·경로 무효
     // 같은 앞선 사유가 끼어도 타이머는 이어 센다(상류 softDisabling). 그 사유가 첫 사유일 때만 조향을 이어 간다.
     // 결합 요청이 Panda 허가를 기다리는 동안은 세지 않는다: 허가가 오면 이 사유로 결합을 거부한다(상류 NO_ENTRY).
@@ -267,8 +268,11 @@ void LateralController::resolve_engagement(BlockKind kind, bool soft_condition, 
         }
     }
 
-    // 차량/컨트롤러의 정적 gate는 실제 결합 요청 실패로 처리한다(그 요청의 Panda 유예는 위에서 내렸다).
-    bool rejected = engage_requested && (kind == BlockKind::Hard || kind == BlockKind::Reject ||
+    // 차량/컨트롤러의 정적 gate와 SoftDisable 사유는 결합 요청 실패로 처리한다(상류 NO_ENTRY, 그 요청의 Panda
+    // 유예는 위에서 내렸다). SoftDisable 사유는 정차·경로 무효(Availability)나 Panda 대기(Transient)가 앞선 사유일
+    // 때도 본다: 예전에는 보정이 덜 된 채 신호 대기 중에 결합하면 받아들인 뒤 3초 해제 예고로 풀었고, Panda를
+    // 기다리는 동안은 결합으로 보였다가 허가가 오면 거부했다.
+    bool rejected = engage_requested && (soft_condition || kind == BlockKind::Hard || kind == BlockKind::Reject ||
                                          kind == BlockKind::SoftDisable || kind == BlockKind::Interrupt);
     if (panda_engage_pending_) {
         const bool panda_waiting = kind == BlockKind::Transient;
@@ -287,6 +291,9 @@ void LateralController::resolve_engagement(BlockKind kind, bool soft_condition, 
         disengage(now_s);
         result->engaged = config_.force_engaged;
         result->engage_rejected = true;
+        // 앞선 사유(정차, Panda 대기)는 혼자서는 거부하지 않으므로 거부 알림에는 실제 이유를 보인다
+        if (soft_condition && (kind == BlockKind::Availability || kind == BlockKind::Transient))
+            result->active_block = soft_reason;
     }
     result->active = kind == BlockKind::None || (kind == BlockKind::SoftDisable && soft_disabling);
 }
@@ -299,7 +306,8 @@ void LateralController::resolve_engagement(BlockKind kind, bool soft_condition, 
 void LateralController::update_target_blend(const LateralTarget &target) {
     TargetBlend &blend = target_blend_;
     if (!blend.have_current || target.capture_timestamp_ns != blend.current.capture_timestamp_ns) {
-        blend.have_previous = blend.have_current && blend.current.valid;
+        // 조향을 막았던 계획(MPC 무효, LateralPlanInvalid)에서는 섞어 오지 않는다
+        blend.have_previous = blend.have_current && blend.current.valid && blend.current.mpc_solution_valid;
         if (blend.have_previous) blend.previous = blend.current;
         blend.current = target;
         blend.have_current = true;

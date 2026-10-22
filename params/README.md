@@ -276,7 +276,12 @@ On top of openpilot:
   other side counts). A blinker left on through a ramp or a turn exit used to
   start a lane change every 4.5 s.
 - **Pushing back cancels.** Steering against the lane change for 0.2 s
-  (filtered like the controller's steering-pressed) cancels it.
+  (filtered like the controller's steering-pressed) cancels it. The lane
+  lines then come back with the 0.5 s fade alone, without a drop to the model
+  path: the fade scales the lane probabilities after their 2/s rate limit.
+  Before 2026-10-22 it scaled them before the limit, so after a cancel the
+  limited probability climbed back from the faded value, and 11 of 13 cancels
+  briefly fell back to the model path.
 - **A blinker turn is a turn, not a lane change.** Below 55 km/h a lane change
   does not start while the car slows by more than 0.75 m/s² (the driver is
   braking for a turn). Turning the wheel 45° or more with the blinker on ends

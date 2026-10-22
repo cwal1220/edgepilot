@@ -102,6 +102,49 @@ TEST(LateralPlanner, LaneChangeFollowsUpstreamDesireHelper) {
     EXPECT_EQ(r.lane_change_state, LaneChangeState::Off);
 }
 
+// Starting에서 취소한 차선 변경은 차선으로 바로 돌아간다. 예전에는 페이드를 판정 확률의 변화율 제한(2/s) 앞에서
+// 곱해, 페이드가 1로 돌아와도 판정 확률이 0.3 밑에 머무는 몇 프레임 동안 모델 경로로 빠졌다(10월 주행: Starting에서
+// 끝난 변경 13번 중 11번). 그 순간 모델 경로는 아직 취소한 쪽으로 가려 했다.
+TEST(LateralPlanner, CancelledLaneChangeKeepsTheLanes) {
+    SteeringParams steering;
+    LateralPlanner planner(steering);
+    const float v = 20.0f;
+    ModelState ms{};
+    ms.valid = 1;
+    for (int i = 0; i < kTrajectorySize; ++i) {
+        const float t = model_t_idx(i);
+        ms.plan[i] = {v * t, 0.0f, 0.0f};
+        ms.lanes[1][i] = {-1.75f, 0.0f};
+        ms.lanes[2][i] = {1.75f, 0.0f};
+    }
+    ms.lane_probabilities[1] = ms.lane_probabilities[2] = 0.9f;
+    ms.lane_stds[1] = ms.lane_stds[2] = 0.05f;
+    ms.desire_state[0] = 1.0f;
+    VehicleCanState vehicle{};
+    LateralTarget r;
+    for (int i = 0; i < 40; ++i) r = planner.update(ms, vehicle, steering_input(v));
+    ASSERT_FALSE(r.laneless_mode);
+    vehicle.left_blinker = true;
+    r = planner.update(ms, vehicle, steering_input(v));
+    vehicle.driver_torque = 300;  // 깜빡이 쪽(왼쪽)으로 민다
+    r = planner.update(ms, vehicle, steering_pushed_input(v));
+    ASSERT_EQ(r.lane_change_state, LaneChangeState::Starting);
+    vehicle.driver_torque = 0;
+    ms.desire_state[0] = 0.1f;
+    ms.desire_state[3] = 0.9f;                                                       // 모델은 변경 중이라고 한다
+    for (int i = 0; i < 8; ++i) r = planner.update(ms, vehicle, steering_input(v));  // 차선을 0.4초 뺀다
+    ASSERT_EQ(r.lane_change_state, LaneChangeState::Starting);
+    vehicle.driver_torque = -300;  // 반대로 밀어 취소한다
+    for (int i = 0; i < 40 && r.lane_change_state == LaneChangeState::Starting; ++i)
+        r = planner.update(ms, vehicle, steering_pushed_input(v));
+    ASSERT_EQ(r.lane_change_state, LaneChangeState::Off);
+    vehicle.driver_torque = 0;
+    for (int i = 0; i < 20; ++i) {
+        EXPECT_FALSE(r.laneless_mode) << "취소 뒤 " << i << "프레임: 차선이 또렷하면 모델 경로로 빠지지 않는다";
+        r = planner.update(ms, vehicle, steering_input(v));
+    }
+}
+
 // 차선 변경 속도 아래에서 켠 깜빡이는 desire를 주지 않는다(상류 desire_helper). 빠를 때 시작한 차선 변경은
 // 그 속도 아래로 감속해도 이어진다.
 TEST(LateralPlanner, SlowBlinkerGivesNoDesire) {

@@ -233,7 +233,8 @@ void VehicleParamsLearner::handle_device_motion(const VehicleParamsInput &in) {
     // 상류는 자세 롤이 무효면 0(10°)을 관측한다. 그대로 두면 롤 std가 1.49°(유효 한계 1.5°)에
     // 붙어 제어 틱 하나만 늦어도 무효 → Hard 해제가 된다(상류는 soft disable). 그 틱은 ESP12
     // 횡가속 롤로 대신한다.
-    if (!localizer_roll && in.lat_accel_valid && in.speed_mps > kRollMinSpeed &&
+    // 요레이트가 무효(0으로 둠)면 구심 가속을 뺄 수 없어 코너링 횡가속이 통째로 롤이 되므로 쓰지 않는다.
+    if (!localizer_roll && yaw_rate_valid && in.lat_accel_valid && in.speed_mps > kRollMinSpeed &&
         std::fabs(centripetal) < kRollMaxCentripetal) {
         const double candidate = std::asin(clip((in.lat_accel_mps2 - centripetal) / kGravity, -1.0, 1.0));
         if (candidate > kRollMin && candidate < kRollMax) {  // kRollStd는 유효 한계(kRollStdMax) 안이다
@@ -358,10 +359,10 @@ VehicleParamsInit restore_vehicle_params(const std::string &json, const VehicleM
                         json_float(root, "stiffness_factor", &sf) &&
                         json_float(root, "angle_offset_average_deg", &offset) &&
                         json_float(root, "yaw_bias_rad_s", &bias);
-    // 상류 지문 대조 자리. 단일 차종이라 차량 상수가 같으면 같은 차로 본다.
+    // 상류 지문 대조 자리. 단일 차종이라 차량 제원(축거, 무게중심)이 같으면 같은 차로 본다. 타이어 강성 계수는
+    // 조정하는 설정이라 대조하지 않는다: 예전에는 바꾸면 배운 조향비·오프셋을 버리고 오프셋 0°에서 다시 배웠다.
     const bool same_car = parsed && static_cast<int>(version) == kPersistVersion &&
-                          near_constant(wheelbase, c.wheelbase_m) && near_constant(cf, c.center_to_front_m) &&
-                          near_constant(tsf, c.tire_stiffness_factor);
+                          near_constant(wheelbase, c.wheelbase_m) && near_constant(cf, c.center_to_front_m);
     // JSON에는 유한한 수만 있다(아니면 parse_json_object가 거부한다)
     const bool sane = same_car && 0.5 * c.steer_ratio <= sr && sr <= 2.0 * c.steer_ratio;
     if (!sane) return init;

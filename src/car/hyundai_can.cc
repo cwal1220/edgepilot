@@ -181,10 +181,10 @@ std::vector<CanFrame> build_lateral_can_frames(const HyundaiLkas11Values &lkas_s
                                                int frame) {
     std::vector<CanFrame> frames;
     frames.reserve(4);  // 10 ms마다 만든다: 늘리며 다시 잡지 않게
-    // 두 버스의 LKAS11은 바이트가 같다(버스만 다르다)
-    frames.push_back(create_lkas11_frame(lkas_seed, lkas_command, kPowertrainBus));
+    // 두 버스의 LKAS11은 바이트가 같다(버스만 다르다). MDPS 버스가 먼저다(헤더 설명).
+    frames.push_back(create_lkas11_frame(lkas_seed, lkas_command, kMdpsBus));
     frames.push_back(frames.back());
-    frames.back().bus = kMdpsBus;
+    frames.back().bus = kPowertrainBus;
     if ((frame % 2) != 0) {
         HyundaiCluCommand clu_command;
         clu_command.button = 0;

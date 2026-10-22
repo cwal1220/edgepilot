@@ -115,8 +115,7 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
                                   caution="torqued_restart",
                                   role=(when("nn_feedforward", True, "nn_feedforward_friction", also=NN_LOADED),)),
         "steer_ratio": number("vehicle_model", "", 0.1, 8, 25, tab="vehicle", learned=True),
-        "tire_stiffness_factor": number("vehicle_model", "x", 0.05, 0.2, 2, tab="vehicle", learned=True,
-                                        caution="paramsd_restart"),
+        "tire_stiffness_factor": number("vehicle_model", "x", 0.05, 0.2, 2, tab="vehicle", learned=True),
         "steer_actuator_delay": number("steer_delay", "s", 0.01, 0.01, 1, tab="vehicle", learned=True),
         "avoid_lkas_fault_enabled": toggle("lkas_fault", unused=(STEERING_OFF,)),
         "avoid_lkas_fault_hold_angle_deg": number("lkas_fault", "°", 1, 0, 84, unused=(

@@ -83,6 +83,14 @@ While steering is active below the MDPS threshold, the `CLU11` on bus 1
 reports 60 km/h and keeps the source's decimal-speed field. This matches the
 K7 branch of the reference openpilot controller.
 
+The two `LKAS11` copies carry the same bytes, and the bus-1 copy goes first.
+The Panda's torque checks (`driver_limit_check`) run on every `LKAS11` frame,
+whatever the bus, and remember the last torque. While the torque ramps down
+against the driver, each frame must come down from the one before, so the
+second copy of a tick is refused. That copy should be the bus-0 one, which
+the MDPS does not read. Until 2026-10-22 the bus-1 copy went second: all 22
+refused frames in the nine routes before then were bus-1 `LKAS11`.
+
 ## Brake signals
 
 The openpilot DBC's TCS13 brake signals do not report the brake pedal on this

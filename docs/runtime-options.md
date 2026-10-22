@@ -221,11 +221,12 @@ at the next start:
 | `live_delay.json` | `locationd` (lagd) | every 60 s and on exit | at `locationd` start, unless it is from another cache version, invalid, or out of range (then it is deleted); a changed `steer_actuator_delay` does not discard it |
 
 A saved learner state that fails to restore is deleted (for torqued, only a
-corrupt cache). paramsd's state also fails when the wheelbase, centre of
-gravity or tyre stiffness changed, or when its steering ratio is outside
-0.5-2x the manual one. torqued starts over when its prior (torque factor,
-friction) changed, and keeps only the factor and friction when the learner
-input source changed. The web console's calibration reset deletes
+corrupt cache). paramsd's state also fails when the wheelbase or centre of
+gravity changed, or when its steering ratio is outside 0.5-2x the manual one.
+A changed tyre stiffness keeps it, as openpilot does: the learned stiffness
+factor starts at 1.0 at every start anyway. torqued starts over when its prior
+(torque factor, friction) changed, and keeps only the factor and friction when
+the learner input source changed. The web console's calibration reset deletes
 `calibration.json` and `flow_calibration.json`.
 
 ## Web console
@@ -325,9 +326,9 @@ openpilot dropped it in 2026-10.
 The manual values reach the learners as priors when `controlsd` starts
 (`locationd` for the steering delay), so a prior changed while auto-learning
 reaches the learner at the next start. The cards of the values that reset a
-learner say so: tyre stiffness and the fixed specs make the next start delete
-paramsd's saved state, and the torque factor and friction make torqued
-relearn from the new prior.
+learner say so: the torque factor and friction make torqued relearn from the
+new prior. A change of the fixed specs (a code change) makes the next start
+delete paramsd's saved state.
 
 The camera calibration card resets the calibration and chooses its source,
 pose or flow (`calibration_use_flow`); it refuses both while engaged.

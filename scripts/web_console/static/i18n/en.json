@@ -398,7 +398,6 @@
   "unit.x": "×",
   "unit.torque": "normalised torque",
   "caution.torqued_restart": "Changing it makes the next controlsd start discard torqued's saved state (points, factor, friction, offset) and relearn from this prior. Until torqued is valid again, Auto-learn uses the new prior for the factor and friction and 0 for the offset.",
-  "caution.paramsd_restart": "Changing it makes the next controlsd start delete paramsd's saved state (steering ratio, angle zero, ESP12 yaw-rate bias) and relearn from scratch.",
   "role.nn_feedforward_pid": "With the learned torque model on, it no longer scales the feed-forward; it only converts the PID's P and I terms to torque.",
   "role.nn_feedforward_curves": "With the learned torque model on, it applies only to the friction compensation added to the model in curves (desired lateral acceleration from 0.2 m/s²).",
   "role.nn_feedforward_friction": "With the learned torque model on, it sets the friction compensation added to the model in curves (from 0.2 m/s² of desired lateral acceleration, in full from 0.6 m/s²), because the model does not see the tracking error. In the 1 s hand-over, below 3 m/s and when the model gives no value it is part of the linear feed-forward, and it stays torqued's prior and band.",

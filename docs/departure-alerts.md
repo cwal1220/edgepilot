@@ -166,6 +166,12 @@ next health reply, which is normal, so for these two the refusal waits up to
 - If it does not, or another blocking condition is left once the Panda is
   ready, the engage is refused then.
 
+A condition that would also end steering while engaged (calibration, MDPS
+fault, paramsd) refuses at once and names itself, without waiting for the
+Panda, and also while the car stands. Before 2026-10-22 such an engage was
+first accepted: while waiting for the Panda it showed as engaged for up to
+0.16 s, and at a standstill it stayed engaged until the 3 s soft disable.
+
 ### Take control
 
 The take-control warning (`overlayd: alert=take_control`) plays the `unable`

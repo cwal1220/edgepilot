@@ -155,7 +155,7 @@ private:
         float hi = kMaxCurvature;
     };
     void disengage(double now_s);
-    void resolve_engagement(BlockKind kind, bool soft_condition, bool logical_engaged, bool engage_requested,
+    void resolve_engagement(BlockKind kind, BlockReason soft_reason, bool logical_engaged, bool engage_requested,
                             double now_s, LateralControlOutput *result);
     // 연이은 계획 사이의 출력 섞기. 새 계획(촬영 시각이 바뀐 것)이 오면 kTargetBlendTicks 틱 동안 직전 계획이 내는
     // 값에서 새 계획이 내는 값으로 옮긴다. 목표 곡률(requested_curvature)과 학습한 토크 모델의 입력이 같이 쓴다.

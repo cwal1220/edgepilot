@@ -95,6 +95,43 @@ TEST(K7Can, TorqueLimiterPassesThePandaChecks) {
     }
 }
 
+// 운전자가 반대로 잡아 토크를 프레임마다 7씩 줄이는 동안, Panda safety(board/safety.h driver_limit_check)는
+// 버스와 상관없이 LKAS11마다 직전 LKAS11과 대조한다. 같은 값의 두 번째 사본은 "줄지 않았다"로 거절되므로
+// MDPS가 받는 버스 1 사본이 먼저 나가야 한다(예전 순서에서는 버스 1 사본이 거절됐다: 10-14~10-22 기록 거절
+// 송신 프레임이 모두 버스 1의 0x340).
+TEST(K7Can, MdpsCopyPassesThePandaWhileTheDriverOverrides) {
+    // driver_limit_check 전사(현대 상수, 운전자 토크 표본 하나)
+    const auto panda_rejects = [](int value, int last, int driver) {
+        const int highest_rate = std::max(last, 0) + kHyundaiSteerDeltaUp;
+        const int lowest_rate = std::min(last, 0) - kHyundaiSteerDeltaUp;
+        const int driver_max =
+            kHyundaiSteerMax + (kHyundaiSteerDriverAllowance + driver) * kHyundaiSteerDriverMultiplier;
+        const int driver_min =
+            -kHyundaiSteerMax + (-kHyundaiSteerDriverAllowance + driver) * kHyundaiSteerDriverMultiplier;
+        const int highest = std::min(highest_rate, std::max(last - kHyundaiSteerDeltaDown, std::max(driver_max, 0)));
+        const int lowest = std::max(lowest_rate, std::min(last + kHyundaiSteerDeltaDown, std::min(driver_min, 0)));
+        return value < lowest || value > highest;
+    };
+    constexpr int kDriver = -300;  // 운전자가 반대로 민다
+    int applied = 280, panda_last = 280, mdps_rejected = 0, other_rejected = 0;
+    for (int tick = 0; tick < 20; ++tick) {
+        applied = apply_hyundai_steer_torque_limits(300, applied, kDriver);
+        HyundaiLkasCommand command;
+        command.apply_steer = applied;
+        command.steer_req = true;
+        for (const CanFrame &f :
+             build_lateral_can_frames(HyundaiLkas11Values{}, HyundaiClu11Values{}, {}, command, true, false, tick)) {
+            if (f.address != kHyundaiLkas11Address) continue;
+            const bool rejected = panda_rejects(applied, panda_last, kDriver);
+            panda_last = applied;  // Panda는 거절해도 desired_torque_last를 바꾼다
+            (f.bus == kMdpsBus ? mdps_rejected : other_rejected) += rejected ? 1 : 0;
+        }
+    }
+    EXPECT_EQ(applied, 280 - 20 * kHyundaiSteerDeltaDown) << "제한기가 틱마다 7씩 줄인다";
+    EXPECT_EQ(mdps_rejected, 0) << "MDPS가 받는 사본은 늘 통과한다";
+    EXPECT_EQ(other_rejected, 20) << "두 번째 같은 값은 거절된다(파워트레인 버스 사본)";
+}
+
 TEST(K7Can, MdpsSpeedSpoof) {
     HyundaiLkas11Values lkas;
     HyundaiClu11Values clu;
@@ -106,9 +143,9 @@ TEST(K7Can, MdpsSpeedSpoof) {
     const auto frames = build_lateral_can_frames(lkas, clu, mdps12_seed, command, true, false, 1);
     ASSERT_EQ(frames.size(), 4) << "홀수 프레임: LKAS11 두 개, MDPS용 CLU11, MDPS12";
     ASSERT_EQ(frames[0].address, kHyundaiLkas11Address);
-    ASSERT_EQ(frames[0].bus, kPowertrainBus);
+    ASSERT_EQ(frames[0].bus, kMdpsBus) << "MDPS가 받는 사본이 먼저다(Panda가 두 번째 같은 값을 거절할 수 있다)";
     ASSERT_EQ(frames[1].address, kHyundaiLkas11Address);
-    ASSERT_EQ(frames[1].bus, kMdpsBus) << "MDPS 버스에도 LKAS11을 보낸다";
+    ASSERT_EQ(frames[1].bus, kPowertrainBus);
     ASSERT_EQ(frames[3].address, kHyundaiMdps12Address);
     ASSERT_EQ(frames[3].bus, kHyundaiMdps12TxBus);
     std::array<uint8_t, 4> bytes = {};
