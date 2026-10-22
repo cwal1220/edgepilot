@@ -31,7 +31,8 @@ public:
     // update의 측정과 요청(틱마다). 기본값은 학습값·편경사가 없고 운전자가 핸들을 잡지 않은 상태다.
     struct Input {
         // 상류 CC.latActive. 거짓이면 토크 0을 내고 PID 상태를 지운다(상류 #24606은 적분기를 남기지만 폐루프
-        // 재생에서 정차 뒤 차선 오차를 키워 지운다, update 참고). 요청 버퍼와 저크 필터는 늘 갱신한다.
+        // 재생에서 정차 뒤 차선 오차를 키워 지운다, update 참고). 요청 버퍼와 저크 필터는 늘 갱신한다. 다시 참이 된
+        // 뒤 지연 틱 수만큼은 오차 없이 피드포워드만 낸다.
         bool active = false;
         float speed_mps = 0.0f;
         float desired_curvature = 0.0f;
@@ -147,6 +148,8 @@ private:
     static constexpr int kRequestBufferLen = 100;
     float lat_accel_request_[kRequestBufferLen] = {};
     int request_head_ = 0;
+    // 조향을 시작한 뒤 지난 활성 틱 수(kRequestBufferLen에서 멈춘다). 지연 틱 수보다 작으면 오차를 쓰지 않는다(update).
+    int active_ticks_ = 0;
     // 저크 선행 마찰용 1.2Hz 저역통과 상태
     float jerk_filtered_ = 0.0f;
     // 곡선 이득을 거는 때를 보는 |목표 횡가속|과 그것이 커지는 빠르기(m/s³, 거른 값). 요청 버퍼처럼 active와 무관하게

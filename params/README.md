@@ -343,6 +343,17 @@ avoidance off (2 frames) is also a code constant, the same as upstream
 `MAX_ANGLE_CONSECUTIVE_FRAMES`. If a case is found where the fault comes
 earlier, lower this constant.
 
+When steering starts again, after this pause or any other, the torque
+controller sends only the feed-forward for one steering delay: no P, I or
+friction from the error. Its error compares the request from one delay ago
+with the wheel now, and while steering rested those requests were the
+measured curvature. When the pause releases at 15°, that is the curvature of
+the wheel at about 45° a moment before. Before 2026-10-22 the P term then
+pushed into the turn the driver was unwinding: in 30 of 34 releases on the
+drives of 2026-10-14 to 22 it exceeded 100 (median about 360). In replay
+over all 34 routes, the mean into-turn torque over the first 0.42 s after a
+release went from 56 to −25 (median over 64 releases).
+
 ### State and CAN
 
 These are code constants, as upstream (openpilot, opendbc, the community forks)

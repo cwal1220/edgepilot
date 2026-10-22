@@ -70,6 +70,36 @@ TEST(LateralTorque, ReengageHasNoStaleBufferSpike) {
     ASSERT_LT(std::fabs(torque.error()), 1e-4f) << "다시 결합할 때 해제 전의 낡은 요청과 비교하지 않는다";
 }
 
+// 85도 일시정지가 풀릴 때처럼, 쉬는 동안(LateralController가 측정 곡률을 요청으로 넣는다) 핸들이 45도에서 풀리다가
+// 조향을 다시 시작하면 지연 틱 수 동안의 비교 대상은 그때의 곡률이라 오차가 회전 쪽으로 크다. 그 동안은 오차를 쓰지
+// 않는다: 다시 시작할 때 조향각만 다른 두 제어기의 토크가 지연 동안 같고, 그 뒤에는 갈린다.
+TEST(LateralTorque, RestartUsesFeedforwardOnlyForTheDelay) {
+    SteeringParams params;
+    params.enabled = true;
+    params.angle_offset_deg = 0.0f;
+    const float v = 8.0f, delay = 0.5f;
+    const int delay_frames = static_cast<int>(delay / 0.01f) + 1;
+    TorqueController a, b;
+    float angle = 45.0f;
+    for (int i = 0; i < 150; ++i) {
+        if (i >= 100) angle = 45.0f - 30.0f * static_cast<float>(i - 99) / 50.0f;  // 마지막 0.5초에 15도까지 푼다
+        const float measured = a.curvature_at_angle(v, angle, params);
+        a.update(torque_in(false, v, measured, angle, delay), params);
+        b.update(torque_in(false, v, measured, angle, delay), params);
+    }
+    int first_split = -1;
+    for (int i = 0; i < 2 * delay_frames; ++i) {
+        // 계획은 직진. b만 조향각이 다르다(측정만 다른 같은 기록).
+        const int ta = a.update(torque_in(true, v, 0.0f, 15.0f, delay), params);
+        const int tb = b.update(torque_in(true, v, 0.0f, 5.0f, delay), params);
+        if (i == 0) ASSERT_GT(std::fabs(a.error()), 0.5f) << "비교 대상은 핸들을 풀기 전의 곡률이다";
+        // 그 오차를 쓰면 P가 회전 쪽 최대 토크로 민다. 피드포워드(직진 요청, 편향, 저크 마찰)만이면 작다.
+        if (i < delay_frames - 1) EXPECT_LT(std::fabs(a.normalized_output()), 0.2f) << "tick " << i;
+        if (first_split < 0 && ta != tb) first_split = i;
+    }
+    EXPECT_EQ(first_split, delay_frames - 1) << "지연 동안은 측정을 보지 않고 그 뒤부터 오차로 따른다";
+}
+
 // 토크 컨트롤러는 넘겨받은 조향 지연(상류 lat_delay)만큼 전의 요청을 지금 측정과 비교한다:
 // 계단 요청이 오차로 나타나는 틱이 지연을 따른다(예전에는 늘 steer_actuator_delay).
 TEST(LateralTorque, TorqueSetpointFollowsLateralDelay) {

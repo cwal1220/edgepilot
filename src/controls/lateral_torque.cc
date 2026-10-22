@@ -122,8 +122,15 @@ int TorqueController::update(const Input &in, const SteeringParams &params, cons
         normalized_output_ = 0.0f;
         feedforward_ = 0.0f;
         friction_torque_ = 0.0f;
+        active_ticks_ = 0;
         return 0;
     }
+    // 조향을 다시 시작한 뒤 지연 틱 수 동안 비교 대상은 쉬는 동안 버퍼에 넣은 요청(측정 곡률, LateralController)이라
+    // 조향의 응답이 아니다. 그 오차는 쓰지 않고 피드포워드만 낸다(P·I·마찰 0). 85도 일시정지가 15도에서 풀릴 때 비교
+    // 대상은 0.4~0.55 s 전 핸들이 약 45도였을 때의 곡률이라, 계획은 직진인데 P가 회전 쪽으로 밀었다(2026-10-14~22
+    // 주행의 해제 34번 중 30번에서 |P| > 100, 중앙값 약 360; 운전자는 반대로 잡고 있었다).
+    if (active_ticks_ < kRequestBufferLen) ++active_ticks_;
+    const float control_error = active_ticks_ < delay_frames ? 0.0f : error;
 
     // 상류처럼 deadzone 조향각을 차량 모델 곡률(학습 SR·강성)로 바꿔 횡가속으로 쓴다. 저속에만 건다(속도가 NaN이면
     // interp가 0을 준다).
@@ -147,7 +154,7 @@ int TorqueController::update(const Input &in, const SteeringParams &params, cons
         feedforward += in.road_bank_lat_accel;
     // opendbc get_friction: 토크 공간 마찰 계수를 latAccelFactor로 횡가속 공간에 옮긴다
     const float friction = tuning.friction * tuning.lat_accel_factor;
-    const float friction_term = interp(apply_deadzone(error + kJerkGain * jerk_filtered_, lat_accel_deadzone),
+    const float friction_term = interp(apply_deadzone(control_error + kJerkGain * jerk_filtered_, lat_accel_deadzone),
                                        {-kFrictionThreshold, kFrictionThreshold}, {-friction, friction});
     feedforward += friction_term;
     friction_torque_ = friction_term / tuning.lat_accel_factor;
@@ -195,7 +202,7 @@ int TorqueController::update(const Input &in, const SteeringParams &params, cons
         return 0;
     }
     const float output_lat_accel =
-        pid_update(error, feedforward, freeze_integrator, kp, params.torque_ki, tuning.lat_accel_factor);
+        pid_update(control_error, feedforward, freeze_integrator, kp, params.torque_ki, tuning.lat_accel_factor);
     // opendbc torque_from_lateral_accel_linear
     const float output_torque = output_lat_accel / tuning.lat_accel_factor;
 
