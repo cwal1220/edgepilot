@@ -175,9 +175,17 @@ twice.
 The model file's `curve_gain` raises the model's output while a curve
 tightens: ×(1 + `curve_gain`), ramped in over the same 0.2→0.6 m/s² of desired
 lateral acceleration as the friction, from 30 to 50 km/h, and with how fast
-the desired lateral acceleration grows (filtered over about 0.1 s, none at 0,
-all from 0.3 m/s³). Until 2026-10-22 it stayed on through the hold and the
-exit too. On the two 2026-10-18 drives with `v4`, the steering angle then gave
+the desired lateral acceleration grows in the plan (none at 0, all from
+0.3 m/s³). That rate is the difference between the plan's desired lateral
+acceleration 0.25 s after and 0.25 s before the time the controller requests
+(the lagd delay). Until 2026-10-22 the gain stayed on through the hold and the
+exit too. For a while after that, the rate was the request's own rate of
+change, filtered over 0.1 s. Each new plan moves the request by
+0.03–0.05 m/s², so that rate reached 0.7–1.1 m/s³ in steady curves and the gain
+came on in holds as well (+0.09–0.10 on average). Reading the plan's shape cut
+the 0.5–3 Hz lateral acceleration in curves by 13–16 % on entries and 12–23 %
+in holds, with the same lane-centre error (closed-loop replay of the ten NN
+drives). On the two 2026-10-18 drives with `v4`, the steering angle then gave
 1.07–1.09 times what the controller asked for in steady curves above 80 km/h
 and 1 m/s², and the car sat on the inside of right curves (11 cm in the
 closed-loop replay of those drives, 13–27 cm against the stock camera's lane

@@ -25,6 +25,8 @@ constexpr int kHeldTurnResumeFrames = 100;
 constexpr float kNnBlendStep = 0.01f;
 // 학습 데이터는 3 m/s 위만 썼다(nnlc csvdata.usable_mask). 그 아래에서는 선형 피드포워드로 돌아간다.
 constexpr float kNnMinSpeedMps = 3.0f;
+// 곡선 이득의 상승 판정 창의 반(초): 요청 시점 앞뒤로 이만큼 떨어진 계획 두 점을 비교한다(lateral_nn_feedforward)
+constexpr float kNnCurveRiseHalfS = 0.25f;
 // 연이은 계획을 섞는 틱 수(50 ms, update_target_blend)
 constexpr int kTargetBlendTicks = 5;
 // 모델이 읽는 가장 먼 시각에 계획 나이 보정을 더해도 계획 격자 끝(model_t_idx(kLateralControlN - 1) = 2.5 s) 안이다
@@ -422,6 +424,13 @@ float LateralController::lateral_nn_feedforward(const LateralTarget &target, con
     const auto la_at = [&](float delta_s) { return curvature_at(delta_s) * speed_sq; };
     const auto angle_at = [&](float delta_s) { return angle(curvature_at(delta_s)); };
     nn_inputs_.push(la_at(0.0f), angle_at(0.0f));
+    // 곡선 이득을 거는 때(TorqueController): 요청 시점(경로 지연 뒤) 앞뒤 kNnCurveRiseHalfS 사이에 계획의 |목표 횡가속|이
+    // 커지는 빠르기. 예전에는 요청의 틱 미분을 0.1 s로 걸렀는데, 계획이 바뀔 때마다 요청이 0.03~0.05 m/s²씩 튀어
+    // 미분으로는 0.7~1.1 m/s³이 돼 정상 곡선(유지)에서도 이득이 켜졌다(유지 구간 평균 추가 이득 0.09~0.10).
+    const float rise_at = std::max(plan_delay_s(), kNnCurveRiseHalfS);
+    const float rise = (std::fabs(la_at(rise_at + kNnCurveRiseHalfS)) - std::fabs(la_at(rise_at - kNnCurveRiseHalfS))) /
+                       (2.0f * kNnCurveRiseHalfS);
+    nn_curve_rise_ = std::isfinite(rise) ? rise : 0.0f;
     // 켜고 끌 때, 그리고 조향을 시작할 때 피드포워드가 건너뛰지 않게 1초에 걸쳐 섞는다(설정은 주행 중에도 바뀐다).
     // 학습에서 뺀 순간(desire가 있거나 깜빡이가 켜진 차선 변경·회전, nnlc csvdata)에는 선형으로 돌아간다.
     const bool trained_situation =
@@ -465,6 +474,7 @@ void LateralController::steer(const VehicleCanState &vehicle_state, const Torque
     nn.weight = nn_weight_;
     nn.curve_friction = lateral_nn_ && lateral_nn_->spec().friction_free;
     nn.curve_gain = lateral_nn_ ? lateral_nn_->curve_gain() : 0.0f;
+    nn.curve_rise = nn_curve_rise_;
     const int raw_torque = torque_controller_.update(in, control_params, nn);
     result->desired_torque = std::clamp(raw_torque, -torque_cap, torque_cap);
     copy_torque_state(result);

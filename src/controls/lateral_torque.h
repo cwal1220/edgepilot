@@ -58,6 +58,8 @@ public:
         float weight = 1.0f;
         bool curve_friction = true;
         float curve_gain = 0.0f;
+        // 계획의 |목표 횡가속|이 커지는 빠르기(m/s³). 곡선 이득은 이것이 양수일 때(곡선 진입)만 건다.
+        float curve_rise = 0.0f;
     };
 
     // openpilot LatControlTorque와 같은 형태로 조향 토크를 계산한다. PID는 횡가속 공간에서 돈다.
@@ -152,8 +154,4 @@ private:
     int active_ticks_ = 0;
     // 저크 선행 마찰용 1.2Hz 저역통과 상태
     float jerk_filtered_ = 0.0f;
-    // 곡선 이득을 거는 때를 보는 |목표 횡가속|과 그것이 커지는 빠르기(m/s³, 거른 값). 요청 버퍼처럼 active와 무관하게
-    // 매 틱 갱신한다.
-    float abs_lat_accel_prev_ = 0.0f;
-    float abs_lat_accel_rise_ = 0.0f;
 };

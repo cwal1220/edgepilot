@@ -25,6 +25,12 @@ constexpr double kPlanMixInRatePerS = 4.0;
 // 안쪽 치우침이 0.25로 절반이 되고(우곡선 11.0 → 5.8 cm) 0.5·1.0은 조금 더 줄 뿐이었다. 대신 차선 측정 잡음을 더
 // 따라가 0.5~3 Hz 횡가속이 0.25에서 16 %, 1.0에서 24 % 늘었다.
 constexpr double kMeasuredCurvatureSeed = 0.25;
+// Lane 모드에서 모델 경로로 넘어가는 판정(update_path_source, 판정 확률 = 좌우 평균). 0.3 밑에 kFallbackEnterFrames
+// 프레임 머물러야 넘어가고, 0.15 밑이면 바로 넘어간다. 0.4 위에서 차선으로 돌아온다.
+constexpr double kFallbackEnterProbability = 0.3;
+constexpr double kFallbackImmediateProbability = 0.15;
+constexpr int kFallbackEnterFrames = 6;  // 0.3초
+constexpr double kFallbackExitProbability = 0.4;
 
 double interp(double x, const double *xp, const double *fp, size_t count) {
     if (count == 0) return 0.0;
@@ -436,13 +442,21 @@ struct LateralPlanner::Impl {
         // (예전에는 이 단계에서도 대체를 꺼, 차선이 약한 출구 분기에서 깜빡이를 켜면 약한 차선이 경로에 섞였다).
         // 복귀 문턱을 openpilot의 0.5에서 0.4로 내렸다. 교차로 후 차선 재획득이 빨라지고, 진입(0.3)과의 밴드가 남아
         // 채터링은 없다.
+        // 진입은 0.3초 늦춘다: 대체의 42~72 %가 1초 안에 끝났고, 그 순간에도 LKA14는 79~96 % 양쪽 선을 보고 있었다
+        // (10월 주행 일곱). 대체 중 차로 중앙 오차 RMS는 18~26 cm로 차선 경로(8~11 cm)의 두 배가 넘고, 계획 밖 핸들
+        // 조작 63번 중 57번이 대체 중이나 직후였다. 선이 아주 약하면(0.15 밑, 교차로) 기다리지 않는다.
         const LaneChangeState lane_change = desire_helper.lane_change_state();
-        if (lane_change == LaneChangeState::Starting || lane_change == LaneChangeState::Finishing)
+        if (lane_change == LaneChangeState::Starting || lane_change == LaneChangeState::Finishing) {
             laneless_buffer = false;
-        else if (lane_probability < 0.3)
-            laneless_buffer = true;
-        else if (lane_probability > 0.4)
-            laneless_buffer = false;
+            low_probability_frames = 0;
+        } else if (lane_probability < kFallbackEnterProbability) {
+            low_probability_frames = std::min(low_probability_frames + 1, kFallbackEnterFrames);
+            if (low_probability_frames >= kFallbackEnterFrames || lane_probability < kFallbackImmediateProbability)
+                laneless_buffer = true;
+        } else {
+            low_probability_frames = 0;
+            if (lane_probability > kFallbackExitProbability) laneless_buffer = false;
+        }
         const bool use_model_path = laneless_buffer;
         // 모델 경로 구간(교차로처럼 차선이 안 보일 때)은 laneless 모드와 같은 openpilot
         // 메인 계산(plan_yaw_target)으로 목표를 낸다. 예전에는 모델 경로 위치를 Lane MPC로 따라갔는데,
@@ -509,6 +523,7 @@ struct LateralPlanner::Impl {
         LateralTarget target = plan_yaw_target(model, v_ego);
         // 차선 모드로 돌아가면 낡은 MPC 해가 아니라 지금 곡률에서 출발한다.
         laneless_buffer = false;
+        low_probability_frames = 0;
         plan_mix = 1.0;
         mpc.reset();
         initial_curvature = measured_curvature;
@@ -561,6 +576,7 @@ struct LateralPlanner::Impl {
     bool laneless_mode = false;
     DesireHelper desire_helper;
     bool laneless_buffer = false;
+    int low_probability_frames = 0;  // 판정 확률이 kFallbackEnterProbability 밑에 머문 프레임(진입 지연)
     // 0 = 차선 융합 경로, 1 = 모델 플랜. 전환 판정을 그대로 따라가되 램프로 움직인다.
     double plan_mix = 1.0;
     int invalid_count = 0;

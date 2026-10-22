@@ -115,11 +115,19 @@ and the camera turned less than 0.5° in the window.
     (night) and 0.32 px (day) at their 1st percentile.
   - Below 1 px the yaw leans 0.1° to 0.2° (only distant points are left).
   - The 1 px gate drops 2.5% of night windows and 8% of day windows.
-- **Mount change:** a block median is 20 windows, so its noise is about 0.2°.
-  When the three newest blocks all sit more than 1° to the same side of the
-  older blocks' mean, and within 0.5° of each other, the older blocks are
-  dropped. The estimate then follows the new mount within three blocks instead
-  of 30.
+- **Mount change:** a block median is 20 windows. Its spread within one drive
+  is 0.08° (median over 13 drives). When the three newest blocks all sit more
+  than 0.5° to the same side of the older blocks' mean, and within 0.5° of each
+  other, the older blocks are dropped. The estimate then follows the new mount
+  within three blocks instead of 30.
+  - Until 2026-10-22 the threshold was 1°. That evening the board went back
+    into the car with the camera turned 0.8° in yaw and 0.7° in pitch, and the
+    saved estimate moved 0.05° in five minutes. Meanwhile the car ran more than
+    30 cm left of the lane centre, until the calibration was reset by hand.
+  - At 0.5° the third new block (306 s, town driving gives one block every 1–4
+    minutes) catches it.
+  - Down to 0.4°, no block sequence in the 340 blocks of the drives since
+    2026-10-12 triggers it.
 
 ### Load on the board
 

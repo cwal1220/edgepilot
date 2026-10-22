@@ -34,12 +34,13 @@ constexpr float kNnCurveFullLatAccel = 0.6f;
 // 여섯)에서 모델의 곡선 부족은 40~80 km/h에 있었고 20~40 km/h 진입은 선형과 같았다.
 constexpr float kNnCurveGainStartSpeedMps = 30.0f / 3.6f;
 constexpr float kNnCurveGainFullSpeedMps = 50.0f / 3.6f;
-// 곡선 이득은 |목표 횡가속|이 커지는 동안(곡선 진입)만 건다: 그 빠르기를 τ 약 0.1 s로 걸러 0이면 없고 0.3 m/s³부터 전부.
-// 유지·탈출에도 걸면 80 km/h 위 정상 곡선에서 조향각이 요구보다 7~9 % 더 나가 차가 안쪽으로 붙었다(2026-10-18 주행 둘,
-// 횡가속 1 m/s² 넘는 유지 구간의 각도/요구 비 좌 1.068, 우 1.093). 폐루프 재생(2026-10-22)에서 우곡선 유지의 안쪽 치우침이
-// 11.0 → 7.0 cm였고 0.5~3 Hz 횡가속은 늘지 않았다. 이득을 아예 빼면 좌곡선이 진입부터 바깥으로 갔다(탈출 -10 cm).
+// 곡선 이득은 계획의 |목표 횡가속|이 커지는 동안(곡선 진입)만 건다(NnFeedforward::curve_rise): 0이면 없고 0.3 m/s³부터
+// 전부. 유지·탈출에도 걸면 80 km/h 위 정상 곡선에서 조향각이 요구보다 7~9 % 더 나가 차가 안쪽으로 붙었다(2026-10-18 주행
+// 둘, 횡가속 1 m/s² 넘는 유지 구간의 각도/요구 비 좌 1.068, 우 1.093). 폐루프 재생(2026-10-22)에서 우곡선 유지의 안쪽
+// 치우침이 11.0 → 7.0 cm였고 0.5~3 Hz 횡가속은 늘지 않았다. 이득을 아예 빼면 좌곡선이 진입부터 바깥으로 갔다(탈출 -10 cm).
+// 커지는 빠르기를 요청의 틱 미분 대신 계획 모양으로 보자(같은 날 폐루프, NN 주행 열) 곡선 안 0.5~3 Hz 횡가속이 진입
+// 13~16 %, 유지 12~23 % 줄었고 차로 중앙 오차는 그대로였다(0.18 m/s³ 문턱도 같았다).
 constexpr float kNnCurveGainFullRise = 0.3f;
-constexpr float kNnCurveRiseFilterAlpha = 0.1f;  // 10 ms 틱당
 constexpr float kDeadzoneFullSpeedMps = 40.0f / 3.6f;
 constexpr float kDeadzoneOffSpeedMps = 60.0f / 3.6f;
 // 직선 이득 배율은 10 m/s까지 다 쓰고 15 m/s에서 1로 돌린다.
@@ -85,13 +86,6 @@ int TorqueController::update(const Input &in, const SteeringParams &params, cons
     const float speed_sq = speed_mps * speed_mps;
     const float desired_lat_accel = in.desired_curvature * speed_sq;
     const float actual_lat_accel = actual_curvature * speed_sq;
-    if (std::isfinite(desired_lat_accel)) {
-        const float abs_lat_accel = std::fabs(desired_lat_accel);
-        abs_lat_accel_rise_ +=
-            kNnCurveRiseFilterAlpha * ((abs_lat_accel - abs_lat_accel_prev_) / kDtCtrlF - abs_lat_accel_rise_);
-        abs_lat_accel_prev_ = abs_lat_accel;
-    }
-
     // 버퍼/저크 필터는 active와 무관하게 매 프레임 갱신한다. inactive에서
     // 얼리면 다시 결합한 뒤 첫 delay 구간에 낡은 요청과 비교되어 토크가 튄다.
     request_head_ = (request_head_ + 1) % kRequestBufferLen;
@@ -172,7 +166,7 @@ int TorqueController::update(const Input &in, const SteeringParams &params, cons
         const float ramp =
             interp(std::fabs(desired_lat_accel), {kNnCurveStartLatAccel, kNnCurveFullLatAccel}, {0.0f, 1.0f});
         const float curve = nn.curve_friction ? ramp : 0.0f;
-        const float rising = interp(abs_lat_accel_rise_, {0.0f, kNnCurveGainFullRise}, {0.0f, 1.0f});
+        const float rising = interp(nn.curve_rise, {0.0f, kNnCurveGainFullRise}, {0.0f, 1.0f});
         const float gain =
             1.0f + nn.curve_gain * rising * ramp *
                        interp(speed_mps, {kNnCurveGainStartSpeedMps, kNnCurveGainFullSpeedMps}, {0.0f, 1.0f});

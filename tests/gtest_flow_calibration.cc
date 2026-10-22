@@ -287,9 +287,18 @@ TEST(FlowCalibratorTest, MountChangeKeepsTheRecentBlocks) {
 
     FlowCalibrator small;
     for (int blk = 0; blk < 6; ++blk) add_block(&small, 0.0, -1.0);
-    for (int blk = 0; blk < 3; ++blk) add_block(&small, 0.8, -1.0);
-    EXPECT_EQ(small.state().mount_changes, 0U) << "1°보다 작은 이동은 평균이 천천히 따라간다";
+    for (int blk = 0; blk < 3; ++blk) add_block(&small, 0.4, -1.0);
+    EXPECT_EQ(small.state().mount_changes, 0U) << "0.5°보다 작은 이동은 평균이 천천히 따라간다";
     EXPECT_EQ(small.state().estimate_blocks, 9U);
+
+    // 2026-10-22 다시 단 보드: 저장된 블록(요 -0.20, 피치 +0.19)에서 요 -1.04, 피치 -0.6 안팎으로 옮겨 갔다
+    FlowCalibrator remounted;
+    for (int blk = 0; blk < 30; ++blk) add_block(&remounted, -0.20, 0.19);
+    for (const double yaw : {-1.04, -1.07}) add_block(&remounted, yaw, -0.62);
+    EXPECT_EQ(remounted.state().mount_changes, 0U);
+    add_block(&remounted, -1.05, -0.71);
+    EXPECT_EQ(remounted.state().mount_changes, 1U) << "0.8° 틀어짐은 새 블록 셋째에 잡는다";
+    EXPECT_NEAR(remounted.state().yaw / kDeg, -1.05, 0.02);
 
     FlowCalibrator scattered;
     for (int blk = 0; blk < 6; ++blk) add_block(&scattered, 0.0, -1.0);

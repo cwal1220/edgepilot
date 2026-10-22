@@ -26,9 +26,12 @@ constexpr int kFlowMinBlocks = 3;      // 추정을 내는 최소 블록 수
 // 1 px 아래 창은 yaw가 0.1~0.2° 치우쳤다(먼 점만 남음). 1 px이면 야간 2.5%, 주간 8%를 버린다.
 constexpr double kFlowMinParallaxPx = 1.0;
 // 장착 변경: 최근 kFlowMountCheckBlocks개 블록이 모두 그 전 블록 평균에서 같은 쪽으로 kFlowMountShiftDeg보다
-// 멀고 서로는 kFlowMountAgreeDeg 안이면 예전 블록을 버린다(블록 중앙값의 잡음은 0.2° 안팎).
+// 멀고 서로는 kFlowMountAgreeDeg 안이면 예전 블록을 버린다. 2026-10-22 보드를 다시 달자 카메라가 요 0.8°, 피치 0.7° 틀어졌는데
+// 1.0° 문턱으로는 못 잡아, 저장된 30블록의 평균이 5분 동안 0.05°만 움직였고 차는 차로 중앙보다 30 cm 넘게 왼쪽으로
+// 갔다(시내 주행이라 블록이 1~4분에 하나). 0.5°면 새 블록 셋째(306 s)에 잡는다. 10-12 이후 열세 경로의 블록 340개에서
+// 0.4°까지 낮춰도 잘못 잡은 적이 없다(한 경로 안 블록 중앙값의 표준편차 중앙값 0.08°).
 constexpr int kFlowMountCheckBlocks = 3;
-constexpr double kFlowMountShiftDeg = 1.0;
+constexpr double kFlowMountShiftDeg = 0.5;
 constexpr double kFlowMountAgreeDeg = 0.5;
 
 struct FlowIntrinsics {

@@ -240,6 +240,7 @@ private:
     float nn_weight_ = 0.0f;  // 선형 ↔ 모델 피드포워드를 섞는 무게(0..1, 1초 램프)
     TargetBlend target_blend_;
     bool nn_evaluated_ = false;
+    float nn_curve_rise_ = 0.0f;  // 계획의 |목표 횡가속| 상승률(m/s³, lateral_nn_feedforward)
     LiveLateralParams live_{};
     bool live_vehicle_valid_ = true;
     float live_delay_s_ = 0.0f;

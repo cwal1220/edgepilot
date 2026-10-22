@@ -294,7 +294,8 @@ TEST(LateralPlanner, LaneProbabilityAdjustmentsDifferFromUpstream) {
     EXPECT_TRUE(lane_mode_after(model_for(1.75f, 0.4f, 0.9f))) << "std 0.4는 0.4배(0.36)라 대체 문턱 0.3 위에 남는다";
     EXPECT_FALSE(lane_mode_after(model_for(1.75f, 0.45f, 0.9f))) << "std 0.45는 0.2배(0.18)";
 
-    // 확률이 0.9에서 0으로 떨어져도 유효 확률이 초당 2로 내려와 0.3 밑에서야(0.3초 뒤) 대체한다
+    // 확률이 0.9에서 0으로 떨어져도 유효 확률이 초당 2로 내려와, 0.3 밑에서 진입을 기다리는 사이 0.15 밑에 닿을 때
+    // 대체한다
     LateralPlanner planner{SteeringParams{}};
     LateralTarget r;
     for (int i = 0; i < 40; ++i)
@@ -305,7 +306,7 @@ TEST(LateralPlanner, LaneProbabilityAdjustmentsDifferFromUpstream) {
         r = planner.update(model_for(1.75f, 0.05f, 0.0f), VehicleCanState{}, steering_input(v));
         ++frames;
     }
-    EXPECT_EQ(frames, 6) << "0.9에서 한 프레임 0.1씩: 여섯 번째 프레임에 0.3 밑";
+    EXPECT_EQ(frames, 8) << "0.9에서 한 프레임 0.1씩: 여섯 번째 프레임에 0.3 밑, 여덟 번째에 0.15 밑";
 }
 
 // 모델 경로로 달리다 차선이 다시 보이면 std가 아직 높아도(0.25~0.5) 돌아온다. 판정값이 초당 2로 0에서 올라 0.4를 넘는
@@ -374,7 +375,44 @@ TEST(LateralPlanner, BriefLaneStdSpikeKeepsTheLanes) {
         r = planner.update(model_for(0.6f), VehicleCanState{}, steering_input(v));
         ++frames;
     }
-    EXPECT_EQ(frames, 15) << "창이 높은 std로 다 차는 10번째 프레임부터 초당 2로 내려가 15번째 프레임에 0.3 밑";
+    EXPECT_EQ(frames, 17)
+        << "창이 높은 std로 다 차는 10번째 프레임부터 초당 2로 내려가 15번째 프레임에 0.3 밑, 17번째에 0.15 밑";
+}
+
+// 모델 경로 대체는 판정 확률이 0.3 밑에 0.3초(6프레임) 머물 때 들어간다. 그보다 짧게 내려갔다 오면 차선에 남고,
+// 0.15 밑이면 기다리지 않는다.
+TEST(LateralPlanner, FallbackEntryWaitsUnlessTheLanesVanish) {
+    const float v = 20.0f;
+    const auto model_for = [&](float prob) {
+        ModelState ms{};
+        ms.valid = 1;
+        for (int i = 0; i < kTrajectorySize; ++i) {
+            ms.plan[i] = {v * model_t_idx(i), 0.0f, 0.0f};
+            ms.lanes[1][i] = {-1.75f, 0.0f};
+            ms.lanes[2][i] = {1.75f, 0.0f};
+        }
+        ms.lane_probabilities[1] = ms.lane_probabilities[2] = prob;
+        ms.lane_stds[1] = ms.lane_stds[2] = 0.05f;
+        ms.desire_state[0] = 1.0f;
+        return ms;
+    };
+    // 확률 0.35(대체 문턱 위)로 자리 잡은 차선에서 확률이 low로 내려간 뒤 대체까지 프레임 수(없으면 -1)
+    const auto frames_to_fallback = [&](float low, int low_frames) {
+        LateralPlanner planner{SteeringParams{}};
+        LateralTarget r;
+        for (int i = 0; i < 40; ++i) r = planner.update(model_for(0.9f), VehicleCanState{}, steering_input(v));
+        for (int i = 0; i < 20; ++i) r = planner.update(model_for(0.35f), VehicleCanState{}, steering_input(v));
+        EXPECT_FALSE(r.laneless_mode);
+        for (int frame = 1; frame <= 40; ++frame) {
+            r = planner.update(model_for(frame <= low_frames ? low : 0.35f), VehicleCanState{}, steering_input(v));
+            if (r.laneless_mode) return frame;
+        }
+        return -1;
+    };
+    // 0.35에서 한 프레임 0.1씩: 첫 프레임에 0.25(0.3 밑), 둘째부터 0.2
+    EXPECT_EQ(frames_to_fallback(0.2f, 5), -1) << "0.25초 내려갔다 오면 차선에 남는다";
+    EXPECT_EQ(frames_to_fallback(0.2f, 40), 6) << "0.3초 머물면 대체";
+    EXPECT_LE(frames_to_fallback(0.0f, 40), 3) << "0.15 밑이면 바로";
 }
 
 // lane_path_weight는 Lane 모드 MPC가 차선 중심에서 벗어난 위치를 되돌리는 세기다. 차가 차선 중심에서
