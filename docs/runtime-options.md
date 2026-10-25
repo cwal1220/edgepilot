@@ -146,7 +146,7 @@ them, and how to check the speaker at the desk, is in
 | --- | --- | --- |
 | `EDGEPILOT_ALERT_SOUND=0` | on | Turns the sounds off. |
 | `EDGEPILOT_ALERT_VOLUME` | `70` | Volume, 0–100. `alert_volume_percent` in `params/display.json` (the web Device settings tab) overrides it at runtime. |
-| `EDGEPILOT_ALERT_PCM` | `plughw:0,1` | ALSA device. |
+| `EDGEPILOT_ALERT_PCM` | `/dev/snd/pcmC0D1p` | ALSA playback device node. |
 
 ## Parameter files
 

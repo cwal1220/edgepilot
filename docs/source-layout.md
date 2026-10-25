@@ -614,8 +614,8 @@ Libraries `hud_state`, `hud` and `alert_tones`, and on the board
   - `alert_tones` synthesises them: overlapping bell-like notes with soft
     attacks and decaying overtones. It is portable, so `alert_sound_preview`
     writes them as WAV and `gtest_alert_tones` checks them on the host.
-  - `alert_sound` streams them to one long-lived `aplay` on the board speaker
-    (`overlayd`).
+  - `alert_sound` writes them to the board speaker's ALSA device through
+    ioctls (`overlayd`), opening it only around an alert.
 - `system_monitor.*`: `/proc`, thermal-zone, and network sampling (the Wi-Fi
   SSID through the `SIOCGIWESSID` ioctl) into `HudState`, called at 1 Hz by
   `overlayd`. Only a `wlan` link with an address and an associated SSID counts

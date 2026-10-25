@@ -285,11 +285,17 @@ flowchart TB
   loop plays in the next.
 - A sound that cannot play in this loop because another did waits for the next
   loop, except `unavailable`, which is skipped.
-- One `aplay` starts with `overlayd` and stays open. A sound thread feeds it
-  silence, or the alert's samples when one fires, so an alert never starts a
-  process and the loop never stalls on the SD card. The amplifier stays on, so
-  the first note is not cut, and an alert sounds within 0.1 s. A new alert cuts
-  off the one playing.
+- A sound thread opens the playback device (`/dev/snd/pcmC0D1p`, through
+  ALSA ioctls) when an alert fires and closes it as soon as the alert has
+  played out (the last 60 ms in the ALSA buffer). An alert never starts a
+  process, so neither the alert nor the loop stalls on the SD card. While the
+  device is open the codec driver keeps the speaker amplifier on, and an
+  amplifier that is on plays the supply noise of CPU and Wi-Fi load (a crackle
+  while a video was copied over ssh on 2026-10-25, gone with the device
+  closed, unchanged with 6 dB less analog gain). So the device stays closed
+  between alerts. 0.15 s of silence goes first while the amplifier powers up,
+  so the first note is not cut (with 80 or 120 ms it was clipped). A new
+  alert cuts off the one playing.
 - The volume is the web console's alert volume (`alert_volume_percent` in
   `params/display.json`); a change plays the engage tone once at the new
   volume. `EDGEPILOT_ALERT_SOUND=0` turns the sounds off, and two more
