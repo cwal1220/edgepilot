@@ -94,16 +94,21 @@ in [Model output](../docs/model-pipeline.md#model-output).
 
 ## Current build
 
-The current build (2026-10-04, sha256 `4ef2b2ab…`) is the split-output core
-with Pulsar2 SmoothQuant (U16 activations, S8 conv weights, MinMax
-calibration). On the board, against the fp32 core on the same MaixCAM2 inputs,
-it is equal to or better than the build before it on every head, and its
-gas-press probability reacts at 6 of 8 green-light stops instead of 4
-([Check](../tools/model/axmodel/README.md#check)).
+The current build (2026-11-06, sha256 `70fbc5da…`) is the openpilot master
+weights quantised again without training: calibration on recorded drives, the
+image normalisation folded into the uint8 inputs, AdaRound weight rounding,
+and the first vision Gelu and `Gelu_2` in FP32
+([Current build](../tools/model/axmodel/README.md#current-build)). On the
+board, in closed loop on a held-out drive against the fp32 core, its plan
+lateral error at 2 s is 2.35 cm and its lane-line error 3.33 cm; the build
+before it (2026-10-04, SmoothQuant, sha256 `4ef2b2ab…`) had 7.72 cm and
+13.2 cm.
 
-- Its calibration set is no longer in this repository, and calibrating on
-  MaixCAM2 recordings scored worse. Compare a new build against it on the same
-  inputs before replacing it, as in
+- It follows fp32 closely, including fp32's lateral response, and has not
+  been road-tested yet
+  ([Limits](../tools/model/axmodel/README.md#limits)).
+- Its calibration set is not in this repository. Compare a new build against
+  it on the same inputs before replacing it, as in
   [step 5](../tools/model/axmodel/README.md#5-compare-on-the-board).
 - The calibration data must carry desire pulses, or the NPU model ignores
   lane-change desire
@@ -111,14 +116,16 @@ gas-press probability reacts at 6 of 8 green-light stops instead of 4
 
 ## Verification
 
-On the board, NPU inference takes about 15.5 ms on one core and a whole
-`modeld` frame about 19.5 ms.
+On the board the 2026-10-04 build's NPU inference took about 15.5 ms on one
+core and a whole `modeld` frame about 19.5 ms. The current build takes about
+6 % less NPU time (`ax_run_model` back to back on 2026-11-06: 9.79 ms against
+10.39 ms).
 
-- On the 552-frame evaluation set the NPU1 model's output is bit-identical to
-  the earlier two-core (NPU2) build.
-- On a 200-frame replay the board output matched the host axengine runner to
-  0.0008 m in plan lateral offset at 2 s, with a hidden-state cosine similarity
-  of 0.9994.
+- On the 552-frame evaluation set the 2026-10-04 NPU1 build's output is
+  bit-identical to the earlier two-core (NPU2) build.
+- On a 200-frame replay that build's board output matched the host axengine
+  runner to 0.0008 m in plan lateral offset at 2 s, with a hidden-state cosine
+  similarity of 0.9994.
 
 The master model replaced v0.9.4 because Pulsar2 6.0 and 7.0 both miscompile
 v0.9.4's Elu at U16

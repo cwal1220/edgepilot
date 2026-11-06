@@ -2,11 +2,13 @@
 
 [← Documentation](../../../docs/README.md)
 
-How `models/supercombo.axmodel`, the model the MaixCAM2 runtime runs
-(`src/model/supercombo_model.cc`), is built from openpilot master's released
-`driving_supercombo.onnx`. Only the network core goes onto the NPU; its input
-queues (the image, desire and feature shift registers) are cut off, and the
-runtime keeps them on the CPU (`src/model/model_temporal.h`).
+How an axmodel for the MaixCAM2 runtime (`src/model/supercombo_model.cc`) is
+built from openpilot master's released `driving_supercombo.onnx`. Only the
+network core goes onto the NPU; its input queues (the image, desire and
+feature shift registers) are cut off, and the runtime keeps them on the CPU
+(`src/model/model_temporal.h`). The build in `models/` since 2026-11-06 comes
+from the same weights by another route, described in
+[Current build](#current-build).
 
 ```mermaid
 flowchart TB
@@ -199,6 +201,83 @@ Copy `build/core.axmodel` into the repository as `models/supercombo.axmodel`
 and update `models/manifest.sha256`. `scripts/upload_to_board.sh` then sends it
 to the board.
 
+## Current build
+
+Since 2026-11-06 `models/supercombo.axmodel` (sha256 `70fbc5da…`) holds the
+same openpilot master weights quantised again, without training, in the
+separate `supercombo_distill_repro` repository (section 7 of its
+`docs/REPRODUCE.md`, with the scripts). It keeps the
+[contract](../../../models/README.md#contract): the same five inputs and the
+same 15 outputs. It differs from steps 1-4 in four ways:
+
+1. **Calibration.** 633 frames of recorded drives, half of them the sharpest
+   turns, with MinMax and without SmoothQuant.
+2. **Inputs and heads.** The image normalisation is folded into the uint8
+   input's dequantisation (scale 1/63.75, zero point 128), and the head biases
+   are corrected for the S8 weight rounding (Nagel 2019).
+3. **AdaRound.** Each S8 weight is rounded up or down, layer by layer, so that
+   the layer's output on 1024 recorded frames stays closest to fp32, instead
+   of going to the nearest step.
+4. **Two Gelus in FP32.** The first vision Gelu and the third (`Gelu_2`) run
+   in FP32: `layer_names` in `layer_configs`, as in
+   `pulsar2_u16_dq_gelu_fp32.json`. That costs 6 % more NPU cycles.
+
+### Why the two Gelus
+
+Pulsar2's Reference mode runs `build/quant/quant_axmodel.onnx` and computes
+Gelu exactly. The board runs the compiled `build/m.axmodel`, and `pulsar2 run`
+on that file matches the board bit for bit. There a U16 Gelu is a table: for
+each input code it interpolates linearly between points spread over the whole
+calibrated input range. The first vision Gelu, after the stem conv, sees
+inputs from −150 to 138, so its points are about 0.64 apart and its output is
+up to 18 steps (about 0.04) too high near zero. The depthwise conv after it has
+weights up to 10.7 and makes that difference about 25 times larger.
+
+So AdaRound alone cut the error of Pulsar2's Reference by about 40 % but not
+the board's: the Gelu table, not the weight rounding, was most of the board's
+error. With these two Gelus exact and the other 18 as tables, the board's
+output is as close to fp32 as Reference's.
+
+### Evidence
+
+On the board, over the 504 moving frames of a held-out drive in closed loop
+(each build's own hidden state fed back), mean difference from the fp32 core:
+
+| Build | Plan y at 2 s | Plan y at 4 s | Yaw at 0.5 s | Lane line | Lead probability |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-04, steps 1-4 with SmoothQuant | 7.72 cm | 26.5 cm | 2.36 mrad | 13.2 cm | 0.034 |
+| changes 1 and 2 | 5.61 cm | 22.6 cm | 1.10 mrad | 9.88 cm | 0.040 |
+| changes 1 to 3 | 5.84 cm | 21.7 cm | 1.14 mrad | 9.08 cm | 0.032 |
+| changes 1 to 4, the current build | 2.35 cm | 10.3 cm | 0.42 mrad | 3.33 cm | 0.014 |
+
+- An onnxruntime emulator of the board in that repository (S8 weights and the
+  compiled Gelu tables) matches the board to a hidden-state cosine of 0.9996.
+  Over eight held-out drive segments it gives the same picture: plan y at 2 s
+  3.60 cm with changes 1 and 2, 1.35 cm with all four.
+- `ax_run_model`, back to back on 2026-11-06: 10.39 ms for the 2026-10-04
+  build, 9.79 ms for the current one. Readings move by a few milliseconds
+  from day to day, so compare builds only within one session.
+- The `modeld` rehearsal ran at 20 Hz with no missed frames or errors.
+
+### Limits
+
+- The build follows fp32 closely, including fp32's lateral response: its
+  lane-centre gain against fp32 is 0.98, where the build with changes 1 and 2
+  has 0.92. A fine-tuned model with an fp32-like response weaved on straight
+  roads in the 2026-11-04 road test. This build has not been driven yet.
+- Against the big teacher model on the same drive, its lane lines and lane
+  width are slightly further off than those of the build with changes 1 and 2,
+  as fp32's are.
+- The calibration and AdaRound frames are recorded drives that are not in
+  this repository, and the GPU AdaRound may round a few weights differently
+  on another machine.
+- `scripts/upload_to_board.sh` sends this file as the board's
+  `supercombo.axmodel`. The 2026-10-04 build (sha256 `4ef2b2ab…`) is in the
+  git history.
+- Steps 1-4 here have not been built with the Gelu fix. In the released graph
+  the two Gelus are `model/node_gelu` and `model/node_gelu_2`; adding them to
+  `pulsar2_u16_u8in.json` as FP32 `layer_names` should apply it.
+
 ## Check
 
 The split build of 2026-09-29, on the board over the 552-frame evaluation set
@@ -238,6 +317,13 @@ NPU inference on the board takes about 15.5 ms on one core.
   change at all. On 2026-09-27 on the board, with a pulse fed in,
   laneChangeLeft was 0.00 for the old model and 0.99 for the new one. Without
   desire the outputs are the same (plan y differs by 0.0006 m).
+- **The board is worse than Pulsar2 predicts.** Pulsar2's Reference mode
+  computes Gelu exactly, the compiled model with a table
+  ([Why the two Gelus](#why-the-two-gelus)). `pulsar2 run` on
+  `build/m.axmodel` matches the board bit for bit; put the Gelus with wide
+  input ranges in FP32. Making all of them FP32 does not build
+  (`ocm alloc with ddr_swap failed`), and a `Clip` in front does not narrow
+  the table, because Pulsar2 keeps the input's scale through it.
 - **Options that do not work.** `highest_mix_precision` does not build, and
   EasyQuant needs more than Docker's 9.7 GB of memory.
 - **Elu.** Pulsar2 6.0 and 7.0 both miscompile Elu at U16, which broke the
@@ -247,6 +333,8 @@ NPU inference on the board takes about 15.5 ms on one core.
 
 - [Model package](../../../models/README.md): the shipped build, its contract
   and board results
+- `supercombo_distill_repro` (private repository), `docs/REPRODUCE.md`
+  section 7: the scripts and commands of the current build
 - [Model pipeline](../../../docs/model-pipeline.md): how the runtime feeds the
   core and reassembles its outputs
 - [Model tools](../README.md): the host environment, the recording reader and
