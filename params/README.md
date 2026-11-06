@@ -398,9 +398,13 @@ drive.
 openpilot's calibrationd does). Below 5 (`kInputsNeeded`), `rpy_rad` is only
 the starting point of the model input warp, and the state is `uncalibrated`, so
 engagement is blocked. It becomes `calibrated` once 5 new blocks are collected.
-A block is 100 accepted samples (`kBlockSize`), and samples are accepted only
-when driving straight at about 24 km/h or more, so 5 blocks take a little over
-25 s of such driving.
+With 0 saved blocks (a new calibration) the first block only moves the model
+input warp to its value and is not counted, as in openpilot's calibrationd since
+2026-10-28 (#39170): it is measured through the uncalibrated warp and can be
+degrees off, and once the blocks were full the spread check took it for a
+mount change. A block is 100 accepted samples (`kBlockSize`), and samples are
+accepted only when driving straight at about 24 km/h or more, so a new
+calibration (1 + 5 blocks) takes a little over 30 s of such driving.
 
 The calibration status moves like this:
 
@@ -409,6 +413,7 @@ stateDiagram-v2
     [*] --> uncalibrated
     uncalibrated --> calibrated: 5 blocks,<br>within the range
     uncalibrated --> invalid: 5 blocks,<br>outside the range
+    note right of uncalibrated: a new calibration's<br>first block only moves the warp
     calibrated --> recalibrating: spread over<br>yaw 2° or pitch 4°
     recalibrating --> calibrated: 5 new blocks
 ```
@@ -430,10 +435,11 @@ next start.
 
 When the spread between blocks goes over 2° in yaw or 4° in pitch, the
 calibrator decides, as openpilot's calibrationd does, that the mount has
-changed, and calibrates again by itself. It collects again from the last
-block, the state is `recalibrating` (HUD `RECAL`), the output moves to the new
-value over 0.5 s (10 samples), and it is calibrated again once 5 new blocks are
-full. Nothing is saved in between. A smaller mount change mixes with the old
+changed, and calibrates again by itself. It starts again from the last block's
+value with 0 blocks, the state is `recalibrating` (HUD `RECAL`), the output
+moves to the new value over 0.5 s (10 samples), and it is calibrated again once
+5 new blocks are full (the warp is already at the new value, so the first block
+counts). Nothing is saved in between. A smaller mount change mixes with the old
 blocks and moves slowly, so reset it with this button.
 
 To measure the intrinsics again and relearn while keeping the old values as the

@@ -114,6 +114,7 @@ struct RefCalibrator {
     int idx = 0;
     int block_idx = 0;
     int valid_blocks = 0;
+    bool seeded = false;  // upstream: 첫 블록으로 워프를 옮겼다(새 보정의 첫 블록은 세지 않는다)
     CalibrationStatus status = CalibrationStatus::Uncalibrated;
     uint64_t accepted = 0;
     uint64_t rejected = 0;
@@ -206,7 +207,7 @@ struct RefCalibrator {
             const int last_block = (block_idx + kInputsWanted - 1) % kInputsWanted;
             const double smooth_from[3] = {rpy[0], rpy[1], rpy[2]};
             const double last_rpy[3] = {rpys[last_block][0], rpys[last_block][1], rpys[last_block][2]};
-            reset(last_rpy, 1, smooth_from);
+            reset(last_rpy, 0, smooth_from);
             status = CalibrationStatus::Recalibrating;
         }
     }
@@ -255,7 +256,10 @@ struct RefCalibrator {
 
         idx = (idx + 1) % kBlockSize;
         ++accepted;
-        if (idx == 0) {
+        if (idx == 0 && !seeded) {
+            seeded = true;
+            for (int i = 0; i < 3; ++i) rpy[i] = rpys[0][i];
+        } else if (idx == 0) {
             ++block_idx;
             valid_blocks = std::min(kInputsWanted, std::max(block_idx, valid_blocks));
             block_idx %= kInputsWanted;
@@ -333,9 +337,10 @@ TEST(CalibrationEquivalence, OnlineCalibrator) {
         EXPECT_TRUE(ref.update(accepted_pose)) << "참조식도 블록 표본을 받아들인다";
     }
     compare_snapshot(actual.snapshot(), ref, "one_block");
-    EXPECT_EQ(actual.snapshot().valid_blocks, 1) << "유효 블록 1개";
+    EXPECT_EQ(actual.snapshot().valid_blocks, 0) << "새 보정의 첫 블록은 세지 않는다";
+    EXPECT_NEAR(actual.snapshot().rpy[2], std::atan2(0.2f, 20.0f), 1e-6) << "첫 블록 값으로 워프만 옮긴다";
 
-    for (int i = 0; i < 4 * kBlockSize; ++i) {
+    for (int i = 0; i < 5 * kBlockSize; ++i) {
         actual.update(accepted_pose, 20.0f);
         ref.update(accepted_pose);
     }
@@ -359,7 +364,7 @@ TEST(CalibrationEquivalence, HeightFollowsUpstream) {
     OnlineCalibrator actual;
     EXPECT_NEAR(actual.snapshot().height_m, 1.22f, 1e-6) << "시작 높이는 HEIGHT_INIT";
     PoseObservation pose = make_pose(20.0f, 0.0f, 0.0f);
-    for (int i = 0; i < 5 * kBlockSize; ++i) {
+    for (int i = 0; i < 6 * kBlockSize; ++i) {  // 워프만 옮기는 첫 블록 + 5블록
         actual.update(pose, 20.0f);
         ref.update(pose);
     }
@@ -438,7 +443,7 @@ TEST(CalibrationEquivalence, MountChangeRecalibratesLikeUpstream) {
     }
     compare_snapshot(yawed_actual.snapshot(), yawed_ref, "yaw_3deg");
     ASSERT_TRUE(recalibrating) << "yaw 편차가 2도를 넘으면 recalibrating";
-    EXPECT_EQ(yawed_actual.snapshot().valid_blocks, 1) << "openpilot처럼 1블록에서 다시 시작";
+    EXPECT_EQ(yawed_actual.snapshot().valid_blocks, 0) << "openpilot처럼 블록 0개에서 다시 시작";
     EXPECT_GT(yawed_actual.snapshot().rpy[2], deg_to_rad(2.0f)) << "새 장착의 yaw로 옮겨 간다";
 
     // block_idx가 0부터 다시 세므로 openpilot도 새 블록 5개가 다 차야 보정 완료다.
@@ -456,6 +461,39 @@ TEST(CalibrationEquivalence, MountChangeRecalibratesLikeUpstream) {
     compare_snapshot(yawed_actual.snapshot(), yawed_ref, "recalibrated");
     EXPECT_EQ(static_cast<int>(yawed_actual.snapshot().status), static_cast<int>(CalibrationStatus::Calibrated))
         << "5블록이 다시 차면 보정 완료";
+}
+
+// upstream #39170: 새 보정의 첫 블록은 보정 안 된 워프(0)로 잰 것이라 크게 틀릴 수 있다. 그 블록은 워프만 옮기고
+// 세지 않으므로, pitch가 5도 틀린 첫 블록이 뒤 블록들과의 편차 검사(4도)에서 장착 변경으로 오판되지 않는다.
+// 첫 블록 뒤의 관측은 그때 워프에 대한 나머지(참값 1도 - 워프)라 보정은 참값으로 모인다.
+TEST(CalibrationEquivalence, FirstBlockOnlyMovesTheWarp) {
+    const double zero[3] = {};
+    RefCalibrator ref;
+    ref.reset(zero, 0);
+    OnlineCalibrator actual;
+    const auto pitched = [](float pitch_rad) { return make_pose(20.0f, 0.0f, -20.0f * std::tan(pitch_rad)); };
+    const float true_pitch = deg_to_rad(1.0f);
+    const PoseObservation first = pitched(true_pitch + deg_to_rad(5.0f));  // 첫 블록 오차 5도
+    for (int i = 0; i < kBlockSize; ++i) {
+        actual.update(first, 20.0f);
+        ref.update(first);
+    }
+    compare_snapshot(actual.snapshot(), ref, "seed_block");
+    EXPECT_EQ(actual.snapshot().valid_blocks, 0);
+    EXPECT_NEAR(actual.snapshot().rpy[1], deg_to_rad(6.0f), 1e-5) << "워프는 첫 블록 값으로 옮긴다";
+
+    for (int i = 0; i < 5 * kBlockSize; ++i) {
+        float warp[3];
+        actual.output_rpy(warp);
+        const PoseObservation residual = pitched(true_pitch - warp[1]);
+        actual.update(residual, 20.0f);
+        ref.update(residual);
+    }
+    compare_snapshot(actual.snapshot(), ref, "five_blocks_after_seed");
+    EXPECT_EQ(static_cast<int>(actual.snapshot().status), static_cast<int>(CalibrationStatus::Calibrated))
+        << "첫 블록의 5도 오차로 장착 변경을 오판하지 않는다";
+    EXPECT_NEAR(actual.snapshot().rpy[1], deg_to_rad(1.0f), 1e-4) << "보정은 참값으로 모인다";
+    EXPECT_LT(actual.snapshot().spread[1], deg_to_rad(0.1f));
 }
 
 ParsedModelOutput parsed_from_pose(const PoseObservation &pose) {
@@ -602,10 +640,10 @@ TEST(CalibrationEquivalence, RecalibrationAfterResetIsSaved) {
             service.update(no_pose, 0.0f);
         }
         ASSERT_EQ(service.snapshot().valid_blocks, 0);
-        // 직진 5블록(500프레임)으로 다시 보정 완료
+        // 워프만 옮기는 첫 블록 + 직진 5블록(600프레임)으로 다시 보정 완료
         ParsedModelOutput straight{};
         straight.pose = make_pose();
-        for (int i = 0; i < 5 * 100; ++i) service.update(straight, 20.0f);
+        for (int i = 0; i < 6 * 100; ++i) service.update(straight, 20.0f);
         ASSERT_EQ(static_cast<int>(service.snapshot().status), static_cast<int>(CalibrationStatus::Calibrated));
     }  // 쓰기 스레드가 남은 일을 마칠 때까지 기다린다
     EXPECT_EQ(access(calibration.c_str(), F_OK), 0) << "다시 수렴한 보정을 저장한다";
@@ -618,7 +656,7 @@ TEST(CalibrationEquivalence, RecalibrationAfterResetIsSaved) {
 }
 
 // openpilot과 같이 저장된 블록 수를 그대로 쓴다: 5 미만(저장소 기본값 0)이면 rpy는 출발점일 뿐
-// 미보정이고, 직진 5블록이 모여야 보정 완료다.
+// 미보정이고, 직진 5블록이 모여야 보정 완료다. 0이면 새 보정이라 첫 블록은 워프만 옮긴다.
 TEST(CalibrationEquivalence, StoredCalibrationBelowFiveBlocksStartsUncalibrated) {
     const float stored[3] = {0.0f, deg_to_rad(-1.0f), deg_to_rad(-1.12f)};
     OnlineCalibrator calibrator;
@@ -628,7 +666,7 @@ TEST(CalibrationEquivalence, StoredCalibrationBelowFiveBlocksStartsUncalibrated)
     float out[3] = {};
     calibrator.output_rpy(out);
     EXPECT_NEAR(out[2], stored[2], 1e-7) << "모델 입력은 저장된 rpy에서 출발한다";
-    for (int i = 0; i < 5 * 100; ++i) calibrator.update(make_pose(), 20.0f);
+    for (int i = 0; i < 6 * 100; ++i) calibrator.update(make_pose(), 20.0f);
     EXPECT_EQ(calibrator.snapshot().valid_blocks, 5);
     EXPECT_EQ(static_cast<int>(calibrator.snapshot().status), static_cast<int>(CalibrationStatus::Calibrated));
 
