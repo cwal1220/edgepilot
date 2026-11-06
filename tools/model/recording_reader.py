@@ -358,8 +358,9 @@ class RouteVideo:
 
 
 def route_event_files(route_dir: Path) -> list[Path]:
-    """기록 순서대로 놓은 이벤트 로그 파일(events/의 60 s 청크)."""
-    return sorted((route_dir / "events").glob("*.bin"))
+    """기록 순서대로 놓은 이벤트 로그 파일(events/의 60 s 청크). macOS가 exFAT 디스크에 파일 속성을 담아 두는
+    ._000.bin 같은 파일은 뺀다(2026-11 주행 기록을 외장 디스크로 옮긴 뒤 모든 route가 그 파일에서 멈췄다)."""
+    return sorted(path for path in (route_dir / "events").glob("*.bin") if not path.name.startswith("._"))
 
 
 # 이벤트 청크의 레코드 색인 한 줄: 머리 시각, 타입, 페이로드의 파일 안 위치와 크기.

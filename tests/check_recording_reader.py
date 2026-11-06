@@ -141,6 +141,15 @@ class EventFiles(unittest.TestCase):
                 index = rr.record_index(path, path.read_bytes())
                 self.assertEqual(index[["timestamp_ns", "type"]].tolist(), [(123, rr.RECORD_CONTROL_STATE)], name)
 
+    def test_skips_macos_attribute_files(self):
+        """exFAT 디스크에서 macOS가 만드는 ._000.bin은 이벤트 파일이 아니다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            events = Path(tmp) / "events"
+            events.mkdir()
+            self.event_file(events / "000.bin")
+            (events / "._000.bin").write_bytes(b"\x00\x05\x16\x07" + b"\0" * 4092)  # AppleDouble 머리
+            self.assertEqual(rr.route_event_files(Path(tmp)), [events / "000.bin"])
+
     def test_route_without_segments(self):
         """segments/가 없는 route는 영상 세그먼트가 없을 뿐이다(일괄 실행이 멈추지 않는다)."""
         with tempfile.TemporaryDirectory() as tmp:
