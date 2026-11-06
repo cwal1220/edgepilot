@@ -29,7 +29,8 @@ public:
     OnlineCalibrator();
 
     Output update(const PoseObservation &pose, float v_ego);
-    // 저장된 보정으로 시작한다(openpilot reset). 블록 수를 그대로 써서 5 미만이면 미보정이다.
+    // 저장된 보정으로 시작한다(openpilot reset). 블록 수를 그대로 써서 5 미만이면 미보정이고, 0이면 새 보정처럼
+    // 첫 블록은 워프만 옮긴다.
     // openpilot처럼 범위를 벗어난 rpy도 받아 Invalid로 두고, 유한하지 않으면 0에서 시작한다.
     // rpy 포인터가 있으면 true.
     bool restore(const float rpy[3], int valid_blocks, const float spread[3] = nullptr, float height_m = kHeightInit);
@@ -59,5 +60,7 @@ private:
     int block_idx_ = 0;
     float old_rpy_[3] = {};
     float old_rpy_weight_ = 0.0f;
+    // 첫 블록으로 워프를 옮겼다(upstream seeded). 새 보정에서는 그 블록을 세지 않는다.
+    bool seeded_ = false;
     Snapshot snapshot_;
 };

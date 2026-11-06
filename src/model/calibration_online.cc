@@ -89,15 +89,19 @@ OnlineCalibrator::Output OnlineCalibrator::update(const PoseObservation &pose, f
     snapshot_.block_sample_count = sample_idx_;
     result.accepted = true;
 
-    if (sample_idx_ == 0) {
+    if (sample_idx_ == 0 && !seeded_) {
+        // 새 보정의 첫 블록은 보정 안 된 워프로 잰 것이라 몇 도씩 틀릴 수 있다. 워프만 그 값으로 옮기고 블록으로
+        // 세지 않는다: 세면 블록이 다 찼을 때 편차 검사가 장착 변경으로 오판한다(upstream #39170, 직진 약 5초가 더
+        // 든다).
+        seeded_ = true;
+        for (int i = 0; i < 3; ++i) snapshot_.rpy[i] = block_rpys_[0][i];
+    } else if (sample_idx_ == 0) {
         ++block_idx_;
         snapshot_.valid_blocks = std::min(kInputsWanted, std::max(block_idx_, snapshot_.valid_blocks));
         block_idx_ %= kInputsWanted;
-        update_status();
         result.block_completed = true;
-    } else {
-        update_status();
     }
+    update_status();
 
     result.snapshot = snapshot_;
     return result;
@@ -112,6 +116,8 @@ bool OnlineCalibrator::restore(const float rpy[3], int valid_blocks, const float
     // 결합이 막힌다. 예전에는 5블록으로 올려 기본값을 보정 완료로 믿었다(2026-10-01 laneless
     // 0.2 m 치우침).
     reset_to_rpy(start, std::max(0, valid_blocks), nullptr, height_m);
+    // 저장된 블록이 있으면 이미 그 워프로 잰 보정이라 첫 블록을 건너뛰지 않는다(upstream __init__의 seeded)
+    seeded_ = snapshot_.valid_blocks > 0;
     if (spread && finite3(spread)) {
         for (int i = 0; i < 3; ++i) snapshot_.spread[i] = std::max(0.0f, spread[i]);
     }
@@ -192,17 +198,17 @@ void OnlineCalibrator::update_status() {
         snapshot_.status = CalibrationStatus::Invalid;
     }
 
-    // 편차가 크면 장착이 바뀐 것으로 보고 마지막 블록 하나에서 다시 모은다(openpilot과 같이
-    // 1블록, recalibrating). 5블록이 다시 찰 때까지 보정 완료가 아니므로 저장하지 않고
-    // 학습기도 보정을 믿지 않는다. roll은 관측하지 않으므로 보지 않는다.
+    // 편차가 크면 장착이 바뀐 것으로 보고 마지막 블록 값에서 블록 0개로 다시 모은다(openpilot과 같이
+    // recalibrating). 워프는 이미 그 값이라 첫 블록부터 센다. 5블록이 다시 찰 때까지 보정 완료가 아니므로 저장하지
+    // 않고 학습기도 보정을 믿지 않는다. roll은 관측하지 않으므로 보지 않는다.
     const bool spread_too_high =
         snapshot_.spread[1] > kMaxAllowedPitchSpread || snapshot_.spread[2] > kMaxAllowedYawSpread;
     if (snapshot_.status == CalibrationStatus::Calibrated && spread_too_high) {
         const int last_block = (block_idx_ + kInputsWanted - 1) % kInputsWanted;
         float smooth_from[3] = {snapshot_.rpy[0], snapshot_.rpy[1], snapshot_.rpy[2]};
         float last_rpy[3] = {block_rpys_[last_block][0], block_rpys_[last_block][1], block_rpys_[last_block][2]};
-        // upstream reset(rpys[block_idx - 1], valid_blocks=1, smooth_from=rpy): 높이는 HEIGHT_INIT로 돌아간다
-        reset_to_rpy(last_rpy, 1, smooth_from, kHeightInit);
+        // upstream reset(rpys[block_idx - 1], smooth_from=rpy): 높이는 HEIGHT_INIT로 돌아간다
+        reset_to_rpy(last_rpy, 0, smooth_from, kHeightInit);
         snapshot_.status = CalibrationStatus::Recalibrating;
     }
 }
