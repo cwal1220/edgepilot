@@ -42,6 +42,7 @@ the board numbers.
 | `axmodel/make_m2_data.py` | builds the calibration and evaluation sets from MaixCAM2 recordings with inputs built like the runtime's: the numpy device warp ([`model_warp.py`](#model_warppy)) with the recorded calibration and camera mount, t-4/t pairs, recorded desire, the fp32 core's own feature history; `m2_calib_20261004.json` is the spec used on 2026-10-04 |
 | `axmodel/run_axmodel_assembled.py` | runs an axmodel on the board over a `make_m2_data.py eval` set and writes the outputs in the original 2576-float layout, for comparison with the fp32 reference |
 | `axmodel/pulsar2_u16_u8in.json` | the Pulsar2 build config: AX620E / NPU1 (one core; the AI-ISP denoiser uses the other), U16 everywhere, SmoothQuant, uint8 image inputs |
+| `axmodel/pulsar2_u16_dq_gelu_fp32.json` | the Pulsar2 config of the current build ([Current build](axmodel/README.md#current-build)): no SmoothQuant, uint8 image inputs dequantised with the normalisation (scale 1/63.75, zero point 128), the first vision Gelu and `Gelu_2` in FP32; its `layer_names` are those of the `supercombo_distill_repro` export |
 
 ## Host environment
 

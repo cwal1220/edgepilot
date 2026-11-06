@@ -1,0 +1,92 @@
+{
+ "model_type": "ONNX",
+ "npu_mode": "NPU1",
+ "target_hardware": "AX620E",
+ "input": "/data/model.onnx",
+ "output_dir": "/data/build",
+ "output_name": "core.axmodel",
+ "quant": {
+  "input_configs": [
+   {
+    "tensor_name": "input_imgs",
+    "calibration_dataset": "/data/calib/input_imgs_dq.tar",
+    "calibration_size": -1,
+    "calibration_format": "Numpy"
+   },
+   {
+    "tensor_name": "big_input_imgs",
+    "calibration_dataset": "/data/calib/big_input_imgs_dq.tar",
+    "calibration_size": -1,
+    "calibration_format": "Numpy"
+   },
+   {
+    "tensor_name": "desire",
+    "calibration_dataset": "/data/calib/desire.tar",
+    "calibration_size": -1,
+    "calibration_format": "Numpy"
+   },
+   {
+    "tensor_name": "features_buffer",
+    "calibration_dataset": "/data/calib/features_buffer.tar",
+    "calibration_size": -1,
+    "calibration_format": "Numpy"
+   },
+   {
+    "tensor_name": "traffic_convention",
+    "calibration_dataset": "/data/calib/traffic_convention.tar",
+    "calibration_size": -1,
+    "calibration_format": "Numpy"
+   }
+  ],
+  "calibration_method": "MinMax",
+  "precision_analysis": false,
+  "layer_configs": [
+   {
+    "start_tensor_names": [
+     "DEFAULT"
+    ],
+    "end_tensor_names": [
+     "DEFAULT"
+    ],
+    "data_type": "U16"
+   },
+   {
+    "layer_names": [
+     "/s/shipped/net/Gelu",
+     "/s/shipped/net/Gelu_2"
+    ],
+    "data_type": "FP32"
+   }
+  ]
+ },
+ "input_processors": [
+  {
+   "tensor_name": "input_imgs",
+   "src_dtype": "U8",
+   "scale": 0.01568627450980392,
+   "zeropoint": 128
+  },
+  {
+   "tensor_name": "big_input_imgs",
+   "src_dtype": "U8",
+   "scale": 0.01568627450980392,
+   "zeropoint": 128
+  },
+  {
+   "tensor_name": "desire",
+   "src_dtype": "FP32"
+  },
+  {
+   "tensor_name": "features_buffer",
+   "src_dtype": "FP32"
+  },
+  {
+   "tensor_name": "traffic_convention",
+   "src_dtype": "FP32"
+  }
+ ],
+ "compiler": {
+  "check": 0,
+  "npu_perf": true
+ }
+}

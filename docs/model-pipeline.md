@@ -197,8 +197,8 @@ three queues stay aligned.
 ## Model
 
 The model is the openpilot master `driving_supercombo` with its history queues
-cut off, compiled with Pulsar2 6.0 as a U16 axmodel (S8 weights, SmoothQuant)
-whose image inputs are uint8. How it is built is in
+cut off, compiled with Pulsar2 6.0 as a U16 axmodel (S8 weights rounded by
+AdaRound, two Gelus in FP32) whose image inputs are uint8. How it is built is in
 [axmodel pipeline](../tools/model/axmodel/README.md); the result is committed
 as `models/supercombo.axmodel` and deployed by `scripts/upload_to_board.sh`.
 
