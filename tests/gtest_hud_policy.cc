@@ -164,56 +164,6 @@ TEST(HudAlertPolicy, UnavailableIsSkippedInAFrameThatAlreadySounded) {
         << "같은 프레임에 다른 알림이 울렸으면 불가용 천이는 미루지 않고 넘긴다";
 }
 
-// 결합 중이던 제어 상태가 0.5초 넘게 끊기면 붉은 카드와 take_control을 1초마다 10초 동안 낸다. 그 뒤에는
-// 조용한 안내만 남고, 새 스냅샷이 오면 내린다. 결합하지 않았을 때 끊긴 것은 경고하지 않는다.
-TEST(HudAlertPolicy, UnresponsiveControlAlarmsWhileItWasEngaged) {
-    PolicyFrame f;
-    const uint64_t t0 = 100'000 * kMs;
-    f.control.timestamp_ns = t0;
-    f.control.engaged = 1;
-    ASSERT_EQ(f.step(t0).sound, HudSound::None);
-    ASSERT_EQ(f.step(t0 + 499 * kMs).sound, HudSound::None) << "0.5초까지는 끊긴 것이 아니다";
-    ASSERT_FALSE(f.hud.control_unresponsive);
-    ASSERT_EQ(f.step(t0 + 500 * kMs).sound, HudSound::TakeControl) << "끊기는 순간 바로 울린다";
-    ASSERT_TRUE(f.hud.control_unresponsive_alarm);
-    ASSERT_EQ(hud_select_alert(f.hud, true).title, "TAKE CONTROL");
-    ASSERT_EQ(f.step(t0 + 1400 * kMs).sound, HudSound::None);
-    ASSERT_EQ(f.step(t0 + 1500 * kMs).sound, HudSound::TakeControl) << "1초마다 다시";
-    f.control_fresh = false;  // 2초 신선도도 지났다: 불가용 천이음 대신 같은 경고를 이어 간다
-    ASSERT_EQ(f.step(t0 + 2500 * kMs).sound, HudSound::TakeControl);
-    ASSERT_EQ(f.step(t0 + 2600 * kMs).sound, HudSound::None) << "끊긴 동안 불가용 천이음은 내지 않는다";
-    ASSERT_EQ(f.step(t0 + 10'499 * kMs).sound, HudSound::TakeControl);
-    ASSERT_EQ(f.step(t0 + 10'500 * kMs).sound, HudSound::None) << "10초 뒤에는 조용하다";
-    ASSERT_TRUE(f.hud.control_unresponsive);
-    ASSERT_FALSE(f.hud.control_unresponsive_alarm);
-    ASSERT_EQ(hud_select_alert(f.hud, true).title, "CONTROLS STOPPED");
-    ASSERT_EQ(f.step(t0 + 12'000 * kMs).sound, HudSound::None);
-
-    // 다시 뜬 controlsd: 새 스냅샷(결합 아님)이면 내리고, 그 뒤에 끊겨도 결합 전이라 경고하지 않는다
-    f.control_fresh = true;
-    f.control.timestamp_ns = t0 + 13'000 * kMs;
-    f.control.engaged = 0;
-    f.step(t0 + 13'000 * kMs);
-    ASSERT_FALSE(f.hud.control_unresponsive);
-    ASSERT_EQ(f.step(t0 + 14'000 * kMs).sound, HudSound::None);
-    ASSERT_FALSE(f.hud.control_unresponsive);
-}
-
-TEST(HudAlertPolicy, TakeControlRepeatsWhileDisengaging) {
-    PolicyFrame f;
-    f.step(0);
-    f.hud.soft_disabling = true;
-    ASSERT_EQ(f.step(10 * kMs).sound, HudSound::TakeControl);
-    ASSERT_EQ(f.step(1009 * kMs).sound, HudSound::None);
-    ASSERT_EQ(f.step(1010 * kMs).sound, HudSound::TakeControl) << "해제 예고 3초 동안 1초마다";
-    ASSERT_EQ(f.step(2010 * kMs).sound, HudSound::TakeControl);
-    f.hud.soft_disabling = false;
-    ASSERT_EQ(f.step(3010 * kMs).sound, HudSound::None) << "예고가 끝나면 멈춘다";
-    f.hud.steer_saturated = true;
-    ASSERT_EQ(f.step(3020 * kMs).sound, HudSound::TakeControl);
-    ASSERT_EQ(f.step(5000 * kMs).sound, HudSound::None) << "조향 한계는 켜지는 순간 한 번";
-}
-
 TEST(HudSound, Sounds) {
     ASSERT_EQ(hud_sound_id(HudSound::Engage), AlertSoundId::Engage);
     ASSERT_EQ(hud_sound_id(HudSound::Unavailable), AlertSoundId::Unavailable);

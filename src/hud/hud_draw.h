@@ -109,8 +109,7 @@ inline bool steering_now(const HudState &hud) { return hud.controller_active && 
 
 // 화면 테두리와 모드 점의 색. 결합 전이면 0(테두리 없음). 결합했지만 조향을 쉬면 회색.
 inline uint32_t state_color(const HudState &hud) {
-    if (hud.steering_fault || hud.panda_faults != 0 || hud.soft_disabling || hud.control_unresponsive_alarm)
-        return kRed;
+    if (hud.steering_fault || hud.panda_faults != 0 || hud.soft_disabling) return kRed;
     if (!hud.services_healthy) return kAmber;
     if (steering_now(hud)) return hud.laneless_mode ? kBlue : kGreen;
     return hud.controller_engaged ? kGray : 0;
