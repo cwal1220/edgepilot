@@ -261,20 +261,15 @@ private:
     // 정책이 고른 알림음을 내고 로그에 남긴다. 거부는 차단 사유, 해제 예고는 그 플래그와 사유를 함께.
     void play_alert(const HudSoundDecision &decision) {
         if (decision.sound == HudSound::None) return;
-        // 조향을 넘겨받으라는 소리는 급한 알림이다(최소 크기, 보통 알림이 끊지 않음)
-        sound_.play(hud_sound_id(decision.sound),
-                    decision.sound == HudSound::TakeControl || decision.sound == HudSound::Unavailable);
+        sound_.play(hud_sound_id(decision.sound));
         switch (decision.sound) {
             case HudSound::Unable:
                 std::fprintf(stderr, "overlayd: alert=unable event=%u block=%s\n", decision.event_id,
                              control_state_.latest().engage_reject_block);
                 break;
             case HudSound::TakeControl:
-                std::fprintf(
-                    stderr,
-                    "overlayd: alert=take_control soft_disable=%d steer_saturated=%d unresponsive=%d block=%s\n",
-                    hud_.soft_disabling ? 1 : 0, hud_.steer_saturated ? 1 : 0, hud_.control_unresponsive_alarm ? 1 : 0,
-                    hud_.active_block);
+                std::fprintf(stderr, "overlayd: alert=take_control soft_disable=%d steer_saturated=%d block=%s\n",
+                             hud_.soft_disabling ? 1 : 0, hud_.steer_saturated ? 1 : 0, hud_.active_block);
                 break;
             case HudSound::Unavailable:
                 std::fprintf(stderr, "overlayd: alert=unavailable\n");

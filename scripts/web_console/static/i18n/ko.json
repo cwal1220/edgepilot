@@ -556,7 +556,7 @@
   "param.display.alert_volume_percent.label": "알림음 크기",
   "param.display.alert_volume_percent.description": "보드 스피커로 내는 알림음(결합·해제·결합 거부·조향 개입 요청·사용 불가·출발 알림)의 크기입니다. overlayd가 1초 안에 반영하고, 바꿀 때마다 확인음을 한 번 냅니다. EDGEPILOT_ALERT_SOUND=0이거나 스피커가 없으면 소리도 확인음도 없습니다.",
   "param.display.alert_volume_percent.increase": "알림음이 커집니다.",
-  "param.display.alert_volume_percent.decrease": "알림음이 작아집니다. 0%면 소리를 내지 않지만, 조향 개입 요청과 사용 불가 경고는 50% 밑으로 줄지 않습니다.",
+  "param.display.alert_volume_percent.decrease": "알림음이 작아집니다. 0%면 소리를 내지 않습니다.",
   "param.display.camera_offset_m.label": "카메라 좌우 위치 보정",
   "param.display.camera_offset_m.description": "보드를 차 중심에서 옆으로 달았을 때 모델이 차 중심에서 본 것처럼 영상을 옮깁니다(sunnypilot camera offset과 같은 방식). Lane·Laneless 모두에 적용되고 HUD 차선도 같이 맞춥니다. 도로면을 기준으로 옮기므로 도로 위 물체(앞차 등)는 기울어 보이고 값이 클수록 심해져, sunnypilot과 같이 ±0.35 m로 제한합니다. 바꾸면 초당 0.1 m씩 옮깁니다.",
   "param.display.camera_offset_m.increase": "차가 차선 안에서 왼쪽으로 갑니다(보드를 차 중심에서 왼쪽에 달았으면 그 거리만큼 +).",

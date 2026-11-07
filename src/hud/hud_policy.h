@@ -46,11 +46,6 @@ AlertSoundId hud_sound_id(HudSound sound);
 // 천이는 정차 부근 path 깜빡임마다 울리므로 소리내지 않는다), 같은 프레임에 다른 알림이 울렸으면
 // 넘긴다. 첫 프레임의 가용 상태는 기준값이다. 결합 거부는 HUD 토스트(engage_reject_label)도
 // 3초 띄운다.
-// 결합 중이던 제어 상태가 0.5초 넘게 끊기면(controlsd가 죽거나 다시 시작해 조향이 멈췄다) 상류 UI의
-// "TAKE CONTROL IMMEDIATELY / System Unresponsive"처럼 붉은 카드를 띄우고 take_control을 1초마다 10초 동안
-// 울린다(control_unresponsive_alarm). 그 뒤에도 끊겨 있으면 조용한 안내만 남긴다. 해제 예고 3초 동안도
-// take_control을 1초마다 다시 울린다(상류 warningSoft는 반복한다). 예전에는 끊겨도 2초 신선도가 지나야 화면이
-// 말없이 OFF가 되었고, 1.25초 만에 다시 뜬 controlsd는 그 사이에 들어 아무 소리도 나지 않았다.
 class HudAlertPolicy {
 public:
     // hud는 이번 프레임의 매핑을 마친 HUD 상태(출발 알림 유형, panda 연결, 해제 예고·조향 한계를
@@ -65,9 +60,6 @@ private:
     bool previous_steer_saturated_ = false;
     bool availability_initialized_ = false;
     bool previous_unavailable_ = false;
-    bool engaged_before_gap_ = false;     // 제어 상태가 끊기기 전 마지막 결합 상태
-    uint64_t unresponsive_since_ns_ = 0;  // 0이면 끊기지 않음
-    uint64_t next_take_control_ns_ = 0;   // 반복하는 take_control의 다음 시각
 };
 
 // 깜빡이 애니메이션 단계: 깜빡이 상태가 바뀐 시각부터 50 ms마다 한 단계, kTurnSignalSteps마다 처음으로.
