@@ -126,6 +126,8 @@ public:
     bool live_delay_in_use() const;
     // 목표 곡률을 읽는 경로 지연: lagd 사용 중이면 추정값(0.15~0.65 s), 아니면 steer_actuator_delay
     float plan_delay_s() const;
+    // 토크 컨트롤러가 측정과 비교하는 요청의 지연: torque_compare_delay가 0보다 크면 그 값, 아니면 경로 지연
+    float torque_compare_delay_s() const;
     // 학습한 토크 모델(docs/lateral-nn.md). 있으면 매 틱 목표 궤적 이력을 쌓고, nn_feedforward가 켜져 있으면 조향 중
     // 피드포워드를 이 모델이 낸다. nullptr이면 선형 피드포워드만 쓴다.
     void set_lateral_nn(std::shared_ptr<const LateralNnModel> model);

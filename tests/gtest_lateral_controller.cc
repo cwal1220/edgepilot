@@ -1320,6 +1320,22 @@ TEST(LateralController, LiveDelaySwitch) {
     EXPECT_FLOAT_EQ(on.plan_delay_s(), 0.34f) << "확정 전·오래된 값은 쓰지 않는다";
 }
 
+// 토크 비교 지연: 0이면 경로 지연(lagd 포함)을 따르고, 양수면 경로 지연과 따로 그 값이다.
+TEST(LateralController, TorqueCompareDelay) {
+    LateralControllerConfig config;
+    config.steering_params.steer_actuator_delay = 0.34f;
+    config.steering_params.use_live_delay = true;
+    LateralController follow(config);
+    follow.set_live_delay(0.57f, true);
+    EXPECT_FLOAT_EQ(follow.torque_compare_delay_s(), 0.57f) << "0이면 경로 지연(상류)";
+
+    config.steering_params.torque_compare_delay = 0.30f;
+    LateralController split(config);
+    split.set_live_delay(0.57f, true);
+    EXPECT_FLOAT_EQ(split.plan_delay_s(), 0.57f) << "경로 지연은 lagd 그대로";
+    EXPECT_FLOAT_EQ(split.torque_compare_delay_s(), 0.30f);
+}
+
 // 결합한 컨트롤러와 그 차를 함께 들고 틱을 진행하는 작은 도구(입력 끊김·해제 예고 시험용)
 struct EngagedDrive {
     LateralControllerConfig config;

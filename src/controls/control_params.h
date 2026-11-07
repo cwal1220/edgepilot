@@ -62,8 +62,16 @@ struct SteeringParams {
     bool use_live_vehicle_params = true;
     bool use_live_torque_params = true;
     // lagd(locationd) 조향 지연 사용. 켜고 lagd가 확정(5블록)되면 경로 지연(목표 곡률을 읽는
-    // 시점), 토크 컨트롤러의 요청 지연, torqued 지연에 추정값을 쓴다(상류 lat_delay).
+    // 시점), 토크 컨트롤러의 요청 지연(torque_compare_delay가 0일 때), torqued 지연에 추정값을 쓴다(상류 lat_delay).
     bool use_live_delay = false;
+    // 토크 컨트롤러가 현재 측정(조향각 곡률)과 비교하는 요청의 지연(초). 0이면 경로 지연(lagd 또는 steer_actuator_delay)을
+    // 그대로 쓴다(상류). 조향각은 3~8초 대역에서 요청을 0.56~0.73 s 늦게 따른다(2026-11-07, 10월 주행도 같다). 그보다
+    // 짧게 비교하면 요청 변화의 일부가 오차에 남아 PID가 핸들을 더 일찍 돌린다(앞섬): 루프 여유를 사고 잔 핸들 움직임을
+    // 낸다. lagd 추정이 틀린 것이 아니다(학습값은 10월과 같다). 2026-11-07 폐루프 재생(shippedadag 주행 둘, 10월 출시
+    // 주행 둘)에서 0.30이면 Lane 모드 직선의 3~8초 흔들림이 경로 지연은 그대로 둔 채 12~15 % 줄었다(모델이 차 움직임을
+    // 0.15 s 늦게 보는 조건에서는 25~35 %). 실차(2026-11-08 밤, shippedadag, 0.30)에서는 조향각이 요청을 0.43 s에
+    // 따랐고(11-07 0.60~0.65 s), 직선 흔들림이 11-07 주행보다 약 4분의 1 작았다(다른 길). 0.5~2 Hz 조향은 +9 %.
+    float torque_compare_delay = 0.0f;
     // 학습한 토크 모델로 피드포워드를 낸다(docs/lateral-nn.md). 웹 콘솔에서 고른 모델 파일(파라미터 디렉터리의
     // lateral_nn.json이 가리키는 models/lateral_nn/<차종>_v<버전>.json, common/lateral_nn_path.h)이 있어야 하고, 없으면
     // 켜도 선형 피드포워드를 쓴다. PID는 그대로다.

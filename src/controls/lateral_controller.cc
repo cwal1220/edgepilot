@@ -63,6 +63,11 @@ float LateralController::plan_delay_s() const {
     return live_delay_in_use() ? live_delay_s_ : config_.steering_params.steer_actuator_delay;
 }
 
+float LateralController::torque_compare_delay_s() const {
+    const float compare = config_.steering_params.torque_compare_delay;
+    return compare > 0.0f ? compare : plan_delay_s();
+}
+
 LiveLateralParams LateralController::live_params() const {
     LiveLateralParams live = live_;
     live.use_vehicle = live_.use_vehicle && config_.steering_params.use_live_vehicle_params;
@@ -152,7 +157,7 @@ LateralControlOutput LateralController::update(const LateralPath &path, const La
     torque_in.desired_curvature = result.desired_curvature;
     torque_in.steering_angle_deg = vehicle_state.steering_angle_deg;
     torque_in.steer_limited_by_safety = steer_limited_by_safety_;
-    torque_in.lat_delay_s = plan_delay_s();
+    torque_in.lat_delay_s = torque_compare_delay_s();
     torque_in.yaw_rate_rad_s = vehicle_state.yaw_rate_rad_s;
     torque_in.yaw_rate_valid = yaw_rate_valid;
     torque_in.road_bank_lat_accel = road_bank_.lat_accel();
