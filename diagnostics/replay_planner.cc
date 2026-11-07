@@ -23,6 +23,7 @@
 #include "recording/event_log_reader.h"
 #include "recording/recording_format.h"
 #include "route_events.h"
+#include "tool_output.h"
 
 #include <cstdio>
 #include <string>
@@ -104,6 +105,7 @@ int main(int argc, char **argv) {
     if (lane_filter > 0.0f) planner.set_lane_filter_weight(lane_filter);
 
     VehicleCanState vehicle{};  // --vehicle이 아니면 깜빡이·개입 없음
+    if (!tool_output_allowed(positional[0])) return 2;
     std::FILE *out = std::fopen(positional[0], "w");
     if (out == nullptr) {
         std::fprintf(stderr, "cannot open %s\n", positional[0]);

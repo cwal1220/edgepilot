@@ -42,6 +42,7 @@
 #include "recording/recorded_can.h"
 #include "recording/recording_format.h"
 #include "route_events.h"
+#include "tool_output.h"
 
 #include <algorithm>
 #include <array>
@@ -347,6 +348,7 @@ int main(int argc, char **argv) {
 
     const char *out_path = opt.positional[0];
     const bool want_csv = std::strcmp(out_path, "-") != 0;
+    if (want_csv && !tool_output_allowed(out_path)) return 2;
     std::FILE *out = want_csv ? std::fopen(out_path, "w") : nullptr;  // -면 행을 서식화하지 않는다(점수만)
     if (want_csv && out == nullptr) {
         std::fprintf(stderr, "cannot open %s\n", out_path);

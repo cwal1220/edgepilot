@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -154,6 +155,26 @@ TEST(ReplayTools, RunOnASyntheticRoute) {
           "replay_localization --lag " + root + "/loc.csv " + events}) {
         EXPECT_EQ(run_tool(args, &out), 2) << args << "\n" << out;
     }
+
+    // 출력 자리에 녹화 파일이 오거나(출력 인자를 빠뜨림) 출력이 route 안이면 쓰지 않는다(tool_output.h).
+    // 2026-10-17, 10-21에 이렇게 events/000.bin이 잘렸다.
+    const auto file_bytes = [](const std::string &path) {
+        std::ifstream in(path, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    const std::string recorded = file_bytes(events);
+    const std::string inside = route + "/out.csv";
+    for (const std::string &args :
+         {"replay_planner " + events + " " + events, "replay_closed_loop " + events + " " + events,
+          "replay_localization " + events + " " + events, "extract_lateral_dataset " + events + " " + events,
+          "replay_controls --dump " + events + " " + events,
+          "replay_lateral_learners --torque-cache " + events + " " + events, "replay_planner " + inside + " " + events,
+          "replay_lateral_learners --outputs " + route + "/events/x.csv " + events}) {
+        EXPECT_EQ(run_tool(args, &out), 2) << args << "\n" << out;
+        EXPECT_NE(out.find("refusing to write"), std::string::npos) << args << "\n" << out;
+    }
+    EXPECT_EQ(file_bytes(events), recorded) << "녹화 파일이 그대로다";
+    EXPECT_FALSE(std::filesystem::exists(inside));
 
     std::filesystem::remove_all(root);
 }

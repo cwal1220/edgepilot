@@ -17,6 +17,7 @@
 #include "recording/event_log_reader.h"
 #include "recording/recording_format.h"
 #include "route_events.h"
+#include "tool_output.h"
 
 #include <algorithm>
 #include <cmath>
@@ -80,6 +81,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "%s: cannot read\n", lag_cache_path.c_str());
         return 1;
     }
+    if (!tool_output_allowed(positional[0])) return 2;
     std::FILE *csv = std::fopen(positional[0].c_str(), "w");
     if (!csv) return 1;
     std::fprintf(csv,
