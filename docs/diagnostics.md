@@ -19,6 +19,7 @@ flowchart LR
         controls["replay_controls<br>controlsd tick"]
         dataset["extract_lateral_dataset<br>CSV for fits"]
         bench["lane_benchmark.py<br>stock lane comparison"]
+        summary["drive_summary.py<br>per-drive summary"]
         hud["hud_tools.py, hud_snapshot<br>HUD frames"]
         m2["make_m2_data.py eval<br>model inputs, fp32 reference"]
     end
@@ -29,6 +30,7 @@ flowchart LR
     route --> controls
     route --> dataset
     route --> bench
+    route --> summary
     route --> hud
     route --> m2
     m2 --> axrun
@@ -37,7 +39,7 @@ flowchart LR
     classDef group fill:#ffffff,stroke:#d1d9e0,color:#59636e
     class host,board group
     class axrun compute
-    class route,planner,controls,dataset,bench,hud,m2 proc
+    class route,planner,controls,dataset,bench,summary,hud,m2 proc
 ```
 
 The replay tools never write onto a recording. An output path (the first

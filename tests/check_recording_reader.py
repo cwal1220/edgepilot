@@ -71,6 +71,10 @@ class RecordingReaderLayout(unittest.TestCase):
             self.assertEqual(offset_in(rr.LEARNER_STATE, name), offset, name)
         self.assertEqual(rr.LEARNER_STATE.itemsize, cpp_size("LearnerState"))
 
+    def test_panda_state(self):
+        self.assertEqual(rr.PANDA_STATE_SIZE, cpp_size("PandaState"))
+        self.assertEqual(dtype_fields(rr.PANDA_STATE), struct_fields("PandaState", IPC))
+
     def test_localization_and_imu(self):
         """크기만 대조하면 필드 순서가 바뀌어도 모른다: 형식·이름·배열 길이를 차례대로 대조한다."""
         self.assertEqual(rr.LOCALIZATION_STATE.itemsize, cpp_size("LocalizationState"))

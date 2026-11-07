@@ -77,6 +77,10 @@ add_test(NAME check_recording_reader.py
          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 # numpy가 없으면 77로 끝난다(건너뜀)
 set_tests_properties(check_recording_reader.py PROPERTIES SKIP_RETURN_CODE 77)
+add_test(NAME check_drive_summary.py
+         COMMAND ${Python3_EXECUTABLE} tests/check_drive_summary.py
+         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(check_drive_summary.py PROPERTIES SKIP_RETURN_CODE 77)
 # 문서 형식(docs/style-guide.md): 제목, 색인 링크, 링크와 앵커, 줄바꿈, 언어, Mermaid 색
 add_test(NAME check_docs.py
          COMMAND ${Python3_EXECUTABLE} tests/check_docs.py

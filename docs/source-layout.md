@@ -822,7 +822,8 @@ only in the board build, against `deps/ax630` from
 - `tools/model/`: the recording readers. `recording_reader.py` decodes `recordd`
   routes (frame index, event log, H.264 video) and mirrors `recording_format.h`
   / `ipc_messages.h` for the analysis tools; `lane_benchmark.py` (model lanes
-  against the stock camera's `LKA14`) builds on it. `model_warp.py` is a NumPy
+  against the stock camera's `LKA14`) and `drive_summary.py` (the per-drive
+  review) build on it. `model_warp.py` is a NumPy
   port of the CPU input warp. See [Model tools](../tools/model/README.md).
 - `tools/control/make_can_golden.py`: the bytes of the frames edgepilot sends
   and the torque limiter, built with a local opendbc's packer and upstream
