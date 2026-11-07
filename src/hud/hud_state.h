@@ -35,7 +35,10 @@ struct HudState {
     int turn_signal_step = 0;
     bool cruise_active = false;
     bool brake_hold = false;
-    bool soft_disabling = false;   // 3초 뒤 해제 예고(active_block이 사유)
+    bool soft_disabling = false;  // 3초 뒤 해제 예고(active_block이 사유)
+    // 결합 중이던 제어 상태가 끊김(hud_policy): 처음 10초는 붉은 경고와 반복 경고음, 그 뒤는 조용한 안내
+    bool control_unresponsive = false;
+    bool control_unresponsive_alarm = false;
     bool steer_saturated = false;  // 커브가 조향 한계를 넘음
     HudLaneChange lane_change = HudLaneChange::None;
     int lane_change_direction = 0;        // -1 왼쪽, 1 오른쪽

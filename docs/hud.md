@@ -103,7 +103,7 @@ The border and the mode chip's dot take the steering state colour:
 
 | Colour | When |
 | --- | --- |
-| Red | steering fault, Panda fault, or disengaging in 3 s |
+| Red | steering fault, Panda fault, disengaging in 3 s, or control stopped while engaged (first 10 s) |
 | Amber | waiting for services: a process is down or there is no fresh model |
 | Green | steering in Lane mode |
 | Blue | steering in Laneless mode |
@@ -178,6 +178,8 @@ first that applies in this order:
 
 | Title | Detail | Bar | When |
 | --- | --- | --- | --- |
+| `TAKE CONTROL` | controls not responding | red | engaged, and no new control state for 0.5 s (`controlsd` died or restarted); for 10 s |
+| `CONTROLS STOPPED` | steering is off | amber | after those 10 s, until control state returns |
 | `UNABLE TO ENGAGE` | the reason | amber | for 3 s after an engage is refused |
 | `TAKE CONTROL` | the reason | red | disengaging in 3 s |
 | `STEERING FAULT` | model, car and Panda links | red | the MDPS reports a fault |
@@ -276,8 +278,8 @@ flowchart TB
 | `engage` | a fifth up | engaged |
 | `disengage` | a fifth down | disengaged |
 | `signal_changed` | three notes up | a departure alert |
-| `take_control` | as `unable` | disengaging in 3 s, or the steering limit is reached |
-| `unavailable` | a tritone, twice | control goes stale, the Panda drops out or faults, or the steering faults |
+| `take_control` | as `unable` | disengaging in 3 s (every second), the steering limit is reached, or control stops responding while engaged (every second for 10 s) |
+| `unavailable` | a tritone, twice | control goes stale, the Panda drops out or faults, or the steering faults (not while `take_control` repeats for stopped control) |
 
 - Control events come from `controlsd`'s event counters. The first snapshot
   after `overlayd` starts is a baseline, not an event, and a counter that goes
@@ -285,6 +287,14 @@ flowchart TB
   loop plays in the next.
 - A sound that cannot play in this loop because another did waits for the next
   loop, except `unavailable`, which is skipped.
+- If `controlsd` stops publishing for 0.5 s while engaged, steering has
+  stopped: the red `TAKE CONTROL` card and `take_control` every second for
+  10 s, as upstream's "TAKE CONTROL IMMEDIATELY / System Unresponsive". The
+  state was 100 Hz on every drive (no gap over 50 ms). Before, the screen only
+  turned to `OFF` after the 2 s freshness, silently, and a `controlsd` that came
+  back within 1.25 s left no sound at all.
+- `take_control` and `unavailable` are urgent: they play at no less than 50 %
+  volume, and while one waits or plays no other sound cuts in.
 - A sound thread opens the playback device (`/dev/snd/pcmC0D1p`, through
   ALSA ioctls) when an alert fires and closes it as soon as the alert has
   played out (the last 60 ms in the ALSA buffer). An alert never starts a

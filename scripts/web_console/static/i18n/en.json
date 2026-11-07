@@ -577,7 +577,7 @@
   "param.display.alert_volume_percent.label": "Alert volume",
   "param.display.alert_volume_percent.description": "Volume of the alerts on the board speaker (engage, disengage, refused engage, take control, unavailable, departure). overlayd applies it within 1 s and plays one confirmation tone per change. With EDGEPILOT_ALERT_SOUND=0 or no speaker there is neither sound nor tone.",
   "param.display.alert_volume_percent.increase": "Alerts get louder.",
-  "param.display.alert_volume_percent.decrease": "Alerts get quieter; 0% is silent.",
+  "param.display.alert_volume_percent.decrease": "Alerts get quieter; 0% is silent, but take control and unavailable warnings never go below 50%.",
   "param.display.camera_offset_m.label": "Camera lateral offset",
   "param.display.camera_offset_m.description": "When the board sits off the car's centre, shifts the image so the model sees it from the centre (as sunnypilot's camera offset does). It applies in Lane and Laneless modes and moves the HUD lines too. The shift is based on the road plane, so objects above the road (lead cars and the like) look sheared, more so at larger offsets; like sunnypilot it is limited to ±0.35 m. A change moves at 0.1 m/s.",
   "param.display.camera_offset_m.increase": "The car moves left within the lane (if the board sits left of the car's centre, enter that distance as +).",
