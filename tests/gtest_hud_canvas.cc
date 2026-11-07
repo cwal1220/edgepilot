@@ -171,6 +171,11 @@ TEST(HudRenderer, EveryAlertTextFitsTheCard) {
     hud.steering_fault = true;
     add(hud);
     hud = HudState{};
+    hud.control_unresponsive = hud.control_unresponsive_alarm = true;
+    add(hud);
+    hud.control_unresponsive_alarm = false;
+    add(hud);
+    hud = HudState{};
     hud.panda_faults = 1;
     add(hud);
     for (bool by_driver : {false, true}) {

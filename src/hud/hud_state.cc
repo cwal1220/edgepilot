@@ -17,6 +17,8 @@ HudAlertCard hud_select_alert(const HudState &hud, bool model_ok) {
     char links[96];
     std::snprintf(links, sizeof(links), "MODEL %s   CAR %s   PANDA %s", model_ok ? "OK" : "--",
                   hud.vehicle_fresh ? "OK" : "--", hud.panda_connected ? "OK" : "--");
+    if (hud.control_unresponsive_alarm) return {"TAKE CONTROL", "Controls not responding", HudAlertLevel::Critical};
+    if (hud.control_unresponsive) return {"CONTROLS STOPPED", "Steering is off", HudAlertLevel::Caution};
     if (hud.engage_reject_label[0] != '\0')
         return {"UNABLE TO ENGAGE", hud.engage_reject_label, HudAlertLevel::Caution};
     if (hud.soft_disabling) return {"TAKE CONTROL", engage_block_label(hud.active_block), HudAlertLevel::Critical};

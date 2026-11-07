@@ -20,6 +20,8 @@ constexpr int kRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kChunkFrames = kRate / 50;  // 20 ms씩 흘린다
 constexpr int kPeriods = 3;               // ALSA 버퍼 60 ms: 지연을 짧게 두면서 스레드가 늦어도 끊기지 않을 만큼
+constexpr int kUrgentBit = 1 << 8;        // pending_에서 급한 알림 표시
+constexpr float kUrgentMinVolume = 0.5f;  // 급한 알림의 최소 크기
 // 장치를 열면 드라이버가 앰프를 켠다. 켜지는 동안 첫 음이 잘리지 않게 알림 앞에 무음을 흘린다.
 constexpr int kWarmupFrames = kRate * 150 / 1000;  // 150 ms(80·120 ms에서는 첫 음이 조금 잘렸다)
 
@@ -111,8 +113,13 @@ AlertSound::~AlertSound() {
 
 void AlertSound::set_volume_percent(float percent) { volume_ = std::clamp(percent, 0.0f, 100.0f) / 100.0f; }
 
-void AlertSound::play(AlertSoundId id) {
-    if (enabled_) pending_ = static_cast<int>(id);
+void AlertSound::play(AlertSoundId id, bool urgent) {
+    if (!enabled_) return;
+    const int request = static_cast<int>(id) | (urgent ? kUrgentBit : 0);
+    int waiting = pending_.load();
+    do {
+        if (!urgent && ((waiting >= 0 && (waiting & kUrgentBit) != 0) || playing_urgent_)) return;
+    } while (!pending_.compare_exchange_weak(waiting, request));
 }
 
 void AlertSound::close_pcm() {
@@ -130,7 +137,8 @@ void AlertSound::loop() {
     while (!stop_) {
         const int next = pending_.exchange(-1);
         if (next >= 0) {  // 새 알림은 재생 중인 알림을 끊는다
-            clip = &clips_[static_cast<size_t>(next)];
+            clip = &clips_[static_cast<size_t>(next & ~kUrgentBit)];
+            playing_urgent_ = (next & kUrgentBit) != 0;
             position = 0;
         }
         if (pcm_fd_ < 0) {
@@ -158,7 +166,8 @@ void AlertSound::loop() {
             data = clip->data() + position;
             position += samples;
             if (position >= clip->size()) clip = nullptr;
-            const float volume = volume_.load();
+            const float volume = playing_urgent_ ? std::max(volume_.load(), kUrgentMinVolume) : volume_.load();
+            if (!clip) playing_urgent_ = false;
             if (volume < 1.0f) {
                 for (size_t i = 0; i < samples; ++i)
                     scaled[i] = static_cast<int16_t>(std::lround(static_cast<float>(data[i]) * volume));

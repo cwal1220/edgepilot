@@ -8,6 +8,10 @@
 namespace {
 
 constexpr uint64_t kRejectLabelNs = 3'000'000'000ULL;
+// 제어 상태는 100 Hz다. 이만큼 새 스냅샷이 없으면 끊긴 것이다(녹화에서 50 ms를 넘는 틈은 없었다).
+constexpr uint64_t kUnresponsiveNs = 500'000'000ULL;
+constexpr uint64_t kUnresponsiveAlarmNs = 10'000'000'000ULL;  // 상류 SELFDRIVE_UNRESPONSIVE_TIMEOUT
+constexpr uint64_t kTakeControlRepeatNs = 1'000'000'000ULL;   // take_control(0.55 s)을 이 간격으로 다시 울린다
 constexpr uint64_t kTurnSignalStepNs = 50'000'000ULL;
 constexpr uint64_t kNetworkCardNs = 10'000'000'000ULL;
 
@@ -81,6 +85,18 @@ HudSoundDecision HudAlertPolicy::update(const ControlState &control, bool contro
     }
     if (now_ns >= reject_label_until_ns_) hud->engage_reject_label[0] = '\0';
 
+    // 결합 중이던 제어 상태가 끊김. 스냅샷 시각은 controlsd가 쓴 것이라 overlayd와 같은 시계다.
+    const bool responsive = control.timestamp_ns != 0 && now_ns < control.timestamp_ns + kUnresponsiveNs;
+    if (responsive) {
+        engaged_before_gap_ = control.engaged != 0;
+        unresponsive_since_ns_ = 0;
+    } else if (engaged_before_gap_ && unresponsive_since_ns_ == 0) {
+        unresponsive_since_ns_ = now_ns;
+    }
+    hud->control_unresponsive = unresponsive_since_ns_ != 0;
+    hud->control_unresponsive_alarm =
+        hud->control_unresponsive && now_ns < unresponsive_since_ns_ + kUnresponsiveAlarmNs;
+
     // 해제 예고·조향 한계: 다른 알림이 울린 프레임에는 이전 값을 두어 다음 프레임에 울린다.
     if (decision.sound == HudSound::None) {
         const bool soft = hud->soft_disabling, saturated = hud->steer_saturated;
@@ -89,13 +105,21 @@ HudSoundDecision HudAlertPolicy::update(const ControlState &control, bool contro
         previous_steer_saturated_ = saturated;
         if (rising) decision.sound = HudSound::TakeControl;
     }
+    // 해제 예고와 제어가 끊긴 처음 10초에는 take_control을 1초마다 다시 울린다
+    if (hud->soft_disabling || hud->control_unresponsive_alarm) {
+        if (decision.sound == HudSound::None && now_ns >= next_take_control_ns_) decision.sound = HudSound::TakeControl;
+        if (decision.sound == HudSound::TakeControl) next_take_control_ns_ = now_ns + kTakeControlRepeatNs;
+    } else {
+        next_take_control_ns_ = 0;
+    }
 
     const bool panda_unavailable =
         panda.timestamp_ns != 0 && (!panda_fresh || !hud->panda_connected || !hud->panda_healthy || panda.faults != 0);
     const bool unavailable = !control_fresh || panda_unavailable || control.steering_fault != 0;
     if (!availability_initialized_) {
         availability_initialized_ = true;
-    } else if (unavailable && !previous_unavailable_ && decision.sound == HudSound::None) {
+    } else if (unavailable && !previous_unavailable_ && decision.sound == HudSound::None &&
+               !hud->control_unresponsive) {
         decision.sound = HudSound::Unavailable;
     }
     previous_unavailable_ = unavailable;
