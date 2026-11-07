@@ -17,11 +17,13 @@ flowchart LR
     video --> m2["axmodel/<br>make_m2_data.py"]
     events --> m2
     events --> bench["lane_benchmark.py"]
+    events --> summary["drive_summary.py"]
     video --> bench
     m2 --> sets["calibration and<br>evaluation sets"]
     bench --> card["scorecard and<br>scene frames"]
+    summary --> drive["per-drive summary"]
     classDef proc fill:#f6f8fa,stroke:#8b949e,color:#1f2328
-    class video,events,m2,bench,sets,card proc
+    class video,events,m2,bench,sets,card,summary,drive proc
 ```
 
 All of them decode the route through `recording_reader.py`, and
@@ -67,6 +69,7 @@ GDC, within 1 LSB).
 | --- | --- |
 | `recording_reader.py` | the Python mirror of `src/recording/recording_format.h` and `src/common/ipc_messages.h` for the analysis tools |
 | `lane_benchmark.py` | compares the model's ego lanes with the stock camera's (K7 `LKA14`) per drive, and draws both on the video frames where they disagree |
+| `drive_summary.py` | summarises a drive: engagement, disengagements and their reasons, Laneless time, driver presses, pauses, lane changes, model timing, calibration, learned values, Panda counters |
 | `model_warp.py` | the device warp in numpy, and the MaixCAM2 intrinsics in one place |
 
 ### `recording_reader.py`
@@ -101,6 +104,32 @@ draws both lanes on it (`DIR/<route>/scenes/*.jpg`, details in
 `DIR/<route>/report.json`). The stock camera is not ground truth; the frames
 are there to tell which one is on the paint. See
 [Stock lane comparison](../../docs/diagnostics.md#stock-lane-comparison).
+
+### `drive_summary.py`
+
+```sh
+python tools/model/drive_summary.py <route_dir> [<route_dir> ...] [--json out.json]
+```
+
+The review done by hand after each drive, in one pass over the event log:
+
+- **Time:** length, moving time (over 10 km/h), top and mean speed.
+- **Engagement:** the share of moving time engaged and steering, every
+  disengagement with its block reason, refused engages, and why the car was
+  engaged but not steering while moving.
+- **Steering:** the Laneless share and entries per minute while steering over
+  20 km/h; driver presses (the 5-tick `kHudFlagSteeringPressed` bit, merged
+  within 2 s), and those that pushed against the command away from a blinker or
+  lane change (±2 s), per hour and how many in Laneless; 85° pauses, soft
+  disables, steer-limit alerts, lane changes and steering-fault time.
+- **Model and calibration:** frame rate, lost frames, run time and
+  capture-to-publish latency; the flow share, the warp's yaw and pitch at the
+  start and end, flow mount changes.
+- **Learners and Panda:** the learned values at the end, and the Panda's
+  blocked sends, heartbeat losses and receive errors added during the drive.
+
+`tests/check_drive_summary.py` checks its HUD bits against the C++ header and
+its counts on a synthetic route.
 
 ### `model_warp.py`
 

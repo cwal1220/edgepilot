@@ -77,6 +77,13 @@ CONTROL_STATE = np.dtype([
 ])
 CONTROL_STATE_SIZE = (CONTROL_STATE.itemsize + 7) // 8 * 8  # C++ 구조체는 8바이트 정렬이라 꼬리 패딩이 붙는다
 
+# PandaState(pandad, 2 Hz): 판다 연결·안전 상태와 누적 오류 수(ipc_messages.h). ControlState처럼 꼬리 패딩이 붙는다.
+PANDA_STATE = np.dtype([("timestamp_ns", "<u8")] + [(name, "<u4") for name in (
+    "connected", "comms_healthy", "tx_enabled", "controls_allowed", "ignition_line", "ignition_can", "safety_mode",
+    "safety_param", "panda_type", "can_rx_errs", "can_send_errs", "can_fwd_errs", "blocked_msg_cnt", "heartbeat_lost",
+    "usb_tx_timeouts", "usb_tx_retries", "malformed_rx_batches", "faults", "fault_status", "voltage", "current")])
+PANDA_STATE_SIZE = (PANDA_STATE.itemsize + 7) // 8 * 8
+
 # ImuBatch(src/common/ipc_messages.h): 16바이트 머리 뒤에 `count`개 샘플(그만큼만 기록된다).
 IMU_BATCH_HEAD = struct.Struct("<QII")
 IMU_SAMPLE = np.dtype([
@@ -392,6 +399,7 @@ def record_index(path: Path, data: bytes) -> np.ndarray:
 STATE_RECORDS = {
     RECORD_MODEL_STATE: (MODEL_STATE, MODEL_STATE.itemsize),
     RECORD_CONTROL_STATE: (CONTROL_STATE, CONTROL_STATE_SIZE),
+    RECORD_PANDA_STATE: (PANDA_STATE, PANDA_STATE_SIZE),
     RECORD_LEARNER_STATE: (LEARNER_STATE, LEARNER_STATE.itemsize),
     RECORD_LOCALIZATION: (LOCALIZATION_STATE, LOCALIZATION_STATE.itemsize),
 }
