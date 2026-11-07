@@ -40,6 +40,17 @@ flowchart LR
     class route,planner,controls,dataset,bench,hud,m2 proc
 ```
 
+The replay tools never write onto a recording. An output path (the first
+argument of `replay_planner`, `replay_closed_loop`, `replay_localization` and
+`extract_lateral_dataset`, and the `--dump`, `--nn-inputs`, `--outputs`,
+`--torque-outputs` and `--torque-cache` files) that is an event log or frame
+index, or lies inside a route folder (one with `events/` or `manifest.json`, up
+to three levels up), is refused with exit code 2
+(`diagnostics/tool_output.h`). A forgotten output argument used to truncate
+the route's `events/000.bin` (2026-10-17, 10-21). Write outputs elsewhere, and
+copy a route's `params/live_torque_parameters.bin` before handing it to
+`replay_lateral_learners --torque-cache`.
+
 ## Lateral planner replay
 
 `replay_planner` re-runs `LateralPlanner` over a recording and writes what the

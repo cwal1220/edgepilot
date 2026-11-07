@@ -28,6 +28,7 @@
 #include "recording/event_log_reader.h"
 #include "recording/recording_format.h"
 #include "route_events.h"
+#include "tool_output.h"
 
 #include <algorithm>
 #include <cmath>
@@ -75,6 +76,10 @@ int main(int argc, char **argv) {
                      "[--source steering|locationd|esp] [--metric-from N] <events.bin...>\n",
                      argv[0]);
         return 2;
+    }
+    // --torque-cache는 읽고 저장 틱마다 다시 쓰므로 route의 params 사본을 그대로 주면 덮어쓴다
+    for (const std::string *path : {&outputs_path, &torque_outputs_path, &torque_cache_path}) {
+        if (!path->empty() && !tool_output_allowed(*path)) return 2;
     }
 
     SteeringParams sp;

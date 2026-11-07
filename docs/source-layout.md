@@ -649,7 +649,8 @@ the event log are described in [Recording](recording.md).
   tools through `diagnostics/route_events.h`, which also reports unreadable
   files and turns them into exit code 1. The tools read numeric options with
   `diagnostics/cli_args.h`, which refuses anything but a whole finite number
-  in range.
+  in range, and check every output path with `diagnostics/tool_output.h`,
+  which refuses a recording file or a path inside a route (exit code 2).
 - `recorded_can.h`: the recorded CAN payload (written by `recordd`, read back
   by `replayd` and the tools, whole frames only).
 - `recordd.cc`: the drive recorder. It encodes the frames `modeld` used and

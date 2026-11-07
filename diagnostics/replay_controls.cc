@@ -27,6 +27,7 @@
 #include "recording/recorded_can.h"
 #include "recording/recording_format.h"
 #include "route_events.h"
+#include "tool_output.h"
 
 #include <algorithm>
 #include <cmath>
@@ -167,6 +168,7 @@ int main(int argc, char **argv) {
         }
         tick.set_lateral_nn(nn);
         if (!nn_inputs_path.empty()) {
+            if (!tool_output_allowed(nn_inputs_path)) return 2;
             nn_inputs = std::fopen(nn_inputs_path.c_str(), "w");
             if (!nn_inputs) {
                 std::fprintf(stderr, "cannot write %s\n", nn_inputs_path.c_str());
@@ -180,6 +182,7 @@ int main(int argc, char **argv) {
     uint64_t tick_ns = first_record_ns;
     const uint64_t start_ns = tick_ns;
 
+    if (!dump_path.empty() && !tool_output_allowed(dump_path)) return 2;
     std::FILE *dump = dump_path.empty() ? nullptr : std::fopen(dump_path.c_str(), "w");
     Digest digest;
     LocalizationRead localization;

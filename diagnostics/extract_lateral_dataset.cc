@@ -14,6 +14,7 @@
 #include "recording/event_log_reader.h"
 #include "recording/recording_format.h"
 #include "route_events.h"
+#include "tool_output.h"
 
 #include <algorithm>
 #include <cmath>
@@ -50,6 +51,7 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    if (!tool_output_allowed(argv[1])) return 2;
     std::FILE *out = std::fopen(argv[1], "w");
     if (!out) {
         std::fprintf(stderr, "cannot open %s\n", argv[1]);
