@@ -257,6 +257,7 @@ void FlowCalibrator::reset() {
     block_pitch_.clear();
     med_yaw_.clear();
     med_pitch_.clear();
+    blocks_since_restore_ = -1;
     state_ = FlowCalibrationState{};
     state_.status = static_cast<uint32_t>(FlowCalibrationStatus::Collecting);
 }
@@ -276,6 +277,7 @@ bool FlowCalibrator::restore(const FlowBlocks &blocks) {
     state_.windows = blocks.windows;
     state_.blocks = static_cast<uint32_t>(med_yaw_.size());
     state_.mount_changes = blocks.mount_changes;
+    if (!med_yaw_.empty()) blocks_since_restore_ = 0;
     update_estimate();
     return true;
 }
@@ -311,6 +313,7 @@ void FlowCalibrator::add(const FlowSolution &window, int tracks, uint64_t end_fr
         med_pitch_.pop_front();
     }
     ++state_.blocks;
+    if (blocks_since_restore_ >= 0) ++blocks_since_restore_;
     detect_mount_change();
     update_estimate();
 }
@@ -325,7 +328,10 @@ void FlowCalibrator::detect_mount_change() {
     }
     old_yaw /= n - recent;
     old_pitch /= n - recent;
-    const double shift = kFlowMountShiftDeg * kPi / 180.0, agree = kFlowMountAgreeDeg * kPi / 180.0;
+    // 복원한 뒤 처음 새 블록 셋이 차면 복원한 블록과 촘촘한 기준으로 한 번 견준다
+    const bool after_boot = blocks_since_restore_ == recent;
+    const double shift = (after_boot ? kFlowBootShiftDeg : kFlowMountShiftDeg) * kPi / 180.0;
+    const double agree = (after_boot ? kFlowBootAgreeDeg : kFlowMountAgreeDeg) * kPi / 180.0;
     // 같은 쪽으로 shift보다 멀고 서로 agree 안이어야 한다(한 축이면 충분하다)
     auto moved = [&](const std::deque<float> &med, double old) {
         double lo = 1e9, hi = -1e9;

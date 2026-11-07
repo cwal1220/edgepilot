@@ -33,6 +33,13 @@ constexpr double kFlowMinParallaxPx = 1.0;
 constexpr int kFlowMountCheckBlocks = 3;
 constexpr double kFlowMountShiftDeg = 0.5;
 constexpr double kFlowMountAgreeDeg = 0.5;
+// 복원한 뒤 처음 새 블록 셋은 한 번 더 촘촘히 본다. 보드를 떼었다 다는 것은 꺼져 있는 동안이라, 부팅 뒤 처음 블록이
+// 저장된 블록과 다르면 그때 다시 단 것이다. 0.5° 기준은 블록 잡음(0.1° 안팎)에 0.5° 재장착을 21~27 %만 잡았고, 놓치면
+// 새 블록이 평균에 섞여 계속 놓쳤다(30블록 평균이 블록마다 1/30씩만 따라간다). 2026-10-12~11-04 22주행에서 처음 새
+// 블록 셋은 저장값과 요 ±0.15° 안이었고, 피치는 날마다 0.1~0.3° 한쪽으로 달랐지만(탑재량) 셋이 모두 0.25°를 넘은
+// 적은 없었다. 10-22 02:37 주행은 셋이 요 +0.38~+0.40°였다(집에서 떼었다 단 뒤, 0.5° 기준으로는 못 잡았다).
+constexpr double kFlowBootShiftDeg = 0.25;
+constexpr double kFlowBootAgreeDeg = 0.3;
 
 struct FlowIntrinsics {
     double fx = 0.0;
@@ -124,5 +131,6 @@ private:
 
     std::vector<float> block_yaw_, block_pitch_;  // 지금 모으는 블록
     std::deque<float> med_yaw_, med_pitch_;       // 끝난 블록의 중앙값(오래된 것부터, 최근 kFlowMaxBlocks개)
+    int blocks_since_restore_ = -1;               // 복원한 뒤 끝난 블록 수(복원하지 않았으면 -1)
     FlowCalibrationState state_{};
 };
