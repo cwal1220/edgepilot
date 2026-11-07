@@ -308,6 +308,45 @@ TEST(FlowCalibratorTest, MountChangeKeepsTheRecentBlocks) {
     EXPECT_EQ(scattered.state().mount_changes, 0U) << "새 블록끼리 0.5° 넘게 흩어지면 장착 변경으로 보지 않는다";
 }
 
+// 복원한 뒤 처음 새 블록 셋은 0.25° 기준으로 한 번 견준다(보드를 떼었다 다는 것은 꺼져 있는 동안이다).
+// 10-22 02:37 주행: 저장값보다 요 +0.38~+0.40°. 0.5° 기준으로는 못 잡던 재장착이다.
+TEST(FlowCalibratorTest, RemountAfterBootIsCheckedTighter) {
+    FlowBlocks saved;
+    for (int i = 0; i < kFlowMaxBlocks; ++i) {
+        saved.yaw.push_back(static_cast<float>(-0.54 * kDeg));
+        saved.pitch.push_back(static_cast<float>(0.09 * kDeg));
+    }
+    saved.windows = kFlowMaxBlocks * kFlowBlockWindows;
+    FlowCalibrator booted;
+    ASSERT_TRUE(booted.restore(saved));
+    for (const double d : {0.38, 0.40}) add_block(&booted, -0.54 + d, 0.09);
+    EXPECT_EQ(booted.state().mount_changes, 0U);
+    add_block(&booted, -0.54 + 0.39, 0.09);
+    EXPECT_EQ(booted.state().mount_changes, 1U) << "부팅 뒤 새 블록 셋째에 잡는다";
+    EXPECT_EQ(booted.state().estimate_blocks, 3U) << "복원한 블록을 버린다";
+    EXPECT_NEAR(booted.state().yaw / kDeg, -0.15, 0.01);
+
+    // 그대로인 장착: 피치가 날마다 0.1~0.3° 한쪽으로 다르게 나와도(10-25 22:42: +0.20, +0.31, +0.09) 두지 않는다
+    FlowCalibrator same;
+    ASSERT_TRUE(same.restore(saved));
+    for (const double d : {0.20, 0.31, 0.09}) add_block(&same, -0.54, 0.09 + d);
+    EXPECT_EQ(same.state().mount_changes, 0U);
+    EXPECT_EQ(same.state().estimate_blocks, static_cast<uint32_t>(kFlowMaxBlocks)) << "오래된 블록이 밀려날 뿐이다";
+
+    // 촘촘한 기준은 복원한 뒤 한 번뿐이다. 그 뒤의 0.4° 이동은 평소 기준(0.5°)으로 본다
+    FlowCalibrator later;
+    ASSERT_TRUE(later.restore(saved));
+    for (int blk = 0; blk < 3; ++blk) add_block(&later, -0.54, 0.09);
+    for (int blk = 0; blk < 3; ++blk) add_block(&later, -0.14, 0.09);
+    EXPECT_EQ(later.state().mount_changes, 0U);
+
+    // 복원하지 않은 보정기(초기화 뒤)에는 촘촘한 기준이 없다
+    FlowCalibrator fresh;
+    for (int blk = 0; blk < 6; ++blk) add_block(&fresh, -0.54, 0.09);
+    for (int blk = 0; blk < 3; ++blk) add_block(&fresh, -0.14, 0.09);
+    EXPECT_EQ(fresh.state().mount_changes, 0U);
+}
+
 TEST(FlowCalibratorTest, CountsRejectedWindows) {
     FlowCalibrator cal;
     FlowSolution bad;

@@ -126,6 +126,17 @@ and the camera turned less than 0.5° in the window.
     30 cm left of the lane centre, until the calibration was reset by hand.
   - At 0.5° the third new block (306 s, town driving gives one block every 1–4
     minutes) catches it.
+  - After a restart the first three new blocks are checked once more, against
+    the restored blocks with 0.25° (within 0.3° of each other). A board is only
+    taken off the car while it is off, so a difference right after boot is a
+    remount. Block noise (about 0.1°) let the 0.5° rule catch a 0.5° remount
+    only 21–27 % of the time, and a missed one stayed missed: the new blocks
+    entered the 30-block mean at 1/30 each. Over 22 drives (2026-10-12 to
+    11-04) the first three blocks after boot were within ±0.15° of the saved
+    yaw; pitch differed by 0.1–0.3° to one side on some days (the load), but
+    never all three past 0.25°. The rule fires on 10-22 02:37 (all three
+    +0.38–0.40° in yaw, after the board had been at the desk) and on 10-12
+    (restored from a rehearsal replay).
   - Down to 0.4°, no block sequence in the 340 blocks of the drives since
     2026-10-12 triggers it.
 
@@ -399,8 +410,9 @@ pitch about 0.0° and yaw -0.27°, with block-median standard deviations of 0.18
 - **Gated driving only.** Windows come only from frames that pass the gate
   (fast, straight, no blinker or desire), so the estimate changes only while
   driving that way.
-- **Small mount changes.** A change under 1° is not detected as a mount change;
-  it is absorbed by the running mean.
+- **Small mount changes.** During a drive, a change under 0.5° is not detected
+  as a mount change; it is absorbed by the running mean. Right after boot the
+  limit is 0.25°.
 
 ## Next
 
