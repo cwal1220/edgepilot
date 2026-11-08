@@ -1,6 +1,6 @@
 // 조향 탭의 주행 모델 카드(scripts/web_console/driving_models.py). models/의 axmodel 파일, 고른 것, 매니저가 modeld에
 // 준 것을 2초마다 읽는다. 다른 파일을 누르면 고르기 파일을 바꾸고, 매니저가 1초 안에 modeld만 새 모델로 다시 띄운다(몇
-// 초 동안 모델 출력이 없다). 결합 중이거나 차가 움직이면 서버가 받지 않고, 버튼도 막아 둔다.
+// 초 동안 모델 출력이 없다). 결합 중이면 서버가 받지 않고 버튼도 막아 둔다(해제 상태면 주행 중에도 바꾼다).
 import {codeText, t} from "./i18n.js";
 import {api, badges, el, helpText, note, pollingCard, runAction, section, syncRows} from "./ui.js";
 

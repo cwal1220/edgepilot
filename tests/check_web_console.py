@@ -1073,12 +1073,12 @@ class DrivingModelsTest(unittest.TestCase):
             self.assertEqual((refused.exception.code, refused.exception.status), ("error.driving_model_unknown", 404))
         self.assertEqual(json.loads(self.selection.read_text())["model"], "ea2a_gnb", "거부하면 그대로")
 
-    def test_refuses_while_engaged_or_moving(self):
+    def test_refuses_only_while_engaged(self):
+        """결합(또는 조향) 중에만 막는다. 해제 상태면 주행 중에도 받는다(2026-11-08 사용자 결정)."""
         cases = ((control_payload(engaged=1), "engaged"), (control_payload(active=1), "engaged"),
-                 (control_payload(vehicle_fresh=1, ego_speed_kph=30.0), "moving"),
-                 (control_payload(vehicle_fresh=1, cluster_speed_kph=5.0), "moving"),
-                 (control_payload(vehicle_fresh=1, ego_speed_kph=0.0), ""),
-                 (control_payload(vehicle_fresh=0, ego_speed_kph=30.0), ""))  # CAN이 없으면(시동 꺼짐) 속도는 보지 않는다
+                 (control_payload(engaged=1, vehicle_fresh=1, ego_speed_kph=30.0), "engaged"),
+                 (control_payload(vehicle_fresh=1, ego_speed_kph=90.0), ""),
+                 (control_payload(vehicle_fresh=1, ego_speed_kph=0.0), ""))
         for payload, blocker in cases:
             publish(self.control, payload)
             self.assertEqual(self.models.blocker(), blocker)

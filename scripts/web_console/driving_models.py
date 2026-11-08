@@ -1,6 +1,6 @@
 """조향 탭의 주행 모델 카드: models/의 axmodel 파일(크기, 체크섬), 지금 고른 것(params/driving_model.json), 매니저가
 modeld에 준 것(상태 파일, scripts/manager.py)을 보여 주고 고르기를 바꾼다. 매니저는 1초 안에 새 고르기를 보고 modeld만
-새 모델로 다시 띄운다. 그동안 몇 초 모델 출력이 없으므로, 결합 중이거나 차가 움직이는 동안에는 받지 않는다. 고른 모델로
+새 모델로 다시 띄운다. 그동안 몇 초 모델 출력이 없으므로 결합 중에는 받지 않는다(해제 상태면 주행 중에도 받는다). 고른 모델로
 modeld가 거듭 바로 죽으면 매니저가 기본 모델로 돌아가고 상태에 failed를 남긴다. 인자나 EDGEPILOT_MODEL(시험용 drop-in)이
 있으면 매니저는 고르기를 쓰지 않는다(상태의 source). 이름 규칙과 경로는 manager.py와 같다(check_web_console.py가 대조한다).
 
@@ -16,10 +16,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from .files import env_path, params_dir, read_json_object, read_json_or_none, write_json_atomic
-from .panda_update import PARKED_MAX_SPEED_KPH
 from .refusal import Refusal
 from .shm_channel import IpcReader, topic_path
-from .state_layout import CONTROL_STATE_MAX_AGE_S, CONTROL_STATE_SIZE, CONTROL_STATE_TOPIC, control_engaged, control_value
+from .state_layout import CONTROL_STATE_MAX_AGE_S, CONTROL_STATE_SIZE, CONTROL_STATE_TOPIC, control_engaged
 
 # manager.py와 같다(작업 디렉터리 기준)
 MODEL_DIR = Path("models")
@@ -86,19 +85,11 @@ class DrivingModels:
         return result
 
     def blocker(self) -> str:
-        """지금 바꾸면 안 되는 이유(engaged, moving), 없으면 빈 문자열. controlsd가 없거나 멈췄으면 조향도 없고, 차의
-        CAN이 없으면(시동 꺼짐) 움직이는지는 보지 않는다."""
+        """지금 바꾸면 안 되는 이유(engaged), 없으면 빈 문자열. 결합(또는 조향) 중에만 막는다: 해제 상태에서는 modeld가
+        몇 초 쉬어도 조향하지 않으므로 주행 중에도 바꿀 수 있다(2026-11-08 사용자 결정). controlsd가 없거나 멈췄으면
+        조향도 없다."""
         latest = self.control.read_fresh(CONTROL_STATE_MAX_AGE_S)
-        if latest is None:
-            return ""
-        payload = latest[2]
-        if control_engaged(payload):
-            return "engaged"
-        if control_value(payload, "vehicle_fresh"):
-            speed = max(control_value(payload, "ego_speed_kph"), control_value(payload, "cluster_speed_kph"))
-            if speed >= PARKED_MAX_SPEED_KPH:
-                return "moving"
-        return ""
+        return "engaged" if latest is not None and control_engaged(latest[2]) else ""
 
     def status(self, manager_running: bool, modeld_running: bool) -> Dict[str, Any]:
         """manager는 매니저가 낸 {model, source, selected, error, unix_time}이고, 매니저가 돌지 않으면 None이다."""
@@ -109,14 +100,12 @@ class DrivingModels:
                 "blocker": self.blocker()}
 
     def select(self, name: str) -> None:
-        """고르기를 바꾼다. 목록에 있는 이름만, 해제 상태이고 차가 서 있을 때만 받는다."""
+        """고르기를 바꾼다. 목록에 있는 이름만, 해제 상태일 때만 받는다."""
         models = {model["name"]: model for model in self.models()}
         if name not in models:
             raise Refusal("error.driving_model_unknown", status=404, name=name)
         blocker = self.blocker()
         if blocker == "engaged":
             raise Refusal("error.driving_model_engaged")
-        if blocker == "moving":
-            raise Refusal("error.driving_model_moving")
         write_json_atomic(self.selection_path, {"model": name, "axmodel_sha256": models[name]["sha256"],
                                                 "selected_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
