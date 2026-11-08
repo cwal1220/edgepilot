@@ -2,6 +2,7 @@
 // 이름이 지금 탭이라 새로고침해도 그 탭에 머문다. 탭 화면은 처음 열 때 만들고, 보이는 탭만(페이지가 가려지지 않은
 // 동안만) 폴링·스트림을 돌린다.
 import {createBevView} from "./bev_view.js";
+import {createDrivingModelCard} from "./driving_model_card.js";
 import {LANGUAGES, lang, setLanguage, t} from "./i18n.js";
 import {createLateralNnCard} from "./lateral_nn_card.js";
 import {createPandaCard} from "./panda_card.js";
@@ -13,7 +14,8 @@ import {createVehicleView} from "./vehicle_view.js";
 
 const STATUS_INTERVAL_MS = 2000;
 // 파라미터 탭에 붙는 카드
-const PARAM_EXTRAS = {steering: () => [createLateralNnCard()], recording: () => [createRecordingsCard()],
+const PARAM_EXTRAS = {steering: () => [createDrivingModelCard(), createLateralNnCard()],
+                      recording: () => [createRecordingsCard()],
                       display: () => [createPandaCard()]};
 
 const main = document.getElementById("main");

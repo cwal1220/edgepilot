@@ -4,6 +4,7 @@
 import ast
 import asyncio
 import gzip
+import hashlib
 import json
 import math
 import os
@@ -42,6 +43,13 @@ from scripts.web_console.learner_monitor import (
     LearnerMonitor,
     LocalizationReader,
 )
+from scripts.web_console.driving_models import DEFAULT_MODEL as DEFAULT_DRIVING_MODEL
+from scripts.web_console.driving_models import MODEL_DIR as DRIVING_MODEL_DIR
+from scripts.web_console.driving_models import NAME_PATTERN as DRIVING_NAME_PATTERN
+from scripts.web_console.driving_models import SELECTION_FILE as DRIVING_SELECTION_FILE
+from scripts.web_console.driving_models import STATUS_PATH as DRIVING_STATUS_PATH
+from scripts.web_console.driving_models import DrivingModels
+from scripts.web_console.driving_models import read_choice as read_driving_choice
 from scripts.web_console.lateral_nn_models import (
     MODEL_DIR,
     SELECTION_FILE,
@@ -998,6 +1006,107 @@ class LateralNnModelsTest(unittest.TestCase):
         self.assertEqual(status["controlsd"]["loaded"], "k7_hev_v3")
         # controlsd는 읽을 때만 상태 파일을 쓴다: 멈춘 뒤에는 남은 파일을 쓰는 중으로 보이지 않는다
         self.assertIsNone(self.models.status(controlsd_running=False)["controlsd"])
+
+
+class DrivingModelsTest(unittest.TestCase):
+    """주행 모델 카드: models/*.axmodel 목록(기본 먼저, 규칙 밖 이름은 뺀다, 체크섬), 고르기 파일(이름과 체크섬), 결합·주행
+    중 거부, 매니저 상태, manager.py와 같은 경로·규칙."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.models_dir = root / "models"
+        self.models_dir.mkdir()
+        (self.models_dir / "supercombo.axmodel").write_bytes(b"shipped")
+        (self.models_dir / "ea2a_gnb.axmodel").write_bytes(b"student")
+        self.selection = root / "params" / DRIVING_SELECTION_FILE
+        self.status_file = root / "status.json"
+        self.control = root / "edgepilot_control_state"
+        self.models = DrivingModels(self.models_dir, self.selection, str(self.status_file), str(self.control))
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_paths_and_name_rule_match_the_manager(self):
+        from scripts import manager
+        self.assertEqual(DRIVING_MODEL_DIR.as_posix(), manager.MODEL_DIR)
+        self.assertEqual(f"{manager.MODEL_DIR}/{DEFAULT_DRIVING_MODEL}.axmodel", manager.DEFAULT_MODEL_PATH)
+        self.assertEqual(DRIVING_SELECTION_FILE, manager.MODEL_SELECTION_FILE)
+        self.assertEqual(DRIVING_STATUS_PATH, manager.MODEL_STATUS_PATH)
+        self.assertEqual(DRIVING_NAME_PATTERN.pattern, manager.MODEL_NAME.pattern)
+        self.selection.parent.mkdir()
+        self.assertEqual(read_driving_choice(self.selection), ("", "none"))
+        self.assertEqual(manager.model_choice(str(self.selection)), ("", "none"))
+        documents = ({"model": "ea2a_gnb"}, {"model": "models/ea2a_gnb.axmodel"}, {"model": "../x"},
+                     {"model": "models/../x.axmodel"}, {"model": 3}, {}, [])
+        for document in documents:
+            self.selection.write_text(json.dumps(document))
+            self.assertEqual(read_driving_choice(self.selection), manager.model_choice(str(self.selection)), document)
+        self.selection.write_text(json.dumps({"model": "models/ea2a_gnb.axmodel"}))
+        self.assertEqual(read_driving_choice(self.selection), ("ea2a_gnb", ""), "deploy_student.py의 경로 꼴")
+        self.selection.write_text("{")
+        self.assertEqual(read_driving_choice(self.selection), ("", "unreadable"))
+        self.assertEqual(manager.model_choice(str(self.selection)), ("", "unreadable"))
+
+    def test_lists_models_default_first_with_checksums(self):
+        for name in ("aa.axmodel", ".hidden.axmodel", "notes.txt"):
+            (self.models_dir / name).write_bytes(b"x")
+        (self.models_dir / "dir.axmodel").mkdir()
+        models = self.models.models()
+        self.assertEqual([model["name"] for model in models], ["supercombo", "aa", "ea2a_gnb"])
+        student = models[2]
+        self.assertEqual((student["bytes"], student["sha256"]), (7, hashlib.sha256(b"student").hexdigest()))
+        (self.models_dir / "ea2a_gnb.axmodel").write_bytes(b"student v2")  # 크기가 바뀌면 다시 계산한다
+        self.assertEqual(self.models.models()[2]["sha256"], hashlib.sha256(b"student v2").hexdigest())
+
+    def test_select_writes_name_and_checksum_and_refuses_unknown(self):
+        status = self.models.status(manager_running=True, modeld_running=True)
+        self.assertEqual((status["selected"], status["selection_error"], status["default"]), ("", "none", "supercombo"))
+        self.models.select("ea2a_gnb")
+        document = json.loads(self.selection.read_text())
+        self.assertEqual((document["model"], document["axmodel_sha256"]),
+                         ("ea2a_gnb", hashlib.sha256(b"student").hexdigest()))
+        self.assertEqual(self.models.status(manager_running=True, modeld_running=True)["selected"], "ea2a_gnb")
+        for name in ("ea2a_gq", "../steering", "supercombo.axmodel"):
+            with self.assertRaises(Refusal) as refused:
+                self.models.select(name)
+            self.assertEqual((refused.exception.code, refused.exception.status), ("error.driving_model_unknown", 404))
+        self.assertEqual(json.loads(self.selection.read_text())["model"], "ea2a_gnb", "거부하면 그대로")
+
+    def test_refuses_while_engaged_or_moving(self):
+        cases = ((control_payload(engaged=1), "engaged"), (control_payload(active=1), "engaged"),
+                 (control_payload(vehicle_fresh=1, ego_speed_kph=30.0), "moving"),
+                 (control_payload(vehicle_fresh=1, cluster_speed_kph=5.0), "moving"),
+                 (control_payload(vehicle_fresh=1, ego_speed_kph=0.0), ""),
+                 (control_payload(vehicle_fresh=0, ego_speed_kph=30.0), ""))  # CAN이 없으면(시동 꺼짐) 속도는 보지 않는다
+        for payload, blocker in cases:
+            publish(self.control, payload)
+            self.assertEqual(self.models.blocker(), blocker)
+            self.assertEqual(self.models.status(manager_running=True, modeld_running=True)["blocker"], blocker)
+            if blocker:
+                with self.assertRaises(Refusal) as refused:
+                    self.models.select("ea2a_gnb")
+                self.assertEqual(refused.exception.code, f"error.driving_model_{blocker}")
+                self.assertFalse(self.selection.exists())
+        publish(self.control, control_payload(engaged=1), stamp=boottime_ns() - int(5e9))
+        self.assertEqual(self.models.blocker(), "", "controlsd가 멈췄으면 조향도 없다")
+        self.models.select("ea2a_gnb")
+
+    def test_status_reports_the_manager_only_while_it_runs(self):
+        self.status_file.write_text(json.dumps({"model": "models/ea2a_gnb.axmodel", "source": "selection",
+                                                "selected": "ea2a_gnb", "error": "", "unix_time": 1}))
+        status = self.models.status(manager_running=True, modeld_running=False)
+        self.assertEqual((status["manager"]["model"], status["modeld_running"]), ("models/ea2a_gnb.axmodel", False))
+        self.assertIsNone(self.models.status(manager_running=False, modeld_running=False)["manager"])
+
+    def test_server_and_page_use_the_card(self):
+        server = (WEB_CONSOLE / "console_server.py").read_text(encoding="utf-8")
+        self.assertEqual(server.count('"/api/driving_model"'), 2)
+        self.assertEqual(server.count("return driving_model_status()"), 2)
+        page = (STATIC_DIR / "console.js").read_text(encoding="utf-8")
+        self.assertIn("steering: () => [createDrivingModelCard(), createLateralNnCard()]", page)
+        card = (STATIC_DIR / "driving_model_card.js").read_text(encoding="utf-8")
+        self.assertIn('api.post("/api/driving_model"', card)
 
 
 class RecordingsTest(unittest.TestCase):

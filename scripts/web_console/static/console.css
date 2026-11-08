@@ -220,6 +220,8 @@ main {
 .nn-model:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--btn-bg); }
 .nn-model[aria-pressed="true"] { border-color: #2b4d73; background: var(--accent-bg); cursor: default; }
 .nn-model-name { margin-right: 4px; color: var(--text); font: 600 13px var(--mono); overflow-wrap: anywhere; }
+/* 주행 모델 카드: 체크섬 앞 8자와 크기 */
+.nn-model-meta { margin-right: 4px; color: var(--muted); font: 12px var(--mono); }
 
 /* 주행 기록 카드: 줄마다 고르기, 시작 시각, 길이, 크기, 배지(둘째 줄) */
 .recordings-all { display: flex; align-items: center; gap: 8px; width: max-content; margin-top: 12px; color: var(--muted); font-size: 13px; cursor: pointer; }

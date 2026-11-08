@@ -11,6 +11,8 @@ API(받지 않는 요청은 상태 코드와 {"detail": {"code": 문구 키, 자
   GET   /api/learners/trend      학습값 10분 추이
   POST  /api/calibration/reset   카메라 보정 초기화(해제 상태에서만)
   POST  /api/calibration/source  보정 출처 {"use_flow": ...}(해제 상태에서만)
+  GET   /api/driving_model       주행 모델(models/*.axmodel) 목록, 고른 것, 매니저가 modeld에 준 것, 바꾸지 못하는 이유
+  POST  /api/driving_model       주행 모델 고르기 {"model": ...}(해제·정차 중에만, 매니저가 modeld만 다시 띄운다)
   GET   /api/lateral_nn          학습 토크 모델 목록, 고른 것, controlsd가 쓰는 것
   POST  /api/lateral_nn          학습 토크 모델 고르기 {"model": ...}(controlsd가 재시작 없이 바꾼다)
   GET   /api/panda               Panda 펌웨어와 설치된 이미지
@@ -38,6 +40,7 @@ from pydantic import BaseModel
 from .backlight import DisplayBacklight
 from .bev_stream import BEV_MAX_HZ, bev_frames, bev_layout
 from .calibration_control import CalibrationControl
+from .driving_models import DrivingModels
 from .lateral_nn_models import LateralNnModels
 from .learner_monitor import LearnerMonitor, LocalizationReader
 from .panda_update import PandaUpdate
@@ -64,6 +67,10 @@ class LateralNnRequest(BaseModel):
     model: str
 
 
+class DrivingModelRequest(BaseModel):
+    model: str
+
+
 class RecordingDeleteRequest(BaseModel):
     names: List[str]
 
@@ -80,6 +87,7 @@ def create_app(stopping: Callable[[], bool]) -> FastAPI:
     panda = PandaUpdate()
     assets = StaticAssets()
     lateral_nn = LateralNnModels()
+    driving_models = DrivingModels()
     recordings = Recordings()
 
     application = FastAPI(title="edgepilot web console", docs_url="/docs")
@@ -143,6 +151,22 @@ def create_app(stopping: Callable[[], bool]) -> FastAPI:
     @application.post("/api/calibration/source")
     def set_calibration_source(request: CalibrationSourceRequest) -> Dict[str, Any]:
         return calibration.set_source(request.use_flow)
+
+    # 주행 모델 카드: 매니저가 도는지와 modeld가 떠 있는지는 매니저 상태로 본다
+    def driving_model_status() -> Dict[str, Any]:
+        manager = processes.status()
+        running = manager["available"] and not manager["stale"]
+        modeld = running and any(item["name"] == "modeld" and item["running"] for item in manager["processes"])
+        return driving_models.status(manager_running=running, modeld_running=modeld)
+
+    @application.get("/api/driving_model")
+    def get_driving_model() -> Dict[str, Any]:
+        return driving_model_status()
+
+    @application.post("/api/driving_model")
+    def set_driving_model(request: DrivingModelRequest) -> Dict[str, Any]:
+        driving_models.select(request.model)
+        return driving_model_status()
 
     # 학습 토크 모델 카드: controlsd가 도는지는 학습 상태의 신선도로 보고, 페이지는 runtime(lateral_nn_loaded)으로
     # 파라미터 안내를 갱신한다. 학습 상태는 응답마다 한 번 읽는다.

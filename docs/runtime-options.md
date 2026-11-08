@@ -39,7 +39,8 @@ processes it starts, so a variable set for the manager reaches every process.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `EDGEPILOT_MODEL=/path/to/supercombo.axmodel` | `models/supercombo.axmodel` in the install directory | Overrides the model selected by `manager.py`. A command-line argument wins over it. |
+| `EDGEPILOT_MODEL=/path/to/supercombo.axmodel` | the web console's choice (`params/driving_model.json`), else `models/supercombo.axmodel` in the install directory | Overrides the driving model; the web console's choice is then ignored. A command-line argument wins over it. |
+| `EDGEPILOT_DRIVING_MODEL_STATUS=path` | `/dev/shm/edgepilot_driving_model.json` | Where the manager writes the model it gave `modeld` and why (`source`: argument, env, selection, default; `error`: missing, failed, ...). |
 | `EDGEPILOT_STOP_LAUNCHER=0` | on | Leaves the stock `launcher.service` and `/maixapp/apps/` running. The default stops them, since they hold the camera and NPU. |
 | `EDGEPILOT_LOG_DIR=dir` | unset: output goes to the terminal | Writes each process's output to `<name>.log` in that directory; a log above 1 MiB is copied to `<name>.log.1` and emptied. `edgepilot.service` sets `/run/edgepilot`, on tmpfs, so logs never reach the SD card. |
 | `EDGEPILOT_REPLAY_ROUTE=route` | unset | Rehearsal: `replayd` plays the recorded route in place of `camerad`, from `EDGEPILOT_REPLAY_START` for `EDGEPILOT_REPLAY_DURATION` seconds; `imud`, `locationd` and `pandad` are not started ([Rehearsal](rehearsal.md)). |

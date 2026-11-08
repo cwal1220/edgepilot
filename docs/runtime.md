@@ -47,9 +47,16 @@ python3 /root/edgepilot/manager.py [supercombo.axmodel]
 ```
 
 The manager changes to its own directory, so it can be started from anywhere.
-With no argument it runs `models/supercombo.axmodel` (or `EDGEPILOT_MODEL`)
-with K7 control and the FastAPI web console on. `pandad` starts only with
-`EDGEPILOT_ENABLE_PANDA=1`, which the boot service sets, and then transmits by
+With no argument it runs `EDGEPILOT_MODEL`, else the driving model chosen on
+the web console's Steering tab (`params/driving_model.json`, `{"model":
+"<name>"}` = `models/<name>.axmodel`; a new choice restarts only `modeld`,
+and a model `modeld` keeps exiting with falls back to the default; the model
+actually running, with its sha256, goes to `params/driving_model_running.json`
+and a change also restarts `recordd`, so each recorded route names the one
+model it ran), else
+`models/supercombo.axmodel`, with K7 control and the FastAPI web console on.
+`pandad` starts only with `EDGEPILOT_ENABLE_PANDA=1`, which the boot service
+sets, and then transmits by
 default (`EDGEPILOT_PANDA_TX=1`). Every setting can be overridden with its
 environment variable; see [Runtime options](runtime-options.md).
 

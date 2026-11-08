@@ -2,6 +2,9 @@
 """scripts/manager.py 검사. stdlib만 쓴다: 매니저가 쓰는 ManagerState 배치가 src/common/ipc_messages.h와 같은지,
 다시 띄우기 규칙(빨리 죽기를 거듭하면 늦추기, 스스로 멈춘 것은 세지 않기), 끝낼 때 recordd를 더 기다리기, 로그 자르기,
 pandad에 주는 safety 기본값이 controlsd가 기다리는 값과 같은지. ctest가 저장소 루트에서 돌린다."""
+import hashlib
+import json
+import os
 import re
 import signal
 import subprocess
@@ -10,6 +13,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -104,6 +108,162 @@ class ManagerTest(unittest.TestCase):
         self.assertTrue((ROOT / "scripts" / "web_console" / "__main__.py").is_file())
         self.assertTrue(hasattr(manager, "ProcSpec"))
 
+
+class DrivingModelTest(unittest.TestCase):
+    """주행 모델: 인자 > EDGEPILOT_MODEL > 웹 콘솔의 고르기(params/driving_model.json) > 기본. 고르기가 바뀌면 modeld만
+    새 모델로 다시 띄우고, 고른 모델로 modeld가 거듭 바로 죽으면 기본 모델로 돌아간다(고르기를 다시 쓰면 다시 해 본다)."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        (self.root / "models").mkdir()
+        (self.root / "params").mkdir()
+        for name in ("supercombo", "ea2a_gnb"):
+            (self.root / "models" / f"{name}.axmodel").write_bytes(b"x")
+        self.selection = self.root / "params" / manager.MODEL_SELECTION_FILE
+        self.cwd = os.getcwd()
+        os.chdir(self.root)  # 매니저처럼 설치 디렉터리 기준
+        self.env = mock.patch.dict(os.environ, {"EDGEPILOT_MODEL": ""})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        os.chdir(self.cwd)
+        self.temporary.cleanup()
+
+    def choose(self, model: str):
+        self.selection.write_text(json.dumps({"model": model}))
+        stat = self.selection.stat()  # 같은 나노초에 두 번 쓰면 바뀐 것을 못 본다
+        os.utime(self.selection, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+    def resolve(self, argument=None, failed=""):
+        choice = manager.resolve_model(argument, str(self.selection), failed)
+        return choice.path, choice.source, choice.selected, choice.error
+
+    def test_resolves_in_order(self):
+        default = manager.DEFAULT_MODEL_PATH
+        self.assertEqual(self.resolve(), (default, "default", "", ""))
+        self.choose("ea2a_gnb")
+        self.assertEqual(self.resolve(), ("models/ea2a_gnb.axmodel", "selection", "ea2a_gnb", ""))
+        self.choose("models/ea2a_gnb.axmodel")  # deploy_student.py가 쓰는 꼴
+        self.assertEqual(self.resolve(), ("models/ea2a_gnb.axmodel", "selection", "ea2a_gnb", ""))
+        self.assertEqual(self.resolve(failed="models/ea2a_gnb.axmodel"), (default, "default", "ea2a_gnb", "failed"))
+        self.assertEqual(self.resolve("/tmp/x.axmodel"), ("/tmp/x.axmodel", "argument", "ea2a_gnb", ""))
+        os.environ["EDGEPILOT_MODEL"] = "/root/test.axmodel"
+        self.assertEqual(self.resolve(), ("/root/test.axmodel", "env", "ea2a_gnb", ""))
+        os.environ["EDGEPILOT_MODEL"] = ""
+        self.choose("ea2a_gq")
+        self.assertEqual(self.resolve(), (default, "default", "ea2a_gq", "missing"))
+        self.choose("../../etc/x")
+        self.assertEqual(self.resolve(), (default, "default", "", "bad_name"))
+        self.selection.write_text("[]")
+        self.assertEqual(self.resolve(), (default, "default", "", "unreadable"))
+
+    def manager_with_modeld(self) -> manager.Manager:
+        m = object.__new__(manager.Manager)
+        m.argument_model = None
+        m.selection_path = str(self.selection)
+        m.model_status_path = str(self.root / "driving_model_status.json")
+        m.model_record_path = str(self.root / "params" / manager.MODEL_RECORD_FILE)
+        m.model_digests = {}
+        m.selection_stamp = manager.file_stamp(m.selection_path)
+        m.failed_model = ""
+        m.model_choice = manager.resolve_model(None, m.selection_path)
+        m.model = m.model_choice.path
+        state = manager.ProcState(manager.ProcSpec("modeld", ["./modeld", m.model]))
+        state.proc = subprocess.Popen(["/bin/sh", "-c", "sleep 30"], start_new_session=True)
+        m.procs = {"modeld": state}
+        return m
+
+    def status(self, m) -> dict:
+        return json.loads(Path(m.model_status_path).read_text())
+
+    def test_restarts_only_modeld_on_a_new_choice_and_falls_back(self):
+        m = self.manager_with_modeld()
+        modeld = m.procs["modeld"]
+        m.check_model_choice()
+        self.assertTrue(modeld.running(), "고르기가 그대로면 아무것도 하지 않는다")
+        self.choose("ea2a_gnb")
+        m.check_model_choice()
+        self.assertEqual(modeld.spec.cmd, ["./modeld", "models/ea2a_gnb.axmodel"])
+        self.assertEqual(modeld.proc.wait(timeout=5), -signal.SIGTERM)
+        self.assertTrue(modeld.stop_requested, "매니저가 멈춘 것이라 빠른 종료로 세지 않는다")
+        self.assertEqual({k: self.status(m)[k] for k in ("model", "source", "selected", "error")},
+                         {"model": "models/ea2a_gnb.axmodel", "source": "selection", "selected": "ea2a_gnb", "error": ""})
+        # 새 모델로 modeld가 거듭 바로 죽는다: 기본 모델로 돌아간다
+        modeld.proc = None
+        modeld.quick_exits = manager.MODEL_QUICK_EXITS_FOR_FALLBACK
+        m.check_model_choice()
+        self.assertEqual(modeld.spec.cmd, ["./modeld", manager.DEFAULT_MODEL_PATH])
+        self.assertEqual((modeld.quick_exits, self.status(m)["error"]), (0, "failed"))
+        m.check_model_choice()
+        self.assertEqual(modeld.spec.cmd, ["./modeld", manager.DEFAULT_MODEL_PATH], "실패한 고르기를 다시 쓰지 않는다")
+        # 고르기를 다시 쓰면 다시 해 본다
+        self.choose("ea2a_gnb")
+        m.check_model_choice()
+        self.assertEqual(modeld.spec.cmd, ["./modeld", "models/ea2a_gnb.axmodel"])
+        self.assertEqual(self.status(m)["error"], "")
+
+    def record(self, m) -> dict:
+        return json.loads(Path(m.model_record_path).read_text())
+
+    def test_records_the_running_model_and_opens_a_new_route(self):
+        """녹화 중에 바꿔도 route마다 실제로 달린 모델 하나만 남는다: 모델 기록(params, recordd가 route를 열 때 복사)을
+        먼저 쓰고 recordd를 다시 띄운다. 기본 모델로 돌아갈 때도 같고, 모델이 그대로면 recordd는 그대로 둔다."""
+        (self.root / "models" / "ea2a_gnb.axmodel").write_bytes(b"student")
+        m = self.manager_with_modeld()
+        recordd = manager.ProcState(manager.ProcSpec("recordd", ["./recordd"]))
+        recordd.proc = subprocess.Popen(["/bin/sh", "-c", "sleep 30"], start_new_session=True)
+        m.procs["recordd"] = recordd
+        m.write_model_status()  # run()이 자식을 띄우기 전에 한다
+        self.assertEqual(self.record(m), {"model": manager.DEFAULT_MODEL_PATH,
+                                          "axmodel_sha256": hashlib.sha256(b"x").hexdigest(), "source": "default",
+                                          "selected": "", "error": ""})
+        stamp = manager.file_stamp(m.model_record_path)
+        m.write_model_status()
+        self.assertEqual(manager.file_stamp(m.model_record_path), stamp, "같은 내용이면 SD에 다시 쓰지 않는다")
+
+        self.choose("ea2a_gnb")
+        m.check_model_choice()
+        self.assertEqual(self.record(m), {"model": "models/ea2a_gnb.axmodel",
+                                          "axmodel_sha256": hashlib.sha256(b"student").hexdigest(),
+                                          "source": "selection", "selected": "ea2a_gnb", "error": ""})
+        self.assertEqual(recordd.proc.wait(timeout=5), -signal.SIGTERM)
+        self.assertTrue(recordd.stop_requested, "새 route를 열려고 멈춘 것이라 빠른 종료로 세지 않는다")
+        m.procs["modeld"].proc.wait(timeout=5)
+
+        # 기본 모델로 돌아가도 기록과 route가 따라간다
+        recordd.proc = subprocess.Popen(["/bin/sh", "-c", "sleep 30"], start_new_session=True)
+        recordd.stop_requested = False
+        m.procs["modeld"].proc = None
+        m.procs["modeld"].quick_exits = manager.MODEL_QUICK_EXITS_FOR_FALLBACK
+        m.check_model_choice()
+        self.assertEqual((self.record(m)["model"], self.record(m)["error"]), (manager.DEFAULT_MODEL_PATH, "failed"))
+        self.assertEqual(recordd.proc.wait(timeout=5), -signal.SIGTERM)
+
+        # 모델은 그대로이고 기록의 고르기만 바뀌면(EDGEPILOT_MODEL이 이긴다) recordd는 그대로다
+        recordd.proc = subprocess.Popen(["/bin/sh", "-c", "sleep 30"], start_new_session=True)
+        m.argument_model = manager.DEFAULT_MODEL_PATH
+        self.choose("supercombo")
+        m.check_model_choice()
+        self.assertEqual(self.record(m)["source"], "argument")
+        self.assertTrue(recordd.running())
+        manager.Manager.terminate_proc(m, recordd, signal.SIGKILL)
+        recordd.proc.wait(timeout=5)
+
+    def test_override_ignores_the_choice(self):
+        m = self.manager_with_modeld()
+        m.argument_model = "/tmp/test.axmodel"
+        m.model_choice = manager.resolve_model(m.argument_model, m.selection_path)
+        m.model = m.model_choice.path
+        m.procs["modeld"].spec.cmd = ["./modeld", m.model]
+        self.choose("ea2a_gnb")
+        m.check_model_choice()
+        self.assertTrue(m.procs["modeld"].running())
+        self.assertEqual(m.procs["modeld"].spec.cmd, ["./modeld", "/tmp/test.axmodel"])
+        self.assertEqual((self.status(m)["source"], self.status(m)["selected"]), ("argument", "ea2a_gnb"))
+        manager.Manager.terminate_proc(m, m.procs["modeld"], signal.SIGKILL)
+        m.procs["modeld"].proc.wait(timeout=5)
 
 if __name__ == "__main__":
     unittest.main()

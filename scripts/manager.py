@@ -12,19 +12,30 @@ EDGEPILOT_LOG_DIR를 주면(부팅 서비스 edgepilot.service) 자식의 출력
 LOG_MAX_BYTES를 넘으면 <이름>.log.1로 하나 남긴 뒤 비운다(tmpfs에 두어 SD에 쓰지 않는다). 주지 않으면
 터미널로 그대로 나온다.
 
-사용: python3 manager.py [supercombo.axmodel]   (모델 기본값은 설치 디렉터리의
-models/supercombo.axmodel, EDGEPILOT_MODEL로도 바꿀 수 있다)
+주행 모델은 인자, EDGEPILOT_MODEL, 웹 콘솔에서 고른 것(params/driving_model.json의 {"model": "<이름>"} =
+models/<이름>.axmodel), 기본 models/supercombo.axmodel 순으로 정한다. 고르기는 1초마다 다시 읽고, 바뀌면 modeld만 새
+모델로 다시 띄운다(인자나 EDGEPILOT_MODEL이 있으면 고르기는 쓰지 않는다). 고른 모델로 modeld가 거듭 바로 죽으면 기본
+모델로 돌아간다(고르기를 다시 쓰면 다시 해 본다). 쓰는 모델과 그 출처는 /dev/shm/edgepilot_driving_model.json에 낸다.
+주행 기록용으로 실제로 쓰는 모델(경로, sha256, 출처)을 params/driving_model_running.json에도 남기고, 쓰는 모델이 바뀌면
+recordd도 다시 띄운다. recordd는 route를 열 때만 params를 복사하므로, 이렇게 해야 녹화 중에 바꿔도 새 route가 열리고 각
+route가 실제로 달린 모델 하나만 가리킨다.
+
+사용: python3 manager.py [supercombo.axmodel]
 """
+import hashlib
+import json
 import mmap
 import os
+import re
 import shutil
 import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 IPC_MAGIC = 0x4B323349
@@ -37,7 +48,17 @@ MAX_PROCESSES = 12
 # C++ ManagerState는 8바이트 정렬이라 배열 뒤에 꼬리 패딩이 붙는다.
 _MANAGER_STATE_BODY = 8 + 4 + 4 + PROCESS.size * MAX_PROCESSES
 MANAGER_STATE_SIZE = (_MANAGER_STATE_BODY + 7) // 8 * 8
+MODEL_DIR = "models"
 DEFAULT_MODEL_PATH = "models/supercombo.axmodel"
+# 웹 콘솔의 주행 모델 카드(web_console/driving_models.py)와 같은 파일·규칙이다. 고르기 파일은 파라미터 디렉터리에 있어
+# recordd가 route마다 녹화한다.
+MODEL_SELECTION_FILE = "driving_model.json"
+MODEL_STATUS_PATH = "/dev/shm/edgepilot_driving_model.json"  # EDGEPILOT_DRIVING_MODEL_STATUS로 바꿀 수 있다
+# 실제로 쓰는 모델의 기록(파라미터 디렉터리, recordd가 route를 열 때 복사한다). 내용이 바뀔 때만 쓴다(SD).
+MODEL_RECORD_FILE = "driving_model_running.json"
+MODEL_NAME = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}")
+# 고른 모델로 modeld가 연달아 이만큼 빨리(QUICK_EXIT_S 안에) 죽으면 기본 모델로 돌아간다(약 4초)
+MODEL_QUICK_EXITS_FOR_FALLBACK = 3
 USB_ROLE_FILE = "/sys/class/usb_role/8000000.dwc3-role-switch/role"
 LOG_MAX_BYTES = 1 << 20
 # camerad가 VI를 열면 AX 공용 풀이 다시 설정돼서 먼저 떠 있던 화면·인코더의 풀이 무효가
@@ -74,8 +95,89 @@ def env_enabled(name: str, default: bool = False) -> bool:
     return value.lower() not in ("0", "false", "no", "off", "n")
 
 
-def default_model_path() -> str:
-    return os.environ.get("EDGEPILOT_MODEL") or DEFAULT_MODEL_PATH
+def params_dir() -> str:
+    """C++ 프로세스·웹 콘솔과 같은 파라미터 디렉터리(EDGEPILOT_PARAMS_DIR, 없으면 params/)."""
+    return os.environ.get("EDGEPILOT_PARAMS_DIR") or "params"
+
+
+def model_choice(path: str) -> Tuple[str, str]:
+    """고르기 파일의 (이름, 오류). {"model": "<이름>"}이고, deploy_student.py가 쓰는 "models/<이름>.axmodel" 꼴도 받는다.
+    파일이 없으면 ("", "none")."""
+    try:
+        with open(path, encoding="utf-8") as file:
+            document = json.load(file)
+    except FileNotFoundError:
+        return "", "none"
+    except (OSError, ValueError):
+        return "", "unreadable"
+    if not isinstance(document, dict):  # JSON 객체가 아니면 깨진 파일과 같다(웹 콘솔 read_json_object)
+        return "", "unreadable"
+    name = document.get("model")
+    if not isinstance(name, str):
+        return "", "no_model"
+    prefix, suffix = MODEL_DIR + "/", ".axmodel"
+    if name.startswith(prefix) and name.endswith(suffix):
+        name = name[len(prefix):-len(suffix)]
+    return (name, "") if MODEL_NAME.fullmatch(name) else ("", "bad_name")
+
+
+@dataclass(frozen=True)
+class ModelChoice:
+    path: str  # modeld에 주는 모델
+    source: str  # argument | env | selection | default
+    selected: str = ""  # 고르기 파일의 이름(인자나 EDGEPILOT_MODEL이 있으면 쓰지 않는다)
+    error: str = ""  # 고르기를 쓰지 못한 이유: unreadable, no_model, bad_name, missing(파일 없음), failed(modeld가 죽음)
+
+
+def resolve_model(argument: Optional[str], selection_path: str, failed: str = "") -> ModelChoice:
+    """인자 > EDGEPILOT_MODEL > 고르기 > 기본. failed는 이번 고르기로 modeld가 거듭 죽은 모델 경로다."""
+    name, error = model_choice(selection_path)
+    error = "" if error == "none" else error
+    if argument:
+        return ModelChoice(argument, "argument", name, error)
+    if os.environ.get("EDGEPILOT_MODEL"):
+        return ModelChoice(os.environ["EDGEPILOT_MODEL"], "env", name, error)
+    if not name:
+        return ModelChoice(DEFAULT_MODEL_PATH, "default", "", error)
+    path = f"{MODEL_DIR}/{name}.axmodel"
+    if not os.path.isfile(path):
+        return ModelChoice(DEFAULT_MODEL_PATH, "default", name, "missing")
+    if path == failed and path != DEFAULT_MODEL_PATH:
+        return ModelChoice(DEFAULT_MODEL_PATH, "default", name, "failed")
+    return ModelChoice(path, "selection", name)
+
+
+def file_stamp(path: str) -> Optional[Tuple[int, int]]:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_mtime_ns, st.st_size
+
+
+def sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        for block in iter(lambda: file.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def write_json_atomic(path: str, document: dict):
+    """tmpfs의 상태 파일: 임시 파일에 쓰고 rename(읽는 쪽이 반쯤 쓴 파일을 보지 않게)."""
+    directory = os.path.dirname(path) or "."
+    fd, temporary = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            json.dump(document, file)
+        os.chmod(temporary, 0o664)
+        os.replace(temporary, path)
+    except OSError:
+        try:
+            os.remove(temporary)
+        except OSError:
+            pass
+        raise
 
 
 class LatestPublisher:
@@ -247,8 +349,16 @@ class Manager:
             raise ValueError(
                 f"Usage: {argv[0] if argv else 'manager.py'} [supercombo.axmodel]"
             )
-        self.model = argv[1] if len(argv) >= 2 else default_model_path()
-        print(f"manager: model {self.model}", flush=True)
+        self.argument_model = argv[1] if len(argv) >= 2 else None
+        self.selection_path = os.path.join(params_dir(), MODEL_SELECTION_FILE)
+        self.model_status_path = os.environ.get("EDGEPILOT_DRIVING_MODEL_STATUS") or MODEL_STATUS_PATH
+        self.model_record_path = os.path.join(params_dir(), MODEL_RECORD_FILE)
+        self.model_digests: Dict[str, Tuple[Optional[Tuple[int, int]], str]] = {}  # 경로 -> (파일 stamp, sha256)
+        self.selection_stamp = file_stamp(self.selection_path)
+        self.failed_model = ""  # 이번 고르기로 modeld가 거듭 죽은 모델(고르기 파일이 바뀌면 잊는다)
+        self.model_choice = resolve_model(self.argument_model, self.selection_path)
+        self.model = self.model_choice.path
+        print(f"manager: model {self.model} ({self.model_choice.source})", flush=True)
         os.environ.setdefault("EDGEPILOT_PANDA_TX", "1")
         os.environ.setdefault("EDGEPILOT_PANDA_ENGAGED", "1")
         os.environ.setdefault("EDGEPILOT_PANDA_SAFETY", "hyundaiCommunity")
@@ -352,6 +462,80 @@ class Manager:
         except ProcessLookupError:
             pass
 
+    def write_model_status(self):
+        choice = self.model_choice
+        try:
+            write_json_atomic(self.model_status_path, {"model": choice.path, "source": choice.source,
+                                                       "selected": choice.selected, "error": choice.error,
+                                                       "unix_time": time.time()})
+        except OSError as exc:
+            print(f"manager: cannot write {self.model_status_path}: {exc}", flush=True)
+        self.write_model_record()
+
+    def model_digest(self, path: str) -> str:
+        """모델 파일의 sha256(보드에서 37 MB에 약 0.3초라 파일 stamp가 같으면 다시 계산하지 않는다), 못 읽으면 ""."""
+        stamp = file_stamp(path)
+        cached = self.model_digests.get(path)
+        if cached is None or cached[0] != stamp:
+            try:
+                cached = (stamp, sha256_file(path) if stamp is not None else "")
+            except OSError:
+                cached = (stamp, "")
+            self.model_digests[path] = cached
+        return cached[1]
+
+    def write_model_record(self):
+        """params/driving_model_running.json: modeld에 준 모델과 그 sha256, 출처. recordd가 route를 열 때 복사하므로
+        주행 기록마다 실제로 달린 모델이 남는다(고르기 파일은 바라는 것이고, 기본 모델로 돌아갔거나 EDGEPILOT_MODEL이
+        있으면 다르다). 같은 내용이면 다시 쓰지 않는다."""
+        choice = self.model_choice
+        record = {"model": choice.path, "axmodel_sha256": self.model_digest(choice.path), "source": choice.source,
+                  "selected": choice.selected, "error": choice.error}
+        try:
+            with open(self.model_record_path, encoding="utf-8") as file:
+                if json.load(file) == record:
+                    return
+        except (OSError, ValueError):
+            pass
+        try:
+            write_json_atomic(self.model_record_path, record)
+        except OSError as exc:
+            print(f"manager: cannot write {self.model_record_path}: {exc}", flush=True)
+
+    def check_model_choice(self):
+        """1초마다: 고르기 파일이 바뀌었거나 고른 모델로 modeld가 거듭 죽었으면 모델을 다시 정하고, 달라졌으면 modeld를
+        새 모델로, recordd를 새 route로 다시 띄운다(매니저가 멈춘 것이라 빠른 종료로 세지 않는다). 모델 기록을 먼저 쓰고
+        recordd는 1초 뒤에 뜨므로 새 route의 params 사본에 새 모델이 들어간다."""
+        stamp = file_stamp(self.selection_path)
+        if stamp != self.selection_stamp:
+            self.selection_stamp = stamp
+            self.failed_model = ""
+        modeld = self.procs.get("modeld")
+        if (modeld is not None and self.model_choice.source == "selection"
+                and modeld.quick_exits >= MODEL_QUICK_EXITS_FOR_FALLBACK and self.failed_model != self.model):
+            print(f"manager: modeld keeps exiting with {self.model}, back to {DEFAULT_MODEL_PATH}", flush=True)
+            self.failed_model = self.model
+        choice = resolve_model(self.argument_model, self.selection_path, self.failed_model)
+        if choice == self.model_choice:
+            return
+        self.model_choice = choice
+        self.write_model_status()
+        if choice.path == self.model:
+            return
+        print(f"manager: driving model {self.model} -> {choice.path} ({choice.source})", flush=True)
+        self.model = choice.path
+        if modeld is not None:
+            modeld.spec.cmd = ["./modeld", choice.path]
+            modeld.quick_exits = 0
+            if modeld.running():
+                self.terminate_proc(modeld, signal.SIGTERM)
+            else:
+                modeld.next_restart_monotonic = time.monotonic()
+        recordd = self.procs.get("recordd")
+        if recordd is not None and recordd.running():
+            print("manager: restarting recordd so the next route records the new model", flush=True)
+            self.terminate_proc(recordd, signal.SIGTERM)
+
     def publish_state(self):
         timestamp = now_ns()
         payload = struct.pack("<QII", timestamp, len(self.procs), 0)
@@ -371,6 +555,7 @@ class Manager:
             signal.signal(sig, self.handle_signal)
 
         self.previous_usb_role = prepare_board("pandad" in self.procs)
+        self.write_model_status()
         waiting = []  # camerad가 자리 잡기를 기다리는 화면·기록
         for state in self.procs.values():
             if state.spec.name in CAMERA_DEPENDENTS and not self.camera_settled():
@@ -390,6 +575,7 @@ class Manager:
         while not self.shutdown:
             now = time.monotonic()
             if now - last_publish >= 1.0:
+                self.check_model_choice()
                 self.publish_state()
                 if self.log_dir:
                     self.trim_logs()

@@ -9,7 +9,8 @@ import {el, section} from "./ui.js";
 const tabLabel = tab => (tab === "vehicle" ? params().vehicle_tab.label : tab);
 
 // extras: 파라미터 섹션 뒤에 붙일 것들({element, start, stop, after}, 예: 기기 설정의 Panda 펌웨어 카드). after가
-// 섹션 이름이면 그 섹션 바로 뒤에(예: 조향의 학습 토크 모델 카드는 토크 제어기 섹션 뒤), 없으면 맨 뒤에.
+// 섹션 이름이면 그 섹션 바로 뒤에(예: 조향의 학습 토크 모델 카드는 토크 제어기 섹션 뒤), ""이면 섹션들 앞에(조향의 주행
+// 모델 카드), 없으면 맨 뒤에.
 export function createParamView(group, {extras = []} = {}) {
   const spec = params().groups[group];
   const bySection = new Map(spec.sections.map(name => [name, []]));
@@ -71,9 +72,10 @@ export function createParamView(group, {extras = []} = {}) {
     spec.note ? el("p.group-note", {text: spec.note}) : null,
     el("div.toolbar", {}, search, modifiedOnly, count),
     moved,
+    extrasAfter(""),
     sections.map(({name, element: node}) => [node, ...extrasAfter(name)]),
     empty,
-    extras.filter(extra => !placed.has(extra.after)).map(extra => extra.element),
+    extras.filter(extra => extra.after !== "" && !placed.has(extra.after)).map(extra => extra.element),
     el("p.file-path", {text: t("params.file", {path: params().paths[group]})}));
   return {
     element,
