@@ -7,13 +7,15 @@
 //
 // scene()은 bev.js가 그리는 것으로, 차량 좌표계다: 미터, x는 앞 범퍼에서 앞으로, y는 왼쪽. 모델의 점은
 // 카메라 기준이고 y가 오른쪽이다. 카메라는 controlsd와 HUD가 잡는 대로 범퍼에서 RADAR_TO_CAMERA 뒤에 있다.
-// 모델은 이미 차의 중심선에서 보므로(modeld가 camera_offset_m만큼 워프한다) y는 옮길 필요가 없다.
+// 모델은 이미 차의 중심선에서 보므로(modeld가 camera_offset_m만큼 워프한다) y는 옮길 필요가 없다. 점의 높이는
+// 따로 노면 하나로 모은다(scene().road, bev_road.js). 선과 경로의 점은 x, y만 갖고 그 노면 위에 그려진다.
 //
 // 두 자차 차선선은 controlsd의 플래너가 보는 대로 그린다: 같은 차선선 필터(lane_filter.js)에 캡처 시각과
 // controlsd의 속도·측정 곡률로 거른다. 모델 자체의 차선선도 함께 남는다(scene().lanes raw).
 
 import {t} from "./i18n.js";
 import {clamp} from "./bev_math.js";
+import {FLAT, roadProfile} from "./bev_road.js";
 import {LaneLineFilter} from "./lane_filter.js";
 import {api} from "./ui.js";
 
@@ -25,6 +27,9 @@ const T_IDXS = Array.from({length: TRAJECTORY}, (_, i) => 10 * (i / (TRAJECTORY 
 // openpilot X_IDXS(float32, model_output.h model_x_idx): 차선·도로 경계 점의 앞 거리, m. ModelState는 그 점의 y, z만 싣는다
 const X_IDXS = Array.from({length: TRAJECTORY}, (_, i) => Math.fround(192 * (i / (TRAJECTORY - 1)) ** 2));
 const RADAR_TO_CAMERA = 1.52;           // model_output.h kRadarToCameraDistanceM (check_web_console.py)
+const LINE_X = X_IDXS.map((x) => x - RADAR_TO_CAMERA);   // 차선·도로 경계 점의 범퍼에서 앞 거리, m
+// 노면 높이(bev_road.js)에서 경로의 무게: 확실한 선(확률·신뢰도 1)의 10분의 1이라 선이 다 흐릴 때만 노면을 정한다
+const PATH_HEIGHT_WEIGHT = 0.1;
 const LEAD_PROBABILITY = 0.5;           // model_output.h kLeadProbabilityThreshold (check_web_console.py)
 export const LANE_SURE = 0.5;           // 차로 폭을 재려면 두 자차 차선선 모두 이만큼 확실해야 한다(bev.js도 쓴다)
 const LANE_WIDTH_INDEX = 6;             // hud_scene.cc kLaneRulerIndex: 카메라에서 6.75 m
@@ -78,23 +83,34 @@ function linePoints(xs, ys, reach, speeds = null) {
   return points;
 }
 
-// offset에 있는 IpcLanePoint(y, z) 배열을 X_IDXS 위의 x와 y로.
+// offset에 있는 IpcLanePoint(y, z) 배열을 X_IDXS 위의 x, y, z로.
 function lanePointsAt(view, offset) {
-  return [X_IDXS, Array.from({length: TRAJECTORY}, (_, i) => view.getFloat32(offset + 8 * i, true))];
+  const column = (k) => Array.from({length: TRAJECTORY}, (_, i) => view.getFloat32(offset + 8 * i + 4 * k, true));
+  return [X_IDXS, column(0), column(1)];
 }
 
-// offset에 있는 IpcPoint 배열의 x와 y.
+// offset에 있는 IpcPoint 배열의 x, y, z.
 function pointsAt(view, offset) {
-  const xs = [], ys = [];
+  const xs = [], ys = [], zs = [];
   for (let i = 0; i < TRAJECTORY; i++) {
     xs.push(view.getFloat32(offset + 12 * i, true));
     ys.push(view.getFloat32(offset + 12 * i + 4, true));
+    zs.push(view.getFloat32(offset + 12 * i + 8, true));
   }
-  return [xs, ys];
+  return [xs, ys, zs];
 }
 
-function polyline(view, offset, reach, speeds = null) {
-  return linePoints(...pointsAt(view, offset), reach, speeds);
+// 모델의 노면(bev_road.js), 그려지는 데(reach, 모델 x)까지: 네 차선선은 확률, 두 도로 경계는 신뢰도(1 - std),
+// 경로는 PATH_HEIGHT_WEIGHT를 무게로 한다. 경로는 유한하고 앞으로 가는 점까지만 본다(정차 중이면 범퍼를 덮지 않아
+// 빠진다).
+function roadOf(lanes, lines, edges, edgeLines, [px, , pz], reach) {
+  let n = 0;
+  while (n < TRAJECTORY && Number.isFinite(px[n]) && Number.isFinite(pz[n]) && (n === 0 || px[n] > px[n - 1])) n++;
+  return roadProfile([
+    ...lines.map(([, , zs], i) => ({xs: LINE_X, zs, weight: lanes[i].probability})),
+    ...edgeLines.map(([, , zs], i) => ({xs: LINE_X, zs, weight: clamp(1 - edges[i].std, 0, 1)})),
+    {xs: px.slice(0, n).map((x) => x - RADAR_TO_CAMERA), zs: pz.slice(0, n), weight: PATH_HEIGHT_WEIGHT},
+  ], LINE_X.filter((x, i) => x > 0 && X_IDXS[i] <= reach));
 }
 
 // 각 점에서 계획의 속도(m/s)를 T_IDXS에 걸친 위치로 구한다. 모델 자체의 속도 출력(ModelState에 없음)과
@@ -114,20 +130,24 @@ function readModel(at, bytes) {
   const planEnd = f32(at.plan + 12 * (TRAJECTORY - 1));
   const reach = Number.isFinite(planEnd) ? clamp(planEnd, DRAW.min, DRAW.max) : DRAW.max;
   const speeds = planSpeeds(view, at.plan);
+  const plan = pointsAt(view, at.plan);
   const lines = [0, 1, 2, 3].map((i) => lanePointsAt(view, at.lanes + 8 * TRAJECTORY * i));
+  const edgeLines = [0, 1].map((i) => lanePointsAt(view, at.road_edges + 8 * TRAJECTORY * i));
   const lanes = lines.map(([xs, ys], i) => ({probability: f32(at.lane_probabilities + 4 * i), points: linePoints(xs, ys, reach)}));
+  const edges = edgeLines.map(([xs, ys], i) => ({std: f32(at.road_edge_stds + 4 * i), points: linePoints(xs, ys, reach)}));
   const lead = at.lead, flow = at.lead_flow, track = at.lead_track;
   return {
     stamp: view.getBigUint64(at.model_timestamp_ns, true),
     captured: seconds(at.capture_timestamp_ns),
     valid: u32(at.valid) !== 0,
-    path: polyline(view, at.plan, reach, speeds),
+    path: linePoints(plan[0], plan[1], reach, speeds),
     planNow: speeds[PLAN_NOW_INDEX],
     planEnd,
     gas: Array.from({length: 6}, (_, i) => f32(at.gas_press_probs + 4 * i)),
     lanes, reach,
     egoLines: [lines[1], lines[2]],     // 차선선 필터(BevStream)에 넣을 자차 차선선의 모델 점
-    edges: [0, 1].map((i) => ({std: f32(at.road_edge_stds + 4 * i), points: linePoints(...lanePointsAt(view, at.road_edges + 8 * TRAJECTORY * i), reach)})),
+    edges,
+    road: roadOf(lanes, lines, edges, edgeLines, plan, reach),
     laneWidth: laneWidth(lanes, lines[1][1], lines[2][1]),
     lead: u32(lead)
       ? {probability: f32(lead + 4), x: f32(lead + 8), y: f32(lead + 12), speed: f32(lead + 16), accel: f32(lead + 20)} : null,
@@ -183,7 +203,7 @@ const NO_CONTROL = {enabled: false, engaged: false, active: false, alarm: false,
 //   path [[x, y, 계획 속도 m/s]], planNow (m/s), lanes [{probability, points, raw}] ×4 (왼쪽 바깥, 왼쪽,
 //   오른쪽, 오른쪽 바깥. controlsd가 도는 동안 자차 차선선의 points는 플래너가 거르는 대로 거른 것이고, raw는
 //   모델 자체의 것으로 자차 차선선에만 있다), edges [{std, points}] ×2, laneWidth (m, 그려진 차선선 사이,
-//   두 자차 차선선이 다 확실하지 않으면 NaN)
+//   두 자차 차선선이 다 확실하지 않으면 NaN), road (노면 높이 bev_road.js RoadProfile, 모델이 없으면 평평)
 //   lead {x: 앞차 뒷면, y, gap, speed, accel, relative (m/s, 자차 속도가 없으면 null), ttc (s, 가까워지지
 //     않으면 Infinity), tracked (x, gap, relative, speed가 앞차 추적에서 온다), raw {x, relative} (모델 자체의
 //     것), flow {relative: -x · rate (m/s, 광류에서)} 또는 null} 또는 null
@@ -215,7 +235,7 @@ function scene(model, control, now, history = []) {
     modelAge, controlAge, stale: modelAge > MODEL_STALE_S,
     path: shown ? shown.path : [], planNow: shown ? shown.planNow : NaN,
     lanes: shown ? shown.lanes : [], edges: shown ? shown.edges : [],
-    laneWidth: shown ? shown.laneWidth : NaN,
+    laneWidth: shown ? shown.laneWidth : NaN, road: shown ? shown.road : FLAT,
     lead: seen ? {x, y: -lead.y, gap: Math.max(0, x), accel: lead.accel, relative,
                   speed: track ? (Number.isFinite(speed) ? speed + track.relative : lead.speed) : lead.speed,
                   ttc: relative !== null && relative < -0.1 ? Math.max(0, x) / -relative : Infinity,

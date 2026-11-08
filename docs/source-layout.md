@@ -794,11 +794,12 @@ only in the board build, against `deps/ax630` from
     cache, the per-frame triangle and instance batches, the shared fog
     uniforms and the shaders), `bev_geometry.js` (the stateless geometry
     writers: bands, the path corridor, curbs, arrows and polyline reading),
-    `bev_ego.js` (the ego car; today a black 2017 K7 made in code),
-    `bev_car.js` (the lead's car model), `bev_data.js` (reads the ModelState
-    and ControlState bytes the console streams), `bev_math.js` (the small
-    maths the BEV files share), and `lane_filter.js` (the planner's lane-line
-    filter, for the ego lines the BEV draws).
+    `bev_road.js` (the road height the BEV draws on), `bev_ego.js` (the ego
+    car; today a black 2017 K7 made in code), `bev_car.js` (the lead's car
+    model), `bev_data.js` (reads the ModelState and ControlState bytes the
+    console streams), `bev_math.js` (the small maths the BEV files share), and
+    `lane_filter.js` (the planner's lane-line filter, for the ego lines the
+    BEV draws).
   - three.js 0.186.1 in `three/`.
 - `scripts/*.service`, `install_autostart.sh`, `install_boot_tuning.sh`: the
   systemd units (`edgepilot.service`, `edgepilot-drivers.service`,

@@ -371,6 +371,24 @@ a column beside the view, or under it below 900 px wide, so they never cover
 the road. Over the view are only the view and layer buttons and the chips along
 the bottom.
 
+- **Road height.** The ground, its grid and distance labels, the lines, the path
+  and the lead follow the road's height as the model sees it, so hills rise and
+  fall instead of lying flat (`web_console/static/bev_road.js`). The ego car
+  stays level at height 0.
+  - **Height.** Each lane line, road edge and the path gives the height ahead
+    relative to its own height at the front bumper. A line counts by its
+    probability, an edge by 1 − std, and the path by 0.1, so the path matters
+    only when every line is faint.
+  - **Why from the bumper.** It drops the model's offset from the set camera
+    height, which is more than 12 cm in 5% of frames and the same all the way
+    ahead.
+  - **Left and right** are not told apart: the two ego lines differ by less
+    than 6 cm in 95% of frames.
+  - **Past the drawn reach** the road stays at its last height.
+
+  On the 2026-09 to 11 drives, the road 48 m ahead stood up to 3.6 m above and
+  3.5 m below the car. On the steepest downhills the model also widens the lane
+  at 48 m by 5-15%. That is in its output, so the BEV shows it too.
 - **Steadied ego lines.** The two ego lines are drawn as the planner sees them:
   `web_console/static/lane_filter.js` runs the planner's lane-line filter on the
   capture times and on `controlsd`'s speed and measured curvature

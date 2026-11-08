@@ -2,9 +2,10 @@
 // three.js로 그린다. 보드는 발행된 상태를 페이지로 복사만 하므로(bev_data.js) 그리기에 드는 비용이 없다.
 //
 // sv_recorder_bev(static/bev.js)에서 옮겨 왔다: 렌더러, 바닥, 풋프린트, 경로 띠와 차(bev_car.js, 지금은 앞차용).
-// 장면은 우리 것이고 차량 좌표계다: 미터 단위, x는 앞 범퍼에서 앞으로, y 왼쪽, z 위. 자차는 이 차 고유의
-// 모델이다(bev_ego.js). HUD처럼 그린다(hud_scene.cc draw_scene): 같은 도달 거리, 차선 알파, 도로 경계 신뢰도, 경로
-// 색, 앞차 임계값과 위험 색이고, laneless 모드에서도 선을 그린다.
+// 장면은 우리 것이고 차량 좌표계다: 미터 단위, x는 앞 범퍼에서 앞으로, y 왼쪽, z 위. 바닥, 선, 경로와 앞차는 모델이
+// 본 노면 높이(scene.road, bev_road.js)를 따르고, 자차는 높이 0에 선다. 자차는 이 차 고유의 모델이다
+// (bev_ego.js). HUD처럼 그린다(hud_scene.cc draw_scene): 같은 도달 거리, 차선 알파, 도로 경계 신뢰도, 경로 색, 앞차
+// 임계값과 위험 색이고, laneless 모드에서도 선을 그린다.
 // HUD에 없는 것: 모델이 감속을 계획한 곳에서 경로를 호박색~빨간색으로 물들이고 가장 느린 속도(또는 STOP)를
 // 그 자리에 쓴다. controlsd가 요구하는 곡률과 실제로 얻는 곡률의 원호, 앞차 제동등, modeld의 앞차 트랙이 놓은
 // 자리의 앞차(모델 거리와 광류를 융합, model/lead_tracker. 비전 크루즈가 이것을 따른다)와 막대로 그린 모델 자체
@@ -31,6 +32,9 @@ import {DASH, el, fitRange, sparkline} from "./ui.js";
 
 // 바닥: 5 m와 20 m 격자선, 앞으로 GRID.ahead, 양옆으로 GRID.side.
 const GRID = {ahead: 160, behind: 8, side: 25, major: 20};
+// 바닥 띠: 범퍼에서 bend m까지 step m마다 노면 높이를 따라 앞뒤로만 휜다(옆으로는 평평, side m씩). 그 뒤로는 behind
+// m까지 높이 0, 그 앞으로는 ahead m까지 노면의 마지막 높이로 평평하게 이어진다.
+const GROUND_STRIP = {behind: -800, bend: 200, ahead: 880, side: 800, step: 1};
 const EGO = [EGO_SIZE.length, EGO_SIZE.width, EGO_SIZE.height];
 const LEAD = [4.5, 1.8, 1.5];            // 모델은 앞차 크기를 주지 않는다: 흔한 승용차
 const LANE_WIDTH = 0.15;                 // 차선선은 도색 폭만큼의 띠로
@@ -226,12 +230,12 @@ class BevView {
   // -- 바뀌지 않는 부분: 바닥, 거리, 자차 --------------------------------------------------------------
   staticParts() {
     const group = new THREE.Group();
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), shader(...GROUND, {
+    this.ground = groundStrip(shader(...GROUND, {
       uGround: {value: new THREE.Color(THEME.ground)}, uRoad: {value: new THREE.Color(THEME.road)},
       uLine: {value: new THREE.Color(THEME.gridLine)}, uAxis: {value: new THREE.Color(THEME.axis)},
       uArea: {value: new THREE.Vector4(GRID.behind, GRID.ahead, GRID.side, 4)}}, {transparent: false, depthWrite: true}));
-    ground.position.set(GRID.ahead / 2, 0, -0.01);
-    group.add(ground);
+    this.ground.mesh.position.z = -0.01;
+    group.add(this.ground.mesh);
     this.distances = [];
     for (let x = GRID.major; x <= GRID.ahead; x += GRID.major) {
       const label = new CSS2DObject(el("div.bev-dist", {text: x + " m"}));
@@ -330,8 +334,9 @@ class BevView {
     this.last = scene;
     this.plan = planSummary(scene.path, scene.planNow);
     this.container.classList.toggle("stale", scene.stale);
-    this.drawLanes(scene.lanes);
-    this.drawEdges(scene.edges);
+    this.drawGround(scene.road);
+    this.drawLanes(scene.lanes, scene.road);
+    this.drawEdges(scene.edges, scene.road);
     this.drawPath(scene);
     this.drawCurvature(scene);
     this.drawLead(scene);
@@ -342,14 +347,22 @@ class BevView {
     this.sideEmpty.hidden = !(this.card.hidden && this.leadPanel.hidden);
   }
 
+  // 바닥 띠를 노면 높이로 휘고, 거리 라벨을 그 위에 놓는다.
+  drawGround(road) {
+    const {mesh, xs} = this.ground, position = mesh.geometry.attributes.position, array = position.array;
+    xs.forEach((x, i) => { array[6 * i + 2] = array[6 * i + 5] = road.at(x); });
+    position.needsUpdate = true;
+    for (const label of this.distances) label.position.z = road.at(label.position.x);
+  }
+
   // 차선선은 띠로, HUD가 그리는 것과 같은 확신도로 그린다. 두 선이 모두 확실한 동안 자차 차로를 그 사이에
   // 옅게 채운다. HUD와 달리 laneless 모드에서도(경계와 함께) 그린다: 모델은 여전히 선을 보고, 차선 버튼으로
   // 숨긴다. 자차 차로 선은 플래너의 것으로 그 차선 필터를 거친 선이고, 모델 자체 선은 그 아래 가늘고
   // 회색으로 그린다(원시 차선 버튼으로 숨긴다).
-  drawLanes(lanes) {
+  drawLanes(lanes, road) {
     const b = this.lanes, raw = this.rawLanes, color = ink(THEME.lane), gray = ink(HUD.gray);
-    b.begin();
-    raw.begin();
+    b.begin(road);
+    raw.begin(road);
     if (lanes.length === 4 && lanes[1].probability >= LANE_SURE && lanes[2].probability >= LANE_SURE) egoLane(b, lanes[1].points, lanes[2].points, ink(THEME.egoLane));
     for (const lane of lanes) {
       if (lane.probability < LANE_MIN_PROBABILITY) continue;
@@ -361,9 +374,9 @@ class BevView {
   }
 
   // 도로 경계는 낮은 빨간 연석으로, 모델의 확신도(1 - std)만큼 그린다.
-  drawEdges(edges) {
+  drawEdges(edges, road) {
     const b = this.curbs, color = ink(HUD.red);
-    b.begin();
+    b.begin(road);
     for (const edge of edges) {
       const confidence = clamp(1 - edge.std, 0, 1);
       if (confidence >= EDGE_MIN_CONFIDENCE) curb(b, edge.points, CURB.width, CURB.height, color, 0.7 * confidence);
@@ -374,7 +387,7 @@ class BevView {
   // 계획을 HUD 경로 색의 띠로, 모델이 감속을 계획한 곳은 물들여 그린다.
   drawPath(scene) {
     const path = scene.path;
-    this.path.begin();
+    this.path.begin(scene.road);
     this.speedTag.visible = false;
     if (path.length > 1) {
       const [hex, strength] = pathStyle(scene.state), now = Number.isFinite(scene.planNow) ? scene.planNow : 0;
@@ -387,8 +400,8 @@ class BevView {
       // 않는다: 원근 때문에 어디에 있든 앞차 라벨 위에 겹치고, 칩이 같은 내용을 보여 준다
       const plan = this.plan;
       if (plan && !(scene.lead && this.layers.lead.visible)) {
-        const [nx, ny] = normalAt(path, plan.i), beside = PATH_WIDTH / 2 + 0.4;
-        this.place(this.speedTag, path[plan.i][0] - nx * beside, path[plan.i][1] - ny * beside, 0, plan.text, "", plan.color);
+        const [nx, ny] = normalAt(path, plan.i), beside = PATH_WIDTH / 2 + 0.4, x = path[plan.i][0] - nx * beside;
+        this.place(this.speedTag, x, path[plan.i][1] - ny * beside, scene.road.at(x), plan.text, "", plan.color);
       }
     }
     this.path.end();
@@ -399,7 +412,7 @@ class BevView {
   // 자리의 차이다. 곡률은 오른쪽이 +이고, BEV의 y는 왼쪽이다.
   drawCurvature(scene) {
     const b = this.arcs, curvature = scene.curvature, speed = scene.speedKph / 3.6;
-    b.begin();
+    b.begin(scene.road);
     if (curvature && speed >= ARC.speed) {
       const length = clamp(speed * ARC.seconds, ARC.min, ARC.max);
       for (const [k, color, alpha, z] of [[curvature.desired, HUD.white, scene.state.active ? 0.85 : 0.45, 0.06],
@@ -423,29 +436,37 @@ class BevView {
     parts.brake.begin(braking ? 1 : 0);
     parts.wheels.begin(lead ? model.wheels.length : 0);
     parts.prints.begin(lead ? (braking ? 3 : 2) : 0);
-    parts.lines.begin();
+    parts.lines.begin(scene.road);
     parts.tag.visible = parts.gap.visible = parts.ttc.visible = false;
     if (lead) {
-      const [l, w, h] = LEAD, scale = fit(LEAD), yaw = headingAt(scene.path, lead.x);
+      const road = scene.road, [l, w, h] = LEAD, scale = fit(LEAD), yaw = headingAt(scene.path, lead.x);
       const c = Math.cos(yaw), s = Math.sin(yaw), x = lead.x + c * l / 2, y = lead.y + s * l / 2;
+      // 앞차는 제 가운데의 노면에 서서 그 기울기만큼 앞을 든다(풋프린트도 같이)
+      const z = road.at(x), pitch = Math.atan(road.slope(x)), cp = Math.cos(pitch), sp = Math.sin(pitch);
       const hex = riskColor(lead), color = ink(hex);
-      parts.body.add(x, y, 0, yaw, ...scale, ink(THEME.model).clone().lerp(color, THEME.modelTint));
-      parts.lamps.add(x, y, 0, yaw, ...scale, null);
+      parts.body.addPitched(x, y, z, yaw, pitch, ...scale, ink(THEME.model).clone().lerp(color, THEME.modelTint));
+      parts.lamps.addPitched(x, y, z, yaw, pitch, ...scale, null);
       if (braking) {                            // 그리고 차 뒤 도로 위의 그 빛
-        parts.brake.add(x, y, 0, yaw, ...scale, null);
-        parts.prints.add(lead.x - c * 0.9, lead.y - s * 0.9, 0.012, yaw, 3.4, w + 2.4, 1, ink(HUD.red), [0.4, w * 0.8, 1.1], [0, 0, 0, 0.55]);
+        const bx = lead.x - c * 0.9;
+        parts.brake.addPitched(x, y, z, yaw, pitch, ...scale, null);
+        parts.prints.addPitched(bx, lead.y - s * 0.9, road.at(bx) + 0.012, yaw, pitch, 3.4, w + 2.4, 1, ink(HUD.red),
+                                [0.4, w * 0.8, 1.1], [0, 0, 0, 0.55]);
       }
       for (const [wx, wy, wz, r, width] of model.wheels) {
-        const px = wx * scale[0], py = wy * scale[1];
-        parts.wheels.add(x + c * px - s * py, y + s * px + c * py, wz * scale[2], yaw, r * scale[2], width, r * scale[2]);
+        // 차 좌표(앞 px, 왼쪽 py, 위 pz)를 든 차의 축으로(Instances.addPitched)
+        const px = wx * scale[0], py = wy * scale[1], pz = wz * scale[2], ahead = px * cp - pz * sp;
+        parts.wheels.addPitched(x + c * ahead - s * py, y + s * ahead + c * py, z + px * sp + pz * cp, yaw, pitch,
+                                r * scale[2], width, r * scale[2]);
       }
-      parts.prints.add(x, y, 0.006, yaw, l + 1.2, w + 1.2, 1, BLACK, [l * 0.92, w * 0.9, 0.6], [0.5, 0, 0, 0.5]);
-      parts.prints.add(x, y, 0.016, yaw, l + 1.6, w + 1.6, 1, color, [l + 0.3, w + 0.3, 0.5], [0.12, 0.85, 0, 0.25]);
+      parts.prints.addPitched(x, y, z + 0.006, yaw, pitch, l + 1.2, w + 1.2, 1, BLACK, [l * 0.92, w * 0.9, 0.6],
+                              [0.5, 0, 0, 0.5]);
+      parts.prints.addPitched(x, y, z + 0.016, yaw, pitch, l + 1.6, w + 1.6, 1, color, [l + 0.3, w + 0.3, 0.5],
+                              [0.12, 0.85, 0, 0.25]);
       if (lead.x > 1) {                         // 양 끝에 눈금이 있는 치수선
         band(parts.lines, [[0.3, 0], [lead.x - 0.3, lead.y]], 0.05, 0.02, color, 0.6);
         band(parts.lines, [[0.3, -0.45], [0.3, 0.45]], 0.06, 0.02, color, 0.8);
         band(parts.lines, [[lead.x - 0.3, lead.y - 0.45], [lead.x - 0.3, lead.y + 0.45]], 0.06, 0.02, color, 0.8);
-        this.place(parts.gap, lead.x / 2, lead.y / 2, 0.05, `${lead.gap.toFixed(1)} m`, "", hex);
+        this.place(parts.gap, lead.x / 2, lead.y / 2, road.at(lead.x / 2) + 0.05, `${lead.gap.toFixed(1)} m`, "", hex);
       }
       if (lead.relative !== null && Math.abs(lead.relative) >= ARROW.slowest) {
         arrow(parts.lines, x, y, x + c * lead.relative * ARROW.seconds, y + s * lead.relative * ARROW.seconds, color);
@@ -455,9 +476,9 @@ class BevView {
         band(parts.lines, [[rx + s * half, ry - c * half], [rx - s * half, ry + c * half]], 0.14, 0.035, ink(HUD.gray), 0.85);
       }
       if (lead.ttc < LEAD_CARD.ttc) {
-        this.place(parts.ttc, x - s * (w / 2 + 1.2), y + c * (w / 2 + 1.2), 0.3, ttcText(lead.ttc), "", TTC_COLOR[ttcTone(lead.ttc)]);
+        this.place(parts.ttc, x - s * (w / 2 + 1.2), y + c * (w / 2 + 1.2), z + 0.3, ttcText(lead.ttc), "", TTC_COLOR[ttcTone(lead.ttc)]);
       }
-      this.place(parts.tag, x, y, h + 0.3, `${Math.round(lead.speed * 3.6)} km/h`, braking ? "BRAKE" : "LEAD", braking ? HUD.red : hex);
+      this.place(parts.tag, x, y, z + h + 0.3, `${Math.round(lead.speed * 3.6)} km/h`, braking ? "BRAKE" : "LEAD", braking ? HUD.red : hex);
     }
     for (const part of [parts.body, parts.lamps, parts.brake, parts.wheels, parts.prints]) part.end();
     parts.lines.end();
@@ -651,6 +672,25 @@ class BevView {
   }
 }
 
+
+// GROUND_STRIP의 바닥 띠: {mesh, xs}. 앞 거리 xs마다 왼쪽(y = side)과 오른쪽 정점 한 쌍이고, drawGround()가 그 높이를
+// 정한다. 격자 셰이더(GROUND)는 월드 x, y로 선을 그어 격자가 띠를 따라 휜다.
+function groundStrip(material) {
+  const {behind, bend, ahead, side, step} = GROUND_STRIP, xs = [behind];
+  for (let x = 0; x <= bend; x += step) xs.push(x);
+  xs.push(ahead);
+  const positions = new Float32Array(6 * xs.length), index = [];
+  xs.forEach((x, i) => {
+    positions.set([x, side, 0, x, -side, 0], 6 * i);
+    if (i) index.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+  geometry.setIndex(index);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.frustumCulled = false;
+  return {mesh, xs};
+}
 
 // 이 브라우저에 기억한 숨긴 레이어(LAYERS의 이름만, 저장값이 깨졌으면 없다)
 function hiddenLayers() {

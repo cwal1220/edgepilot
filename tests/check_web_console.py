@@ -1606,10 +1606,10 @@ class BevTest(unittest.TestCase):
         self.assertEqual(len(cpp_golden), 36)
         self.assertEqual(golden(ROOT / "tests" / "check_bev_lane_filter.mjs"), cpp_golden)
 
-    def test_lane_filter_copy_matches_cpp(self):
-        """JS 사본을 jsc(macOS)나 node로 돌려 C++ 기준 출력과 맞춘다. 둘 다 없으면 건너뛴다."""
+    def run_js(self, name):
+        """tests/의 JS 시험 하나를 jsc(macOS)나 node로 돌려 다 통과하는지 본다. 둘 다 없으면 건너뛴다."""
         jsc = Path("/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc")
-        script = ROOT / "tests" / "check_bev_lane_filter.mjs"
+        script = ROOT / "tests" / name
         if jsc.is_file():
             command = [str(jsc), "-m", str(script)]
         elif shutil.which("node"):
@@ -1619,6 +1619,14 @@ class BevTest(unittest.TestCase):
         run = subprocess.run(command, capture_output=True, text=True, timeout=60)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertIn("all passed", run.stdout)
+
+    def test_lane_filter_copy_matches_cpp(self):
+        """JS 사본이 C++ 기준 출력과 맞는다."""
+        self.run_js("check_bev_lane_filter.mjs")
+
+    def test_road_height(self):
+        """BEV 노면 높이(bev_road.js): 범퍼 기준 상대 높이, 무게 평균, 덮지 않는 선과 knot 건너뛰기."""
+        self.run_js("check_bev_road.mjs")
 
     def test_page_reads_what_the_server_says(self):
         """bev_data.js NEEDS의 필드가 /api/bev 레이아웃에 다 있어야 한다(빠지면 페이지가 그리지 않는다). ControlState

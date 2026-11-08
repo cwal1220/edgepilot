@@ -10,7 +10,8 @@ export const ink = (hex) => inks.get(hex) || inks.set(hex, new THREE.Color(hex))
 
 // -- 매 프레임 다시 쓰는 지오메트리 ---------------------------------------------------------------------
 // 프레임 사이에 유지하는 버퍼 속 삼각형: position과 값 size개짜리 속성 하나 더(알파가 있는 색, uv, ...).
-// 프레임은 begin()하고, 쓰고, end()한다. end()가 새로 쓴 부분을 보낸다.
+// 프레임은 begin(road)하고, 쓰고, end()한다. 그 프레임의 정점은 노면 road(bev_road.js) 위에 놓인다: put()의 z는
+// 그 x의 노면에서 잰 높이다. end()가 새로 쓴 부분을 보낸다.
 export class Batch {
   constructor(name, size, material, order) {
     this.name = name;
@@ -25,7 +26,10 @@ export class Batch {
     this.grown = true;
   }
 
-  begin() { this.v = this.n = 0; }
+  begin(road) {
+    this.v = this.n = 0;
+    this.road = road;
+  }
 
   // 정점 vertices개와 인덱스 indices개를 더 넣을 자리. 첫 새 정점의 인덱스를 돌려준다.
   reserve(vertices, indices) {
@@ -45,7 +49,7 @@ export class Batch {
 
   put(x, y, z, a, b, c, d) {
     const v = this.v++, o = this.size * v, values = this.values;
-    this.positions[3 * v] = x; this.positions[3 * v + 1] = y; this.positions[3 * v + 2] = z;
+    this.positions[3 * v] = x; this.positions[3 * v + 1] = y; this.positions[3 * v + 2] = z + this.road.at(x);
     values[o] = a;
     if (this.size > 1) values[o + 1] = b;
     if (this.size > 2) values[o + 2] = c;
@@ -76,8 +80,8 @@ export class Batch {
 }
 
 // 지오메트리 하나의 인스턴스를 프레임에 있는 만큼 한 번의 드로로 그린다: 각각 x, y, z에 놓고 yaw만큼 돌리고
-// sx, sy, sz만큼 늘이며, 제 색(colors)과 제 속성(extra, name: size)을 갖는다. 프레임에 메시가 담을 수 있는
-// 것보다 많으면 메시를 더 크게 다시 만든다.
+// (addPitched는 그다음 앞을 pitch만큼 든다) sx, sy, sz만큼 늘이며, 제 색(colors)과 제 속성(extra, name: size)을
+// 갖는다. 프레임에 메시가 담을 수 있는 것보다 많으면 메시를 더 크게 다시 만든다.
 export class Instances {
   constructor(geometry, material, {order = 0, colors = true, extra = {}} = {}) {
     this.geometry = Object.keys(extra).length ? geometry.clone() : geometry;
@@ -114,11 +118,17 @@ export class Instances {
     this.count = 0;
   }
 
-  add(x, y, z, yaw, sx, sy, sz, color, ...extra) {
+  add(x, y, z, yaw, ...rest) {
+    this.addPitched(x, y, z, yaw, 0, ...rest);
+  }
+
+  // 열은 늘인 앞(c·cp, s·cp, sp), 왼쪽(-s, c, 0), 위(-c·sp, -s·sp, cp) 축이다: 오르막에 놓인 차.
+  addPitched(x, y, z, yaw, pitch, sx, sy, sz, color, ...extra) {
     const i = this.count++, m = this.mesh.instanceMatrix.array, o = 16 * i, c = Math.cos(yaw), s = Math.sin(yaw);
-    m[o] = c * sx; m[o + 1] = s * sx; m[o + 2] = 0; m[o + 3] = 0;
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    m[o] = c * cp * sx; m[o + 1] = s * cp * sx; m[o + 2] = sp * sx; m[o + 3] = 0;
     m[o + 4] = -s * sy; m[o + 5] = c * sy; m[o + 6] = 0; m[o + 7] = 0;
-    m[o + 8] = 0; m[o + 9] = 0; m[o + 10] = sz; m[o + 11] = 0;
+    m[o + 8] = -c * sp * sz; m[o + 9] = -s * sp * sz; m[o + 10] = cp * sz; m[o + 11] = 0;
     m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
     if (this.colors) {
       const a = this.mesh.instanceColor.array;

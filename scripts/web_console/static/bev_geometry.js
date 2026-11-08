@@ -1,11 +1,14 @@
 // BEV의 상태 없는 지오메트리 쓰기(bev.js에서 뗐다): 폴리라인을 따르는 띠, 경로 띠, 연석, 화살표, 자차 차로를
-// Batch에 넣고, 폴리라인을 읽는다(x에서의 y와 방향, 길이, 법선). 원호의 점도 만든다.
+// Batch에 넣고, 폴리라인을 읽는다(x에서의 y와 방향, 길이, 법선). 원호의 점도 만든다. 높이 z는 Batch가 그 프레임에
+// 받은 노면(bev_road.js)에서 잰 것이다. 띠와 연석은 노면을 따라 휘도록 점 사이를 STEP m 안으로 촘촘히 한다.
 import {smoothstep} from "./bev_math.js";
+
+const STEP = 2;
 
 // -- 지오메트리 쓰기 --------------------------------------------------------------------------------------
 // points [[x, y], ...]를 따라 높이 z에 놓는 폭 width의 띠.
 export function band(b, points, width, z, color, alpha) {
-  ribbon(b, points, width / 2, (i, side, x, y) => b.put(x, y, z, color.r, color.g, color.b, alpha));
+  ribbon(b, densify(points), width / 2, (i, side, x, y) => b.put(x, y, z, color.r, color.g, color.b, alpha));
 }
 
 // left와 right 사이 차로를 color로 옅게 채우고, 앞으로 갈수록 흐려진다.
@@ -40,8 +43,9 @@ export function arrow(b, x0, y0, x1, y1, color) {
 
 // 경로용으로 points를 따르는 띠: 폭 방향 위치, 진행 거리와 slow[i](계획 감속). 그 길이를 돌려준다.
 export function corridor(b, points, width, z, slow) {
-  const along = arcLengths(points);
-  ribbon(b, points, width / 2, (i, side, x, y) => b.put(x, y, z, side, along[i], slow[i]));
+  const fine = densify(points.map(([x, y], i) => [x, y, slow[i]]));
+  const along = arcLengths(fine);
+  ribbon(b, fine, width / 2, (i, side, x, y) => b.put(x, y, z, side, along[i], fine[i][2]));
   return along.length ? along[along.length - 1] : 0;
 }
 
@@ -54,8 +58,8 @@ export function arc(k, length, n = 24) {
 }
 
 // 도로 경계를 낮은 연석으로: 윗면과 양 옆면, 조명을 받는다.
-export function curb(b, points, width, height, color, alpha) {
-  const n = points.length, h = width / 2;
+export function curb(b, line, width, height, color, alpha) {
+  const points = densify(line), n = points.length, h = width / 2;
   if (n < 2) return;
   const base = b.reserve(4 * n, 18 * (n - 1));
   points.forEach(([px, py], i) => {
@@ -100,6 +104,19 @@ function ribbon(b, points, h, vertex) {
     vertex(i, 1, px - nx * h, py - ny * h);
     if (i) { const k = base + 2 * i; b.tri(k - 2, k - 1, k); b.tri(k - 1, k + 1, k); }
   }
+}
+
+// 이웃한 두 점이 STEP m보다 먼 곳에 사이 점을 넣은 폴리라인: 점의 값(x, y와 그 뒤의 것)을 모두 직선으로 잇는다.
+function densify(points) {
+  const out = [];
+  points.forEach((p, i) => {
+    if (i) {
+      const q = points[i - 1], n = Math.ceil(Math.hypot(p[0] - q[0], p[1] - q[1]) / STEP);
+      for (let k = 1; k < n; k++) out.push(q.map((v, j) => v + (p[j] - v) * k / n));
+    }
+    out.push(p);
+  });
+  return out;
 }
 
 // 폴리라인 점마다 첫 점부터의 길이(m)
