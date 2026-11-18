@@ -227,15 +227,26 @@ The learner lines are amber until they are valid.
 ## Touch
 
 `overlayd` reads the touchscreen (`hyn_ts`, rotated clockwise 90° like
-MaixCDK). Only short taps count:
+MaixCDK). Two gestures count, both on one spot (the finger stays within 40 px
+of where it went down):
 
-| Tap on | Action |
+- a **tap**: let go within 0.6 s;
+- a **long press**: hold for 1 s. It acts at 1 s, before the finger lifts, and
+  that press is not also a tap.
+
+A press that moves further, or that lets go between 0.6 and 1 s, does nothing.
+
+| Gesture on | Action |
 | --- | --- |
-| the status pill | opens a network card for 10 s (SSID, IPv4, interface, signal, or `Not connected`, plus the USB link's address); a second tap closes it |
-| the left column (set speed and gear cards, chips, board state card) | shows or hides the diagnostics card, which is off when `overlayd` starts |
-| anywhere else | closes the network card |
+| tap on the status pill | opens a network card for 10 s (SSID, IPv4, interface, signal, or `Not connected`, plus the USB link's address); a second tap closes it |
+| long press on the status pill | turns recording on or off: flips `enabled` in `params/recording.json`, the file the web console's recording switch writes, and `recordd` follows it within 250 ms. The red `REC` in the pill appears or goes within about a second; if the storage reserve is low, `STORAGE FULL` shows instead ([Recording](recording.md)) |
+| tap on the left column (set speed and gear cards, chips, board state card) | shows or hides the diagnostics card, which is off when `overlayd` starts |
+| tap anywhere else | closes the network card |
+| long press anywhere else | nothing |
 
-Every tap is logged as `overlayd: tap x=... y=... <action>`.
+Every gesture is logged: `overlayd: tap x=... y=... <action>` and
+`overlayd: long press x=... y=... <action>` (`recording on`, `recording off`,
+`recording toggle failed: <reason>` or `none`).
 
 ## Backlight
 

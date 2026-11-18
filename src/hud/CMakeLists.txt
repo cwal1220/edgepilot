@@ -11,8 +11,9 @@ add_edgepilot_library(hud
   hud_policy.cc
   hud_renderer.cc
   hud_scene.cc
+  recording_switch.cc
 )
-target_link_libraries(hud PUBLIC hud_state)
+target_link_libraries(hud PUBLIC hud_state utils_json)
 
 # 알림음 합성. 호스트에서 alert_sound_preview가 같은 소리를 낸다.
 add_edgepilot_library(alert_tones alert_tones.cc)

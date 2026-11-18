@@ -2,7 +2,7 @@
 // 비디오 레이어 0(IVPS로 가운데 4:3을 640x480에), HUD는 렌더러가 640x480 화면 좌표로
 // 세로 패널 방향 그림판에 그려 그래픽 레이어 fb0로 옮기고, 합성은 하드웨어가 한다. 알림은
 // 화면 카드와 로그에 더해 보드 스피커로 알림음을 낸다(alert_sound.h). 터치스크린은 오른쪽
-// 위 상태 알약(네트워크 카드)과 왼쪽 열(진단 카드)을 켜고 끄는 데 쓴다.
+// 위 상태 알약(탭은 네트워크 카드, 길게 누르면 녹화 켜고 끄기)과 왼쪽 열(진단 카드)에 쓴다.
 
 #include "common/app_config.h"
 #include "common/build_version.h"
@@ -16,6 +16,7 @@
 #include "hud/hud_policy.h"
 #include "hud/hud_renderer.h"
 #include "hud/hud_state.h"
+#include "hud/recording_switch.h"
 #include "hud/system_monitor.h"
 #include "maixcam2/maix_display.h"
 #include "maixcam2/maix_touch.h"
@@ -27,6 +28,7 @@
 #include <iterator>
 #include <limits>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -80,7 +82,7 @@ public:
         if (!learner_state_.open(kLearnerStateTopic)) throw std::runtime_error("open learnerState ipc failed");
         if (!localization_state_.open(kLocalizationStateTopic))
             throw std::runtime_error("open localization ipc failed");
-        if (!touch_.open()) std::fprintf(stderr, "overlayd: no touchscreen; tap toggles disabled\n");
+        if (!touch_.open()) std::fprintf(stderr, "overlayd: no touchscreen; touch actions disabled\n");
 
         StatsWindow window(monotonic_now_ns());  // fps·CPU를 재는 1초 창(상태 줄 한 줄)
         while (!g_stop) {
@@ -208,12 +210,24 @@ private:
         localization_state_.poll();
     }
 
-    // 터치로 네트워크·진단 카드를 여닫고(HudTouch) 탭은 로그에 남긴다.
+    // 터치: 탭은 네트워크·진단 카드를 여닫고(HudTouch), 상태 알약을 길게 누르면 녹화를 켜고 끈다(recording.json을
+    // 뒤집으면 recordd가 따르고, 알약의 REC가 그 결과를 보인다). 둘 다 로그에 남긴다. 파일 쓰기는 누를 때 한 번이라
+    // 루프에서 바로 한다.
     void update_touch(uint64_t now_ns) {
-        int x = 0, y = 0;
-        if (touch_.poll_tap(&x, &y)) {
-            const char *action = hud_touch_.tap(x, y, kOutW, kOutH, now_ns, &hud_);
-            std::fprintf(stderr, "overlayd: tap x=%d y=%d %s\n", x, y, action);
+        const TouchGesture::Event event = touch_.poll();
+        if (event.kind == TouchGesture::Kind::Tap) {
+            const char *action = hud_touch_.tap(event.x, event.y, kOutW, kOutH, now_ns, &hud_);
+            std::fprintf(stderr, "overlayd: tap x=%d y=%d %s\n", event.x, event.y, action);
+        } else if (event.kind == TouchGesture::Kind::LongPress) {
+            std::string action = "none";
+            if (hud_touch_.long_press_toggles_recording(event.x, event.y, kOutW)) {
+                bool enabled = false;
+                std::string error;
+                action = toggle_recording_enabled(param_path("recording.json"), &enabled, &error)
+                             ? (enabled ? "recording on" : "recording off")
+                             : "recording toggle failed: " + error;
+            }
+            std::fprintf(stderr, "overlayd: long press x=%d y=%d %s\n", event.x, event.y, action.c_str());
         }
         hud_touch_.expire(now_ns, &hud_);
     }

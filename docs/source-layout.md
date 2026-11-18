@@ -573,9 +573,10 @@ Libraries `hud_state`, `hud` and `alert_tones`, and on the board
     large-angle pause), TPMS and camera calibration cards with the board state
     card above TPMS and the learned values card above calibration (white while
     control uses them), a recording/Wi-Fi status pill (and the network card a
-    tap opens), and chips that appear only when something needs attention
-    (panda, storage). The numbers no other card shows sit in a diagnostics card
-    that a tap on the left column shows or hides.
+    tap opens; a long press turns recording on or off), and chips that appear
+    only when something needs attention (panda, storage). The numbers no other
+    card shows sit in a diagnostics card that a tap on the left column shows or
+    hides.
   - **Which file draws what.** `hud_renderer` lays out the frame and the top
     and bottom-edge widgets, `hud_scene` draws the road scene (ribbons, lead
     chevron, lane position), `hud_cards` the cards, and `hud_draw.h` holds what
@@ -608,8 +609,15 @@ Libraries `hud_state`, `hud` and `alert_tones`, and on the board
     in a frame that already sounded) and holds the engage-reject toast for 3 s.
   - `TurnSignalClock` steps the blinker animation from the time the blinkers
     changed.
-  - `HudTouch` opens and closes the network and debug cards.
+  - `HudTouch` opens and closes the network and debug cards, and says when a
+    long press (on the status pill) turns recording on or off.
   - `smooth_lane_center_offset` filters the lane-position readout.
+- `touch_gesture.h`: `TouchGesture` tells a tap from a long press for one
+  finger (`maix_touch` feeds it the touchscreen reports), so
+  `gtest_hud_policy` checks the timing and the 40 px slop on the host.
+- `recording_switch.*`: flips `enabled` in `params/recording.json` for the long
+  press, changing only that value's text and writing it back atomically like
+  the web console.
 - `alert_tones.*`, `alert_sound.*`: the alert sounds.
   - `alert_tones` synthesises them: overlapping bell-like notes with soft
     attacks and decaying overtones. It is portable, so `alert_sound_preview`
@@ -714,8 +722,9 @@ only in the board build, against `deps/ax630` from
     not use it.
   - It also sets the backlight (`set_backlight`), which only `overlayd` does.
 - `maix_touch.*`: the touchscreen (`hyn_ts`, multi-touch type B) read without
-  blocking; reports short taps in screen coordinates, rotated clockwise 90° as
-  MaixCDK's `maix_touchscreen_maixcam2.hpp` does.
+  blocking; reports taps and long presses (`TouchGesture`) in screen
+  coordinates, rotated clockwise 90° as MaixCDK's
+  `maix_touchscreen_maixcam2.hpp` does.
 - `maix_cmm.*`: physically contiguous CMM blocks shared across processes
   (allocate in one, uncached; map by physical address in another, cached for
   CPU reads, which invalidate the range first).

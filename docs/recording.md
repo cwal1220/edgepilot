@@ -49,8 +49,10 @@ replay tools, `lane_benchmark.py`). `gtest_recording` covers
 
 ## Starting and stopping a route
 
-`params/recording.json` `enabled` starts and stops a route. `recordd` looks at
-the file every 250 ms and acts when it changes. A route needs a storage
+`params/recording.json` `enabled` starts and stops a route. The web console's
+recording switch sets it, and so does a long press on the HUD's status pill
+([HUD](hud.md#touch)). `recordd` looks at the file every 250 ms and acts when
+it changes. A route needs a storage
 reserve: at least 5 GiB and 10% of the SD card free, and at most 160 MiB
 waiting in the tmpfs staging area. More than that means the card is not
 keeping up (at 8 Mbit/s the staging peaks near 106 MiB while a closed segment

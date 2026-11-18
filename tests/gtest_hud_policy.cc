@@ -1,12 +1,21 @@
 // hud_policy: overlayd가 그리기 밖에서 정하는 것. 제어 이벤트 카운터 → 알림(첫 스냅샷은 기준값,
 // 우선순위, 한 프레임 하나, controlsd 재시작), 프레임마다 알림음 하나(해제 예고는 미루고 불가용 천이는
-// 넘긴다, 결합 거부 토스트 3초), 깜빡이 단계, 터치로 여닫는 카드, 차선 위치 평활.
+// 넘긴다, 결합 거부 토스트 3초), 깜빡이 단계, 터치로 여닫는 카드, 차선 위치 평활. 터치 몸짓(탭과 길게 누르기,
+// touch_gesture.h)과 길게 눌러 녹화 켜고 끄기(recording_switch: recording.json의 enabled만 뒤집는다)도 본다.
 #include "hud/hud_policy.h"
+#include "hud/recording_switch.h"
+#include "hud/touch_gesture.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
+
 #include <cmath>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <limits>
+#include <string>
 
 namespace {
 
@@ -219,6 +228,119 @@ TEST(HudTouch, CardsToggleAndTheNetworkCardTimesOut) {
     ASSERT_TRUE(hud.debug_card) << "진단 카드는 시간으로 닫지 않는다";
     touch.tap(100, 200, kW, kH, 61000 * kMs, &hud);
     ASSERT_FALSE(hud.debug_card);
+}
+
+TEST(HudTouch, LongPressOnTheStatusPillTogglesRecording) {
+    constexpr int kW = 640;
+    HudTouch touch;
+    ASSERT_TRUE(touch.long_press_toggles_recording(600, 20, kW)) << "오른쪽 위 상태 알약";
+    ASSERT_FALSE(touch.long_press_toggles_recording(400, 300, kW)) << "그 밖은 아무것도 하지 않는다";
+    ASSERT_FALSE(touch.long_press_toggles_recording(100, 200, kW)) << "왼쪽 열(진단 카드)도 길게는 아무것도 아니다";
+}
+
+constexpr uint64_t kUs = 1000ULL;  // 밀리초 → 마이크로초
+
+TEST(TouchGesture, AShortStillPressIsATapOnRelease) {
+    TouchGesture g;
+    ASSERT_EQ(g.report(true, 600, 20, 0).kind, TouchGesture::Kind::None);
+    ASSERT_EQ(g.report(true, 610, 25, 100 * kUs).kind, TouchGesture::Kind::None) << "40 px 안의 흔들림";
+    ASSERT_EQ(g.poll(300 * kUs).kind, TouchGesture::Kind::None);
+    const TouchGesture::Event tap = g.report(false, 612, 24, 300 * kUs);
+    ASSERT_EQ(tap.kind, TouchGesture::Kind::Tap);
+    ASSERT_EQ(tap.x, 600) << "누른 자리로 알린다";
+    ASSERT_EQ(tap.y, 20);
+    ASSERT_EQ(g.poll(5000 * kUs).kind, TouchGesture::Kind::None) << "뗀 뒤에는 길게 누르기가 없다";
+}
+
+TEST(TouchGesture, HoldingStillFiresOneLongPressBeforeReleaseAndNoTap) {
+    TouchGesture g;
+    g.report(true, 600, 20, 0);
+    ASSERT_EQ(g.poll(999 * kUs).kind, TouchGesture::Kind::None);
+    const TouchGesture::Event press = g.poll(1000 * kUs);
+    ASSERT_EQ(press.kind, TouchGesture::Kind::LongPress) << "1초가 찬 첫 확인, 손을 떼기 전";
+    ASSERT_EQ(press.x, 600);
+    ASSERT_EQ(g.poll(1500 * kUs).kind, TouchGesture::Kind::None) << "한 누름에 한 번";
+    g.report(true, 605, 22, 1800 * kUs);
+    ASSERT_EQ(g.report(false, 605, 22, 2000 * kUs).kind, TouchGesture::Kind::None) << "떼어도 탭이 아니다";
+    g.report(true, 600, 20, 3000 * kUs);
+    ASSERT_EQ(g.poll(4000 * kUs).kind, TouchGesture::Kind::LongPress) << "다음 누름은 다시 센다";
+}
+
+TEST(TouchGesture, MovingOrReleasingBetweenTheLimitsIsNothing) {
+    TouchGesture g;
+    g.report(true, 600, 20, 0);
+    g.report(true, 600, 70, 200 * kUs);  // 50 px 아래로 쓸었다
+    g.report(true, 600, 20, 300 * kUs);  // 돌아와도
+    ASSERT_EQ(g.poll(1500 * kUs).kind, TouchGesture::Kind::None) << "움직인 누름은 길게 누르기가 아니다";
+    ASSERT_EQ(g.report(false, 600, 20, 1600 * kUs).kind, TouchGesture::Kind::None);
+
+    g.report(true, 600, 20, 2000 * kUs);
+    g.report(true, 600, 20, 2050 * kUs);  // 장치는 누르는 동안 보고를 계속 낸다
+    ASSERT_EQ(g.poll(2700 * kUs).kind, TouchGesture::Kind::None);
+    ASSERT_EQ(g.report(false, 600, 20, 2800 * kUs).kind, TouchGesture::Kind::None) << "0.6~1초에 뗀 누름";
+
+    g.report(true, 600, 20, 4000 * kUs);
+    g.drop();  // SYN_DROPPED
+    ASSERT_EQ(g.poll(6000 * kUs).kind, TouchGesture::Kind::None) << "잃은 이벤트가 있으면 그 누름은 버린다";
+    ASSERT_EQ(g.report(false, 600, 20, 6100 * kUs).kind, TouchGesture::Kind::None);
+}
+
+struct TempRecordingFile {
+    std::filesystem::path path;
+    TempRecordingFile() {
+        path = std::filesystem::temp_directory_path() /
+               ("edgepilot_recording_" + std::to_string(getpid()) + "_" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".json");
+    }
+    ~TempRecordingFile() {
+        std::filesystem::remove(path);
+        std::filesystem::remove(path.string() + ".tmp");
+    }
+    void write(const std::string &text) const { std::ofstream(path) << text; }
+    std::string read() const {
+        std::ifstream file(path);
+        return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+};
+
+TEST(RecordingSwitch, FlipsOnlyEnabledAndKeepsTheConsoleLayout) {
+    TempRecordingFile file;
+    // 웹 콘솔이 쓰는 모양(json.dumps indent=2 + 줄바꿈)
+    const std::string off = "{\n  \"enabled\": false,\n  \"bitrate_bps\": 8000000\n}\n";
+    const std::string on = "{\n  \"enabled\": true,\n  \"bitrate_bps\": 8000000\n}\n";
+    file.write(off);
+    bool enabled = false;
+    std::string error;
+    ASSERT_TRUE(toggle_recording_enabled(file.path.string(), &enabled, &error)) << error;
+    ASSERT_TRUE(enabled);
+    ASSERT_EQ(file.read(), on);
+    ASSERT_TRUE(toggle_recording_enabled(file.path.string(), &enabled, &error)) << error;
+    ASSERT_FALSE(enabled);
+    ASSERT_EQ(file.read(), off) << "두 번 뒤집으면 처음 글 그대로";
+
+    file.write("{\"bitrate_bps\": 4000000, \"enabled\" :true}");
+    ASSERT_TRUE(toggle_recording_enabled(file.path.string(), &enabled, &error)) << error;
+    ASSERT_FALSE(enabled);
+    ASSERT_EQ(file.read(), "{\"bitrate_bps\": 4000000, \"enabled\" :false}") << "다른 키, 순서, 공백은 그대로";
+}
+
+TEST(RecordingSwitch, LeavesABadOrMissingFileAlone) {
+    TempRecordingFile file;
+    bool enabled = true;
+    std::string error;
+    ASSERT_FALSE(toggle_recording_enabled(file.path.string(), &enabled, &error)) << "파일이 없다";
+    ASSERT_FALSE(error.empty());
+    ASSERT_FALSE(std::filesystem::exists(file.path)) << "없는 파일을 만들지 않는다";
+
+    for (const std::string bad : {"{\"enabled\": 1, \"bitrate_bps\": 8000000}", "{\"bitrate_bps\": 8000000}",
+                                  "[true]", "{\"enabled\": tru"}) {
+        file.write(bad);
+        error.clear();
+        ASSERT_FALSE(toggle_recording_enabled(file.path.string(), &enabled, &error)) << bad;
+        ASSERT_FALSE(error.empty()) << bad;
+        ASSERT_EQ(file.read(), bad) << "고치지 않는다";
+    }
+    ASSERT_TRUE(enabled) << "실패하면 enabled를 건드리지 않는다";
 }
 
 TEST(LaneCenterSmoothing, FollowsAtATenthPerFrameAndRestartsAfterALoss) {

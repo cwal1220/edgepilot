@@ -127,6 +127,8 @@ const char *HudTouch::tap(int x, int y, int width, int height, uint64_t now_ns, 
     return "close";
 }
 
+bool HudTouch::long_press_toggles_recording(int x, int y, int width) const { return hud_status_touch(x, y, width); }
+
 void HudTouch::expire(uint64_t now_ns, HudState *hud) const {
     if (now_ns >= network_card_until_ns_) hud->network_card = false;
 }

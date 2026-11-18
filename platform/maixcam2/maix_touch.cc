@@ -8,15 +8,11 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <string>
 
 namespace {
-
-constexpr uint64_t kTapMaxUs = 600000;  // 이보다 오래 누르면 탭이 아니다
-constexpr int kTapSlop = 40;            // 누른 자리에서 이만큼(화면 px) 넘게 움직이면 탭이 아니다
 
 // /sys/class/input/eventN/device/name이 hyn_ts인 장치(보드에서는 event1).
 std::string find_device() {
@@ -44,17 +40,17 @@ bool MaixTouch::open() {
     if (device.empty()) return false;
     fd_ = ::open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd_ < 0) return false;
-    int clock = CLOCK_MONOTONIC;  // 누른 시간을 시계 조정과 무관하게 잰다
-    ioctl(fd_, EVIOCSCLOCKID, &clock);
+    int clock = CLOCK_MONOTONIC;  // 누른 시간을 시계 조정과 무관하게 잰다. 못 바꾸면 이벤트 시각은 CLOCK_REALTIME
+    if (ioctl(fd_, EVIOCSCLOCKID, &clock) == 0) clock_ = CLOCK_MONOTONIC;
     input_absinfo info{};
     raw_x_max_ =
         ioctl(fd_, EVIOCGABS(ABS_MT_POSITION_X), &info) == 0 && info.maximum > 0 ? info.maximum : MaixDisplay::kHeight;
     return true;
 }
 
-bool MaixTouch::poll_tap(int *x, int *y) {
-    if (fd_ < 0) return false;
-    bool tapped = false;
+TouchGesture::Event MaixTouch::poll() {
+    if (fd_ < 0) return {};
+    TouchGesture::Event result;
     input_event events[16];
     ssize_t bytes = 0;
     while ((bytes = ::read(fd_, events, sizeof(events))) > 0) {
@@ -71,25 +67,20 @@ bool MaixTouch::poll_tap(int *x, int *y) {
             } else if (e.type == EV_KEY && e.code == BTN_TOUCH) {
                 touching_ = e.value != 0;
             } else if (e.type == EV_SYN && e.code == SYN_DROPPED) {
-                touching_ = pressed_ = false;  // 잃은 이벤트가 있으면 이번 누름은 버린다
-            } else if (e.type == EV_SYN && e.code == SYN_REPORT && touching_ != pressed_) {
-                pressed_ = touching_;
+                touching_ = false;  // 잃은 이벤트가 있으면 이번 누름은 버린다
+                gesture_.drop();
+            } else if (e.type == EV_SYN && e.code == SYN_REPORT) {
                 int sx = 0, sy = 0;
                 to_screen(&sx, &sy);
-                if (pressed_) {
-                    down_x_ = sx;
-                    down_y_ = sy;
-                    down_us_ = event_us(e);
-                } else if (event_us(e) - down_us_ <= kTapMaxUs && std::abs(sx - down_x_) <= kTapSlop &&
-                           std::abs(sy - down_y_) <= kTapSlop) {
-                    *x = down_x_;
-                    *y = down_y_;
-                    tapped = true;
-                }
+                const TouchGesture::Event event = gesture_.report(touching_, sx, sy, event_us(e));
+                if (event.kind != TouchGesture::Kind::None) result = event;
             }
         }
     }
-    return tapped;
+    if (result.kind != TouchGesture::Kind::None) return result;
+    timespec now{};
+    clock_gettime(clock_, &now);
+    return gesture_.poll(static_cast<uint64_t>(now.tv_sec) * 1'000'000ULL + static_cast<uint64_t>(now.tv_nsec) / 1000);
 }
 
 // MaixCDK와 같은 시계 방향 90°: 패널 y → 화면 x, 패널 x → 화면 아래에서 위로.

@@ -1,7 +1,7 @@
 #pragma once
 
-// overlayd가 그리기 밖에서 정하는 것: 프레임마다 울릴 알림음, 터치로 여닫는 카드, 깜빡이 애니메이션
-// 단계, 길 위 차선 안 위치 눈금의 평활. 화면·스피커·터치 장치 없이 돌아 호스트에서 시험한다.
+// overlayd가 그리기 밖에서 정하는 것: 프레임마다 울릴 알림음, 터치로 여닫는 카드와 녹화 켜고 끄기, 깜빡이
+// 애니메이션 단계, 길 위 차선 안 위치 눈금의 평활. 화면·스피커·터치 장치 없이 돌아 호스트에서 시험한다.
 
 #include "common/ipc_messages.h"
 #include "hud/alert_tones.h"
@@ -77,11 +77,14 @@ private:
 
 // 터치: 상태 알약은 네트워크 카드를, 왼쪽 열은 진단 카드를 켜고 끈다. 그 밖을 누르면 열린 네트워크
 // 카드를 닫는다. 네트워크 카드는 10초 뒤 저절로 닫힌다. 진단 카드는 overlayd가 다시 시작하면 꺼진다.
+// 상태 알약을 길게 누르면 녹화를 켜고 끈다(overlayd가 recording_switch로 recording.json을 뒤집는다).
 // width·height는 화면 크기.
 class HudTouch {
 public:
     // 탭 하나를 반영하고 로그에 남길 동작 이름을 돌려준다.
     const char *tap(int x, int y, int width, int height, uint64_t now_ns, HudState *hud);
+    // 길게 누르기 하나가 녹화를 켜고 끄는지(상태 알약 위). 그 밖의 길게 누르기는 아무것도 하지 않는다.
+    bool long_press_toggles_recording(int x, int y, int width) const;
     // 시간이 다 된 네트워크 카드를 닫는다.
     void expire(uint64_t now_ns, HudState *hud) const;
 
