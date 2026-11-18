@@ -601,5 +601,18 @@
   "toggle.auto": "자동 학습",
   "toggle.manual": "수동",
   "toggle.locationd": "locationd",
-  "toggle.esp12": "ESP12"
+  "toggle.esp12": "ESP12",
+  "unused.nn_off": "지금은 쓰지 않음: 학습한 토크 모델이 꺼져 있습니다.",
+  "param.steering.nn_curve_gain_high_speed_scale.label": "고속 곡선 이득",
+  "param.steering.nn_curve_gain_high_speed_scale.description": "학습한 토크 모델의 곡선 이득(모델 파일의 curve_gain, 곡선이 조여드는 동안 건다)을 고속에서 이 배율로 줄입니다: 80 km/h까지 그대로, 100 km/h부터 이 배율. 주행 셋의 폐루프 재생에서 이 이득은 60~80 km/h에는 필요했지만 100 km/h 위 곡선에서는 조향각을 요구보다 1~3 % 더 내게 했습니다.",
+  "param.steering.nn_curve_gain_high_speed_scale.increase": "고속 곡선 진입 토크가 커집니다. 차가 요구보다 더 돌아 안쪽에 붙을 수 있습니다.",
+  "param.steering.nn_curve_gain_high_speed_scale.decrease": "고속 곡선 진입 토크가 작아집니다. 1이면 예전과 같습니다.",
+  "param.steering.bank_yaw_bias_correction.label": "편경사의 ESP12 요레이트 바이어스 보정",
+  "param.steering.bank_yaw_bias_correction.description": "주행 중 locationd 요레이트와 비교해 배운 ESP12 요레이트 바이어스를 편경사 추정(횡가속 + 요레이트 x 속도)에서 뺍니다. 편경사는 선형 피드포워드의 편경사 보정과 학습한 토크 모델의 롤 입력이 씁니다. 2026-11 주행에서 ESP12는 차보다 오른쪽으로 3.5~6.3 mrad/s 더 돌았고, 100 km/h에서 1도 편경사처럼 보였습니다.",
+  "param.steering.bank_yaw_bias_correction.increase": "편경사 추정에 보정한 요레이트를 씁니다.",
+  "param.steering.bank_yaw_bias_correction.decrease": "예전처럼 ESP12 원시 요레이트를 씁니다.",
+  "param.steering.model_path_read_lead_s.label": "모델 경로 읽기 앞섬",
+  "param.steering.model_path_read_lead_s.description": "모델 경로(Laneless 모드, Lane 모드에서 모델 경로를 따를 때)를 경로 지연 + plan 나이보다 이만큼 더 앞에서 읽습니다. openpilot 0.9는 0.2초를 더했고, 0이면 예전 edgepilot과 같습니다. 차선 MPC 경로에는 쓰지 않습니다. 실차 지연 0.5초 시뮬레이션에서 0.2초 앞섬은 학생 모델의 몇 초 주기 좌우 흔들림을 30~50 % 줄였고, 계속 미는 힘에 버티는 정도는 그대로였습니다.",
+  "param.steering.model_path_read_lead_s.increase": "모델이 계획한 대로 더 일찍 돕니다: 느린 흔들림이 줄지만 곡선에 더 일찍 들어갈 수 있습니다.",
+  "param.steering.model_path_read_lead_s.decrease": "예전처럼 경로 지연 가까이에서 읽습니다. 느린 흔들림이 돌아올 수 있습니다."
 }

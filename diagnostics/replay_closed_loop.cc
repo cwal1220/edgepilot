@@ -35,6 +35,7 @@
 #include "controls/control_params.h"
 #include "controls/lateral_controller.h"
 #include "controls/lateral_torque.h"
+#include "learners/localizer_inputs.h"
 #include "localization/lateral_lag.h"
 #include "planning/lateral_planner.h"
 #include "recorded_vehicle_can.h"
@@ -372,6 +373,7 @@ int main(int argc, char **argv) {
     VehicleCanState recorded_vehicle{};
     LocalizationState localization{};
     bool have_localization = false;
+    double localization_read_t = -1000.0;  // 녹화 시각으로 그 locationd 표본을 읽은 때
 
     Exogenous ex;
     ModelState ms_sim{};
@@ -434,6 +436,12 @@ int main(int argc, char **argv) {
             vehicle.yaw_rate_rad_s = recorded_vehicle.yaw_rate_rad_s - path_deviation * v_mps;
             vehicle.lat_accel_mps2 = recorded_vehicle.lat_accel_mps2 + path_deviation * v_mps * v_mps;
             vehicle.long_accel_mps2 = recorded_vehicle.long_accel_mps2;
+        }
+        // locationd 요레이트(ESP12 바이어스 학습용): ESP12처럼 시뮬 차가 더 도는 만큼을 더한다(ESP12 관례 왼쪽 +)
+        if (have_localization) {
+            float imu_yaw = 0.0f;
+            const bool imu_ok = imu_yaw_left_from(localization, sim_t - localization_read_t, &imu_yaw);
+            controller.set_imu_yaw_rate(imu_yaw - path_deviation * v_mps, imu_ok, sim_t);
         }
         // lagd 지연: controlsd처럼 확정인 추정을 쓰고, locationd가 멈추면 마지막 값을 쓴다(ControlsTick::on_localization)
         controller.set_live_delay(
@@ -585,7 +593,10 @@ int main(int argc, char **argv) {
         }
         // controlsd와 같은 거름과 파서. 시뮬 차는 이 상태에서 ESP12만 가져간다.
         if (type == RecordType::CanRx) apply_recorded_can(buf.data(), buf.size(), rec_t, &recorded_vehicle);
-        if (type == RecordType::Localization && read_record(buf, &localization)) have_localization = true;
+        if (type == RecordType::Localization && read_record(buf, &localization)) {
+            have_localization = true;
+            localization_read_t = rec_t;
+        }
         ControlState cs;
         if (type == RecordType::ControlState && read_record(buf, &cs)) {
             ex.v_kph = cs.ego_speed_kph > 0.0f ? cs.ego_speed_kph : cs.cluster_speed_kph;

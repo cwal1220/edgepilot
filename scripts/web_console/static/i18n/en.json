@@ -622,5 +622,18 @@
   "toggle.auto": "Auto-learn",
   "toggle.manual": "Manual",
   "toggle.locationd": "locationd",
-  "toggle.esp12": "ESP12"
+  "toggle.esp12": "ESP12",
+  "unused.nn_off": "Not used now: the learned torque model is off.",
+  "param.steering.nn_curve_gain_high_speed_scale.label": "Curve gain at highway speed",
+  "param.steering.nn_curve_gain_high_speed_scale.description": "Scales the learned torque model's curve gain (its file's curve_gain, applied while a curve tightens) at high speed: unchanged up to 80 km/h, this factor from 100 km/h. In closed-loop replay of three drives the gain was needed at 60-80 km/h but made the steering angle 1-3 % larger than asked in curves above 100 km/h.",
+  "param.steering.nn_curve_gain_high_speed_scale.increase": "More torque on highway curve entries; the car may turn more than asked and sit on the inside.",
+  "param.steering.nn_curve_gain_high_speed_scale.decrease": "Less torque on highway curve entries; 1 keeps the earlier behaviour.",
+  "param.steering.bank_yaw_bias_correction.label": "ESP12 yaw bias correction for the bank",
+  "param.steering.bank_yaw_bias_correction.description": "Removes the ESP12 yaw-rate bias, learned while driving against locationd's yaw rate, from the road-bank estimate (lateral acceleration + yaw rate x speed). The bank goes into the linear feed-forward's bank compensation and into the learned torque model's roll input. On the 2026-11 drives ESP12 read 3.5-6.3 mrad/s more right turn than the car, which looked like a 1 degree bank at 100 km/h.",
+  "param.steering.bank_yaw_bias_correction.increase": "The bank estimate uses the corrected yaw rate.",
+  "param.steering.bank_yaw_bias_correction.decrease": "The raw ESP12 yaw rate is used, as before.",
+  "param.steering.model_path_read_lead_s.label": "Model path read lead",
+  "param.steering.model_path_read_lead_s.description": "Reads the model's own path (Laneless mode, and Lane mode where it follows the model path) this much further ahead than the path delay plus the plan's age. openpilot 0.9 added 0.2 s; 0 keeps edgepilot's earlier read. The lane MPC path is not affected. In simulation at the car's 0.5 s delay, a 0.2 s lead cut the students' slow side-to-side sway by 30-50 % without weakening how they hold against a steady push.",
+  "param.steering.model_path_read_lead_s.increase": "The car turns into what the model plans earlier: less slow sway, but it may cut curves earlier.",
+  "param.steering.model_path_read_lead_s.decrease": "Reads closer to the path delay, as before; slower sway may return."
 }

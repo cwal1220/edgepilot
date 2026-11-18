@@ -110,8 +110,11 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
                                                          also=NN_LOADED),)),
         "torque_straight_kp_scale": number("torque_controller", "x", 0.05, 0.3, 1, unused=(STEERING_OFF,)),
         "torque_compare_delay": number("torque_controller", "s", 0.01, 0, 1, unused=(STEERING_OFF,)),
+        "model_path_read_lead_s": number("path_mode", "s", 0.01, 0, 0.5, unused=(STEERING_OFF,)),
         "nn_feedforward": toggle("torque_controller", unused=(
             STEERING_OFF, when("lateral_nn_loaded", False, "nn_not_loaded", group="runtime"))),
+        "nn_curve_gain_high_speed_scale": number("torque_controller", "x", 0.05, 0, 1, unused=(
+            STEERING_OFF, when("nn_feedforward", False, "nn_off"))),
         "torque_friction": number("torque_model", "torque", 0.005, 0, 0.3, tab="vehicle", learned=True,
                                   caution="torqued_restart",
                                   role=(when("nn_feedforward", True, "nn_feedforward_friction", also=NN_LOADED),)),
@@ -122,6 +125,7 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
         "avoid_lkas_fault_hold_angle_deg": number("lkas_fault", "°", 1, 0, 84, unused=(
             STEERING_OFF, when("avoid_lkas_fault_enabled", False, "lkas_fault_off"))),
         "live_bank_compensation": toggle("vehicle_model", tab="vehicle", learned=True, unused=(STEERING_OFF, NN_ON)),
+        "bank_yaw_bias_correction": toggle("torque_controller", unused=(STEERING_OFF,)),
         "use_live_vehicle_params": toggle("vehicle_model", tab="vehicle", labels=LEARNING),
         "use_live_torque_params": toggle("torque_model", tab="vehicle", labels=LEARNING),
         "use_live_delay": toggle("steer_delay", tab="vehicle", labels=LEARNING),

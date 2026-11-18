@@ -136,8 +136,14 @@ LateralControlOutput LateralController::update(const LateralPath &path, const La
     const bool steering = result.active && !result.large_angle_hold && !result.steer_fault && !standstill;
     result.lat_active = steering;
     const bool yaw_rate_valid = result.esp12_fresh && vehicle_state.yaw_rate_valid;
-    road_bank_.update(kDtCtrlF, speed_mps, vehicle_state.lat_accel_mps2, vehicle_state.lat_accel_valid,
-                      vehicle_state.yaw_rate_rad_s, yaw_rate_valid);
+    // ESP12 바이어스는 스위치와 상관없이 배운다(기록·비교용). 빼는 것은 스위치가 켜졌을 때만이다.
+    const bool imu_fresh = imu_yaw_valid_ && now_s - imu_yaw_time_s_ <= 0.5;
+    esp_yaw_bias_.update(kDtCtrlF, speed_mps, vehicle_state.yaw_rate_rad_s, yaw_rate_valid, imu_yaw_rate_, imu_fresh);
+    const float bank_yaw_rate = config_.steering_params.bank_yaw_bias_correction
+                                    ? vehicle_state.yaw_rate_rad_s - esp_yaw_bias_.bias()
+                                    : vehicle_state.yaw_rate_rad_s;
+    road_bank_.update(kDtCtrlF, speed_mps, vehicle_state.lat_accel_mps2, vehicle_state.lat_accel_valid, bank_yaw_rate,
+                      yaw_rate_valid);
 
     const CurvatureBounds hold = hold_angle_bounds(speed_mps, steering, steering_pressed, live);
     update_target_blend(target);
@@ -330,15 +336,19 @@ float LateralController::requested_curvature(const LateralTarget &target, const 
                                              const LiveLateralParams &live, const CurvatureBounds &hold,
                                              float *plan_curvature) {
     const SteeringParams &control_params = config_.steering_params;
+    // 모델 경로(plan 방향각을 그대로 쓰는 목표)만 model_path_read_lead_s만큼 더 앞에서 읽는다. 차선 MPC 경로는 그대로다.
+    const auto read_delay = [&](const LateralTarget &t) {
+        return plan_delay_s() + (t.laneless_mode ? control_params.model_path_read_lead_s : 0.0f);
+    };
     float requested_curvature =
-        steering ? lag_adjusted_curvature(target, speed_mps, plan_age_s, plan_delay_s())
+        steering ? lag_adjusted_curvature(target, speed_mps, plan_age_s, read_delay(target))
                  : torque_controller_.estimate_actual_curvature(speed_mps, vehicle_state.steering_angle_deg,
                                                                 VehicleModel::make(control_params, live),
                                                                 vehicle_state.yaw_rate_rad_s, yaw_rate_valid);
     const TargetBlend &blend = target_blend_;
     if (steering && blend.weight < 1.0f) {
-        const float previous =
-            lag_adjusted_curvature(blend.previous, speed_mps, plan_age_s + blend.previous_extra_age_s, plan_delay_s());
+        const float previous = lag_adjusted_curvature(blend.previous, speed_mps,
+                                                      plan_age_s + blend.previous_extra_age_s, read_delay(blend.previous));
         if (std::isfinite(previous)) requested_curvature = previous + blend.weight * (requested_curvature - previous);
     }
     *plan_curvature = requested_curvature;

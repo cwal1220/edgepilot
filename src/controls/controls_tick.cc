@@ -356,6 +356,9 @@ void ControlsTick::on_localization(const LocalizationRead &localization, double 
         const bool use =
             localizer_sample_from(state, steering().use_locationd_learner_inputs, age_s, now_s - age_s, &sample);
         learners_.set_localizer(use, sample);
+        float imu_yaw = 0.0f;
+        const bool imu_ok = imu_yaw_left_from(state, age_s, &imu_yaw);
+        controller_.set_imu_yaw_rate(imu_yaw, imu_ok, now_s);
     }
 }
 

@@ -34,6 +34,11 @@ constexpr float kNnCurveFullLatAccel = 0.6f;
 // 여섯)에서 모델의 곡선 부족은 40~80 km/h에 있었고 20~40 km/h 진입은 선형과 같았다.
 constexpr float kNnCurveGainStartSpeedMps = 30.0f / 3.6f;
 constexpr float kNnCurveGainFullSpeedMps = 50.0f / 3.6f;
+// 고속에서 곡선 이득을 nn_curve_gain_high_speed_scale배로 줄이는 구간: 80 km/h까지 그대로, 100 km/h부터 그 배율.
+// 2026-11-15 폐루프 재생(11-15·11-14·11-08 주행 셋, Lane 모드, 1 m/s² 넘는 곡선의 조향각 곡률/요구)에서 이득이 60~80 km/h
+// 0.99(빼면 0.97)였지만 100 km/h 위 1.03/1.01(우/좌, 빼면 1.00/1.00)이었다. 실차 11-15 Laneless 100~130 km/h 우곡선은 1.066.
+constexpr float kNnCurveGainFadeStartSpeedMps = 80.0f / 3.6f;
+constexpr float kNnCurveGainFadeEndSpeedMps = 100.0f / 3.6f;
 // 곡선 이득은 계획의 |목표 횡가속|이 커지는 동안(곡선 진입)만 건다(NnFeedforward::curve_rise): 0이면 없고 0.3 m/s³부터
 // 전부. 유지·탈출에도 걸면 80 km/h 위 정상 곡선에서 조향각이 요구보다 7~9 % 더 나가 차가 안쪽으로 붙었다(2026-10-18 주행
 // 둘, 횡가속 1 m/s² 넘는 유지 구간의 각도/요구 비 좌 1.068, 우 1.093). 폐루프 재생(2026-10-22)에서 우곡선 유지의 안쪽
@@ -167,9 +172,13 @@ int TorqueController::update(const Input &in, const SteeringParams &params, cons
             interp(std::fabs(desired_lat_accel), {kNnCurveStartLatAccel, kNnCurveFullLatAccel}, {0.0f, 1.0f});
         const float curve = nn.curve_friction ? ramp : 0.0f;
         const float rising = interp(nn.curve_rise, {0.0f, kNnCurveGainFullRise}, {0.0f, 1.0f});
+        const float high_speed_scale = clamp_float(params.nn_curve_gain_high_speed_scale, 0.0f, 1.0f);
         const float gain =
             1.0f + nn.curve_gain * rising * ramp *
-                       interp(speed_mps, {kNnCurveGainStartSpeedMps, kNnCurveGainFullSpeedMps}, {0.0f, 1.0f});
+                       interp(speed_mps,
+                              {kNnCurveGainStartSpeedMps, kNnCurveGainFullSpeedMps, kNnCurveGainFadeStartSpeedMps,
+                               kNnCurveGainFadeEndSpeedMps},
+                              {0.0f, 1.0f, 1.0f, high_speed_scale});
         feedforward += w * (gain * nn.torque * tuning.lat_accel_factor + curve * friction_term - feedforward);
         nn_feedforward_used_ = true;
     }

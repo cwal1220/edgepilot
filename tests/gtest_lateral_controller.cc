@@ -933,6 +933,23 @@ TEST(RoadBankEstimator, HoldsInCurvesAndFadesWhenStale) {
     }
 }
 
+// ESP12 요레이트 바이어스는 직선 주행 중 locationd 요레이트와의 차이로 배우고(시정수 20초), 커브·저속·locationd 무효일
+// 때는 멈춰 유지하며, ±0.02 rad/s로 자른다.
+TEST(EspYawBiasEstimator, LearnsOnStraightsHoldsOtherwise) {
+    EspYawBiasEstimator bias;
+    const float dt = 0.01f;
+    for (int i = 0; i < 100 * 100; ++i) bias.update(dt, 25.0f, -0.006f + 0.001f, true, 0.001f, true);
+    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "직선 100초면 수렴";
+    for (int i = 0; i < 30 * 100; ++i) bias.update(dt, 25.0f, 0.05f, true, 0.04f, true);  // |0.04·25| = 1 m/s²: 커브
+    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "커브에서는 유지";
+    for (int i = 0; i < 30 * 100; ++i) bias.update(dt, 5.0f, 0.0f, true, 0.0f, true);
+    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "저속에서는 유지";
+    for (int i = 0; i < 30 * 100; ++i) bias.update(dt, 25.0f, 0.0f, true, 0.0f, false);
+    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "locationd가 무효면 유지";
+    for (int i = 0; i < 300 * 100; ++i) bias.update(dt, 25.0f, 0.012f, true, -0.012f, true);  // |0.012·25| < 0.4
+    EXPECT_NEAR(bias.bias(), EspYawBiasEstimator::kMaxBias, 1e-6f) << "한계로 자른다";
+}
+
 // 스스로 가는 최대 조향각은 고장 각도 아래에서 멈춰야 뜻이 있다: 파일이 더 큰 값을 줘도 그 아래로 자른다.
 TEST(LateralController, HoldAngleStaysBelowTheFaultAngle) {
     const std::string path = "/tmp/gtest_lateral_controller_hold_angle_" + std::to_string(getpid()) + ".json";
@@ -981,6 +998,34 @@ TEST(LateralController, NewPlanIsBlendedInOverFiveTicks) {
         const float weight = switched ? std::min(1.0f, static_cast<float>(frame - 99) / 5.0f) : 0.0f;
         EXPECT_NEAR(result.desired_curvature, from + weight * (to - from), 1e-6f) << "frame " << frame;
     }
+}
+
+// 모델 경로 읽기 앞섬은 모델 경로 목표(laneless_mode)에만 더한다: 차선 MPC 목표의 목표 곡률은 앞섬과 상관없이 같고, 모델 경로
+// 목표는 경로 지연 + 앞섬에서 읽은 값(lag_adjusted_curvature)이 된다.
+TEST(LateralController, ModelPathReadLeadOnlyForModelPath) {
+    LateralTarget target = replay_target();
+    for (int i = 0; i < kLateralControlN; ++i) {  // 곡률이 커지는 plan: ψ = 0.002·t²
+        target.psis[i] = 0.002f * model_t_idx(i) * model_t_idx(i);
+        target.curvatures[i] = 0.0f;
+    }
+    const auto run = [&](bool model_path, float lead) {
+        LateralTarget t = target;
+        t.laneless_mode = model_path;
+        LateralControllerConfig config;
+        config.force_engaged = true;
+        config.steering_params.model_path_read_lead_s = lead;
+        LateralController controller(config);
+        float desired = 0.0f;
+        double now = 1.0;
+        for (int frame = 0; frame < 300; ++frame, now += 0.01)
+            desired = controller.update(replay_path(), t, ready_vehicle(now), now, frame).desired_curvature;
+        return desired;
+    };
+    EXPECT_FLOAT_EQ(run(false, 0.2f), run(false, 0.0f)) << "차선 MPC 목표는 그대로";
+    const float plain = run(true, 0.0f), lead = run(true, 0.2f);
+    EXPECT_GT(lead, plain + 1e-5f) << "커지는 곡선을 더 앞에서 읽는다";
+    const float delay = LateralController(LateralControllerConfig{}).plan_delay_s();
+    EXPECT_NEAR(lead, lag_adjusted_curvature(target, 60.0f / 3.6f, 0.0f, delay + 0.2f), 2e-4f);
 }
 
 // MPC가 무효인 계획은 조향을 막는다(LateralPlanInvalid). 다음 계획으로 조향을 다시 시작할 때 그 계획에서 섞어 오지

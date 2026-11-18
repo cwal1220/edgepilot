@@ -23,3 +23,12 @@ inline bool localizer_sample_from(const LocalizationState &loc, bool enabled, do
     out->roll_ok = (loc.flags & kLocalizationSensorsOk) != 0;
     return enabled && age_s >= 0.0 && age_s < kLocalizerMaxAgeS && (loc.flags & kLocalizationFilterValid) != 0;
 }
+
+// 컨트롤러의 ESP12 요레이트 바이어스 학습(EspYawBiasEstimator)에 넘기는 locationd 요레이트. ESP12 관례(왼쪽 +)로
+// 바꾼다: angular_velocity_calib[2]는 오른쪽 +다(2026-11-15 주행에서 ESP12 요레이트와 상관 -0.99). 0.5초 안의 값이고
+// 필터가 유효하며 자이로 입력이 거부되지 않았을 때만 쓴다.
+inline bool imu_yaw_left_from(const LocalizationState &loc, double age_s, float *yaw_left_rad_s) {
+    *yaw_left_rad_s = -loc.angular_velocity_calib[2];
+    return age_s >= 0.0 && age_s < kLocalizerMaxAgeS && (loc.flags & kLocalizationFilterValid) != 0 &&
+           (loc.input_flags & kLocalizationInvalidGyro) == 0;
+}

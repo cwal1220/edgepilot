@@ -57,6 +57,9 @@ struct SteeringParams {
     // ESP12 실측으로 직선에서 추정한 도로 편경사(뱅크)를 FF에서 보정한다. 커브에서는 직전 값을
     // 유지하고 30초 넘게 갱신이 없으면 0으로 줄인다(controls/road_bank.h의 RoadBankEstimator).
     bool live_bank_compensation = true;
+    // 편경사 추정에 넣는 ESP12 요레이트에서 주행 중 바이어스(locationd 요레이트와의 차이, EspYawBiasEstimator)를 뺀다.
+    // 편경사 추정은 선형 피드포워드의 편경사 보정과 학습한 토크 모델의 롤 입력이 쓴다. 끄면 예전처럼 원시값이다.
+    bool bank_yaw_bias_correction = false;
     // paramsd·torqued 학습값 사용. 끄면 학습기는 계산·기록만 한다. 차량 값을 켜면
     // 롤 보정이 live_bank_compensation을 대신한다.
     bool use_live_vehicle_params = true;
@@ -72,10 +75,19 @@ struct SteeringParams {
     // 0.15 s 늦게 보는 조건에서는 25~35 %). 실차(2026-11-08 밤, shippedadag, 0.30)에서는 조향각이 요청을 0.43 s에
     // 따랐고(11-07 0.60~0.65 s), 직선 흔들림이 11-07 주행보다 약 4분의 1 작았다(다른 길). 0.5~2 Hz 조향은 +9 %.
     float torque_compare_delay = 0.0f;
+    // 모델 경로(Laneless 모드, Lane 모드의 모델 경로 구간)를 읽는 시점에 더하는 앞섬(초). 목표 곡률은 경로 지연 + plan 나이에서
+    // 읽는데(lag_adjusted_curvature), 상류 0.9.x는 여기에 0.2 s를 더했다(steerActuatorDelay + 0.2). edgepilot은 lagd 추정(0.39~0.44 s)
+    // + plan 나이(약 0.09 s)라 앞섬이 없다. 차선 MPC 경로에는 더하지 않는다(10월 Lane 모드 폐루프 재생에서 늦게 읽을수록 나빴다).
+    // 2026-11-15 cl_sim(학생 모델, 지연 0.5 s): 0.49 s에서 읽으면 5초 흔들림이 출시 모델보다 컸고(5.4~6.3 대 3.6 cm), 0.7 s에서
+    // 읽으면 30~50 % 줄어 출시 수준이 됐다(외란 유지 오프셋은 그대로). 0이면 예전과 같다.
+    float model_path_read_lead_s = 0.0f;
     // 학습한 토크 모델로 피드포워드를 낸다(docs/lateral-nn.md). 웹 콘솔에서 고른 모델 파일(파라미터 디렉터리의
     // lateral_nn.json이 가리키는 models/lateral_nn/<차종>_v<버전>.json, common/lateral_nn_path.h)이 있어야 하고, 없으면
     // 켜도 선형 피드포워드를 쓴다. PID는 그대로다.
     bool nn_feedforward = false;
+    // 학습한 토크 모델의 곡선 이득(모델 파일 curve_gain)을 고속에서 줄이는 배율: 80 km/h까지 그대로, 100 km/h부터 이 배율
+    // (lateral_torque.cc kNnCurveGainFade*). 1이면 예전과 같다.
+    float nn_curve_gain_high_speed_scale = 1.0f;
     // paramsd·torqued 입력을 상류처럼 locationd 요레이트·롤로 받는다. 끄면 ESP12 요레이트(자체 바이어스
     // 추정)와 ESP12 횡가속 롤. locationd가 없거나 낡으면 ESP12로 돌아간다.
     bool use_locationd_learner_inputs = true;
