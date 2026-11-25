@@ -310,8 +310,9 @@ Library `car`.
 
 - `car_specs.h`: the K7 YG HEV's wheelbase and centre of gravity (opendbc
   `CarSpecs`), the Civic reference values of opendbc `VehicleDynamicsParams`,
-  and `scale_tire_stiffness_per_mass`, which the torque controller, paramsd and
-  the planner share.
+  `scale_tire_stiffness_per_mass`, which the torque controller and paramsd
+  share, and the measured camera lever (`camera_lever_m`), which the lane MPC
+  and `replay_closed_loop` share.
 - `can_frame.h`, `vehicle_can.*`, `hyundai_can.*`: `can_frame.h` holds the
   transport type and the K7 YG HEV address/bus table; `vehicle_can` decodes
   received frames into vehicle state, and `hyundai_can` encodes
@@ -422,7 +423,8 @@ Library `planning`.
   lateral MPC (Lane mode), or the plan yaw (Laneless mode and Lane mode's
   model-path stretches), to produce curvature targets. This is the only
   producer of `LateralTarget`. The MPC starts from its previous solution's
-  curvature with a quarter of the measured curvature mixed in.
+  curvature with a quarter of the measured curvature mixed in, and its
+  rotation radius is the measured camera lever.
 - `lane_line_filter.*`: smooths the two ego lane lines over time for the
   planner: the last filtered lines moved by the car's own motion, blended with
   the new frame. See [Lane-line filter](lane-line-filter.md).

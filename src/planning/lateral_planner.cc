@@ -356,12 +356,6 @@ struct LateralPlanner::Impl {
         desire_params.lane_change_min_speed_mps = steering.lane_change_min_speed_kph / 3.6;
         desire_helper.update_params(desire_params);
         laneless_mode = steering.laneless_mode;
-        constexpr double wheelbase = kWheelbaseM, center_to_front = kCenterToFrontM;
-        // 뒷바퀴 강성은 질량당 값이다. 상류 식 aF·m / (L·cR)에서 질량이 약분된다.
-        const double tire_rear_per_mass =
-            scale_tire_stiffness_per_mass(wheelbase, center_to_front, double{steering.tire_stiffness_factor}).second;
-        factor1 = wheelbase - center_to_front;
-        factor2 = center_to_front / (wheelbase * tire_rear_per_mass);
     }
 
     LateralTarget update(const ModelState &model, const VehicleCanState &vehicle, const LateralPlannerInput &in) {
@@ -475,7 +469,13 @@ struct LateralPlanner::Impl {
     // 풀이가 실패하면 MPC를 비우고 실제 곡률에서 다시 시작한다.
     void solve_lane_mpc(const MpcReferences &references, float v_ego, float measured_curvature,
                         const std::array<double, kTrajectorySize> &path_t) {
-        const double lateral_factor = std::max(0.0, factor1 - factor2 * v_ego * v_ego);
+        // 회전 반경: 곡선에서 카메라 점(차선 기준점)이 곡률에 비례해 옆으로 움직이는 몫. 잰 카메라 레버(car_specs)를 쓴다.
+        // 예전 값 (L − a) − a/(L·cR)·v²(tire_stiffness_factor 0.83)는 60 km/h에서 0.75 m(잰 값 1.52 m)이고 80 km/h부터
+        // 0이라, MPC가 미끄럼 몫을 작게 보고 곡률을 더 요구해 차가 곡선 안쪽에 섰다(2026-11-07~22 주행 12개, 1 m/s² 넘는
+        // 곡선에서 모델 차선 기준 7~8 cm). 폐루프 재생(Lane 모드 주행 7개, 60 km/h 넘는 자유 주행 97분)에서 안쪽 치우침이
+        // 7.4 → 2.7 cm(유지 5.0 → 1.4, 탈출 4.3 → 0.1), 차로 중앙 RMS 8.2 → 7.7 cm, p95 15.8 → 14.2 cm였고 주행 일곱
+        // 모두 줄었다. 30~60 km/h는 안쪽 6.5 → 2.0 cm, RMS 그대로였고 0.5~3 Hz 횡가속도 그대로였다. 상류(0)는 9.2 cm였다.
+        const double rotation_radius = camera_lever_m(v_ego);
         // lane 모드도 laneless와 같은 스케줄. heading은 차선 경로에서 나오므로
         // 고속에서 heading 고정 1.0이면 횡 offset에 대한 DC 강성이 0이 되어
         // 커브에서 바깥쪽 0.3~0.5m 평형이 생긴다(2026-08-25 실측: 요구곡률
@@ -490,7 +490,7 @@ struct LateralPlanner::Impl {
         // 그래서 차가 요구보다 조금만 더 돌아도 곡선 안쪽으로 붙은 채 남았다.
         initial_curvature =
             kMeasuredCurvatureSeed * measured_curvature + (1.0 - kMeasuredCurvatureSeed) * initial_curvature;
-        mpc.run(initial_curvature, std::max(0.0f, v_ego), lateral_factor, references.y, references.heading, weights);
+        mpc.run(initial_curvature, std::max(0.0f, v_ego), rotation_radius, references.y, references.heading, weights);
         const bool solver_failed = mpc.status() != 0;
         if (solver_failed) {
             mpc.reset();
@@ -568,8 +568,6 @@ struct LateralPlanner::Impl {
     LateralMpc mpc;
     // 다음 사이클의 초기 curvature. 나머지 초기 상태는 자차 기준 0이다.
     double initial_curvature = 0.0;
-    double factor1 = 0.0;
-    double factor2 = 0.0;
     double lane_path_weight = 3.0;
     bool laneless_mode = false;
     DesireHelper desire_helper;

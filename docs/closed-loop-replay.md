@@ -61,12 +61,21 @@ measured on 2026-10-22 from the lane direction at the camera against the
 curvature in steady curves on five drives (51 km/h 1.74 m, 64 km/h 1.16 m,
 78 km/h 0.78 m, 88 km/h 0.59 m). Before 2026-10-22 the replay used 0
 (`--camera-lever 0,0` reproduces it exactly); the numbers in this document
-from before then were made that way. The lane MPC's own rotation radius
-(`lateral_planner`, `(L − a) − a/(L·cR)·v²`) is lower than the measured
-lever, but in the replay with the lever, putting the measured value into the
-MPC moved the car about 4.5 cm outward in both curve directions (right curves
-+2.9 → −1.6 cm inside, left −2.3 → −6.9 cm) with the same overall RMS, and
-upstream's 0 was worse (15.06 against 14.84 cm), so the MPC keeps its value.
+from before then were made that way. The constants live in `car_specs.h`
+(`kCameraLeverM`, `kCameraLeverPerV2`).
+
+Since 2026-11-24 the lane MPC uses the same lever as its rotation radius
+(`lateral_planner`). The earlier value, `(L − a) − a/(L·cR)·v²`, was 0.75 m
+at 60 km/h and 0 from 80 km/h, so the MPC asked for a little more curvature
+than the road and the car held the inside of curves. That was 7–8 cm on the
+model's lanes on twelve drives from 2026-11-07 to 11-22, and the replay
+reproduces it (7.4 cm). On seven Lane-mode drives (97 free-running minutes
+above 60 km/h), the lever cut it to 2.7 cm (holding 5.0 → 1.4, exit
+4.3 → 0.1) and the lane-centre RMS from 8.2 to 7.7 cm, on every drive, with
+the same 0.5–3 Hz lateral acceleration. On 2026-10-22 the same change moved
+the car about 4.5 cm outward but left the RMS as it was (the replay then put
+right curves only 2.9 cm inside), so the MPC kept its value until the inside
+offset grew. Upstream's 0 is worse (9.2 cm inside).
 
 `k_path` is the path the car travels: the steering angle's curvature delayed
 by the angle-to-path lag (`--path-lag`, 0.11 s). The recorded side goes

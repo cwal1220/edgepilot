@@ -26,6 +26,7 @@
 //   --lane-filter W            차선선 시간 필터의 새 측정 가중(planning/lane_line_filter, 1이면 끈다).
 //   --lateral-nn m.json        학습한 토크 모델(docs/lateral-nn.md). --steering의 nn_feedforward가 켜져 있을 때 쓴다.
 //   --camera-lever a,b         카메라 레버 a − b·v²(m, kDefaultCameraLeverM). 0,0이면 카메라 점이 차체 축으로 나아간다.
+#include "car/car_specs.h"
 #include "car/hyundai_can.h"
 #include "car/vehicle_can.h"
 #include "cli_args.h"
@@ -68,11 +69,10 @@ constexpr float kMaxDeviationPsi = 0.15f;
 // 조향각(차량 모델) 곡률 → 요레이트 곡률 지연. 2026-10-12~10-16 주행 다섯(선형·학습 FF, 30~90 km/h)의 상관 최대가
 // 0.10~0.11 s(IMU, ESP12는 0~8 ms 더 늦다)이고, 순수 지연·1차 지연·둘을 합친 모양의 재현도가 같다(R² 0.94~0.98).
 constexpr float kDefaultPathLagS = 0.11f;
-// 카메라 레버(m) = a − b·v²(0 밑이면 0): 카메라 점의 진행 방향이 차체 축보다 레버·곡률만큼 바깥이다(타이어 미끄럼).
-// 정상 곡선에서 카메라 위치의 차선 방향 대 곡률로 쟀다(2026-10-14~22 주행 다섯: 51 km/h 1.74 m, 64 km/h 1.16 m,
-// 78 km/h 0.78 m, 88 km/h 0.59 m). 0이면 카메라 점이 차체 축으로 나아가 2026-10-22 전의 재생과 같다.
-constexpr float kDefaultCameraLeverM = 2.33f;
-constexpr float kDefaultCameraLeverPerV2 = 0.0029f;
+// 카메라 레버(m) = a − b·v²(0 밑이면 0): 차선 MPC와 같은 잰 값(car_specs kCameraLeverM)이다. 0이면 카메라 점이 차체
+// 축으로 나아가 2026-10-22 전의 재생과 같다.
+constexpr float kDefaultCameraLeverM = static_cast<float>(kCameraLeverM);
+constexpr float kDefaultCameraLeverPerV2 = static_cast<float>(kCameraLeverPerV2);
 // 녹화 ESP12가 이보다 낡으면 시뮬 차의 ESP12 값을 무효로 둔다(50 Hz 메시지)
 constexpr double kEsp12MaxAgeS = 0.1;
 
