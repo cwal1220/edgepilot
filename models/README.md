@@ -67,19 +67,19 @@ models that exist only on the board in place.
 ```text
 input_imgs          [1, 12, 128, 256]  uint8   road tower, frames t-4 and t
 big_input_imgs      [1, 12, 128, 256]  uint8   wide tower, frames t-4 and t
-desire              [1, 25, 8]         float   5 Hz max-pooled desire history
-features_buffer     [1, 24, 512]       float   5 Hz hidden-state history
+desire              [1, 33, 8]         float   5 Hz max-pooled desire history (132 ticks)
+features_buffer     [1, 32, 512]       float   5 Hz hidden-state history (128 ticks)
 traffic_convention  [1, 2]             float
--> 15 outputs (out_meta ... out_desire_state), reassembled into the openpilot
-   [2576] layout by src/model/model_output_assembly.h
+-> 15 outputs (out_meta ... out_desire_state), reassembled into the
+   [2576] layout by src/model/model_output_assembly.h; out_action is ignored
 ```
 
-The heads are separate outputs so each gets its own U16 range; the runtime
-still accepts a single-output axmodel
-([2. Split the outputs](../tools/model/axmodel/README.md#2-split-the-outputs)).
-The release graph's `action_t` input is dropped from the core, and the delay it
-carries is applied after the model
-([1. Extract the core](../tools/model/axmodel/README.md#1-extract-the-core)).
+This is the Smoked Cheddar graph (openpilot e170f08). `supercombo.axmodel` in
+this folder was built from the earlier release (desire `[1, 25, 8]`, features
+`[1, 24, 512]`) and does not load with this runtime; neither do the student
+models built from it. The heads are separate outputs so each gets its own U16
+range. The release graph's `action_t` input feeds the plan in this model, and
+the build fixes it to `[0.3, 0.3]` inside the axmodel.
 
 Both image towers are active: the runtime warps one `1280x720` NV12 frame
 through two calibrated virtual cameras (`medmodel` fl=910 and `sbigmodel`

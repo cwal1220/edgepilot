@@ -2,9 +2,10 @@
 
 // openpilot master supercombo 코어(axmodel)를 AX630C NPU에서 돌린다. 공개 ONNX가
 // 그래프 안에 갖던 이미지·desire·특징 큐는 여기서 관리한다(model_temporal.h).
-// 입력: input_imgs/big_input_imgs uint8 [1,12,128,256], desire [1,25,8],
-// features_buffer [1,24,512], traffic_convention [1,2]. 출력은 헤드를 나눈 출력들(split_outputs.py)을
-// [1,2576] 제자리에 모은다. 입력 워프는 GDC(maix_gdc_warp.h)가 config의 nv12 크기 NV12 소스에서 한다.
+// 입력: input_imgs/big_input_imgs uint8 [1,12,128,256], desire [1,33,8],
+// features_buffer [1,32,512], traffic_convention [1,2](Smoked Cheddar 그래프, model_temporal.h). action_t는
+// 빌드가 모델 안에 상수로 넣는다. 출력은 헤드를 나눈 출력들(split_outputs.py)을 [1,2576] 제자리에 모은다.
+// 입력 워프는 GDC(maix_gdc_warp.h)가 config의 nv12 크기 NV12 소스에서 한다.
 
 #include "common/app_config.h"
 #include "common/model_output.h"

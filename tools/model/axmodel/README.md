@@ -35,6 +35,14 @@ flowchart TB
 Run the scripts from this folder in the host environment of
 [Model tools](../README.md#host-environment).
 
+**These scripts target the earlier release graph (sha256 `65a08adc…`).** The
+runtime now expects the Smoked Cheddar graph (openpilot e170f08: desire
+`[1, 33, 8]`, features `[1, 32, 512]`, `action_t` feeding the plan; see
+[Model](../../../docs/model-pipeline.md#model)). Its axmodels are built by the
+model project's pipeline. Here `extract_core.py` stops on that graph
+(`action_t now feeds the outputs`), and the node names its rewrites and
+`split_outputs.py` look for are those of the earlier graph.
+
 ## 1. Extract the core
 
 Needs `onnx`.

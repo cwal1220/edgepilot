@@ -58,11 +58,9 @@ SupercomboModel::SupercomboModel(const char *model_file, const AppConfig &config
             throw std::runtime_error(std::string("axmodel input ") + kInputNames[i] + " is " + shape_string(t.shape) +
                                      ", not the master contract");
     }
-    // 출력은 헤드를 나눈 출력들(split_outputs.py)이다. 이름으로 찾아 제자리에 모은다.
+    // 출력은 헤드를 나눈 출력들(split_outputs.py)이다. 이름으로 찾아 제자리에 모은다. 쓰지 않는 헤드(Smoked
+    // Cheddar의 out_action: 상류는 여기서 곡률을 내지만 edgepilot은 plan으로 조향한다)는 이름만 남기고 둔다.
     using model_output_assembly::kParts;
-    if (session_.outputs().size() != static_cast<size_t>(model_output_assembly::kPartCount))
-        throw std::runtime_error("axmodel has " + std::to_string(session_.outputs().size()) + " outputs, expected " +
-                                 std::to_string(model_output_assembly::kPartCount));
     for (int p = 0; p < model_output_assembly::kPartCount; ++p) {
         const auto &part = kParts[p];
         int found = -1;
@@ -75,6 +73,10 @@ SupercomboModel::SupercomboModel(const char *model_file, const AppConfig &config
                                      ", expected " + std::to_string(part.count) + " float");
         output_parts_[p] = found;
     }
+    for (size_t i = 0; i < session_.outputs().size(); ++i)
+        if (std::find(std::begin(output_parts_), std::end(output_parts_), static_cast<int>(i)) ==
+            std::end(output_parts_))
+            std::fprintf(stderr, "axmodel output %s is not used\n", session_.outputs()[i].name.c_str());
 
     // traffic convention은 이 차에서 상수(우측 통행 {1, 0})라 한 번만 쓴다.
     const float right_hand_traffic[2] = {1.0f, 0.0f};

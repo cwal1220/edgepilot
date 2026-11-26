@@ -52,10 +52,12 @@ parts below.
 ### Model and calibration
 
 `modeld <supercombo.axmodel>` takes one argument, the model. The runtime
-targets the openpilot master supercombo core: 5 inputs (`input_imgs` and
-`big_input_imgs` uint8 `[1,12,128,256]`, `desire` `[1,25,8]`,
-`features_buffer` `[1,24,512]`, `traffic_convention` `[1,2]`) and 2576 output
-floats (15 head outputs reassembled). `modeld` checks
+targets the Smoked Cheddar supercombo core (openpilot e170f08): 5 inputs
+(`input_imgs` and `big_input_imgs` uint8 `[1,12,128,256]`, `desire` `[1,33,8]`,
+`features_buffer` `[1,32,512]`, `traffic_convention` `[1,2]`) and 15 head
+outputs reassembled into 2576 floats; an extra `out_action` is ignored. Models
+built from the earlier release (desire `[1,25,8]`, features `[1,24,512]`) do
+not load. `modeld` checks
 names, shapes, dtypes, and buffer sizes at startup and refuses any other
 axmodel rather than misreading it.
 

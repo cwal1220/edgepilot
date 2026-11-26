@@ -488,12 +488,13 @@ Library `model`, process `modeld`.
   `ax_engine_api.h` declares the API. These are the only files
   under `src/` that touch the NPU.
 - `model_output_assembly.h`: reassembles the split-head axmodel outputs into
-  the openpilot 2576-float layout (`model_output.h`); each head is quantised
-  over its own range.
-- `model_temporal.h`: the history queues the NPU core does not carry:
-  100-tick desire pulses pooled to 25x8, 96 ticks of hidden state strided to
-  24x512, and the 5-frame image history per tower. No engine dependency, so
-  `gtest_model_output` pins the convention on the host.
+  the runtime's 2576-float layout (`model_output.h`, the earlier release's
+  order); each head is quantised over its own range.
+- `model_temporal.h`: the history queues the NPU core does not carry, sized
+  for Smoked Cheddar: 132-tick desire pulses pooled to 33x8, 128 ticks of
+  hidden state strided to 32x512, and the 5-frame image history per tower.
+  No engine dependency, so `gtest_model_output` pins the convention on the
+  host.
 - `yuv6_pack.h`: unpacks an NV12 view into the YUV6 planes, with NEON where
   the CPU has it; the GDC warp uses it.
 - `model_input_transform.*`: the CPU input warp: direct

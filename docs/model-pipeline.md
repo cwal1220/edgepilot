@@ -181,12 +181,12 @@ flowchart TB
 
 Every queue has the newest entry last and shifts one slot per frame:
 
-- desire: rising-edge pulses at 20 Hz over 100 ticks, max-pooled 4:1 into the
-  25x8 input
-- features: the last 96 ticks of the 512-float hidden state; the model sees
-  every 4th slot, 0 to 92. This frame's output is pushed after the run into
-  the last slot, 95, so the model first sees it four frames later, when it
-  reaches slot 92
+- desire: rising-edge pulses at 20 Hz over 132 ticks, max-pooled 4:1 into the
+  33x8 input
+- features: the last 128 ticks of the 512-float hidden state; the model sees
+  every 4th slot, 0 to 124 (6.4 s). This frame's output is pushed after the run
+  into the last slot, 127, so the model first sees it four frames later, when
+  it reaches slot 124
 - images: the last 5 frames per tower; the model sees the oldest (t-4) and the
   newest (t)
 
@@ -196,11 +196,20 @@ three queues stay aligned.
 
 ## Model
 
-The model is the openpilot master `driving_supercombo` with its history queues
-cut off, compiled with Pulsar2 6.0 as a U16 axmodel (S8 weights rounded by
-AdaRound, two Gelus in FP32) whose image inputs are uint8. How it is built is in
-[axmodel pipeline](../tools/model/axmodel/README.md); the result is committed
-as `models/supercombo.axmodel` and deployed by `scripts/upload_to_board.sh`.
+The runtime targets openpilot's "Smoked Cheddar" `driving_supercombo`
+(e170f08, 2026-11-24, sha256 `1fde7dcb…`) and models trained from it, with
+the history queues cut off and compiled with Pulsar2 as an axmodel whose image
+inputs are uint8. Its queues are longer than the earlier release's (desire 132
+ticks instead of 100, features 128 instead of 96), so axmodels built from the
+earlier release (`models/supercombo.axmodel`, sha256 `65a08adc…` at the source,
+and the students built from it) no longer load. The release graph's
+`action_t` input feeds the plan, lead and action heads in this model; the
+build fixes it to openpilot's default `[0.3, 0.3]` inside the axmodel (moving
+it to the board's delays, about `[0.53, 0.875]`, changes plan y by 0.4 cm at
+2 s and 1.2 cm at 4 s on average). These axmodels are built by the model
+project's pipeline; the scripts in
+[axmodel pipeline](../tools/model/axmodel/README.md) still target the earlier
+graph.
 
 `src/model/ax_engine_session.*` wraps `libax_engine`. The axmodel file stays
 mapped read-only for the session, and its pages are dropped once the engine
@@ -215,11 +224,12 @@ definitions.
 ```text
 input_imgs          [1, 12, 128, 256]  uint8   road tower: frames t-4 and t, 6 YUV planes each
 big_input_imgs      [1, 12, 128, 256]  uint8   wide tower, same layout
-desire              [1, 25, 8]         float   100-tick 20 Hz pulse history, max-pooled by 4
-features_buffer     [1, 24, 512]       float   hidden states from slots 0, 4, ..., 92 of 96 ticks
+desire              [1, 33, 8]         float   132-tick 20 Hz pulse history, max-pooled by 4
+features_buffer     [1, 32, 512]       float   hidden states from slots 0, 4, ..., 124 of 128 ticks
 traffic_convention  [1, 2]             float   constant (right-hand traffic)
 -> 15 outputs                          float   out_meta ... out_desire_state,
                                                reassembled into 2576 floats
+   (+ out_action)                      float   ignored (see below)
 ```
 
 The heads are separate outputs, with the plan split into motion, orientation,
@@ -231,7 +241,10 @@ longer accepted.)
 
 At load `modeld` checks each input's name, element count, dtype and buffer
 size, and each output's element count and dtype by name. It refuses any other
-model, so a mismatched axmodel fails loudly instead of being misparsed.
+model, so a mismatched axmodel fails loudly instead of being misparsed. An
+output it does not need, such as Smoked Cheddar's `out_action` (the lateral
+and longitudinal action upstream now steers with; edgepilot steers from the
+plan), is logged as unused and left alone.
 
 ## Model output
 

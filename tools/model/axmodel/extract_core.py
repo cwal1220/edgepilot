@@ -1,5 +1,8 @@
 """openpilot master driving_supercombo.onnx에서 NPU 코어를 잘라 낸다.
 
+이 스크립트는 예전 출시 그래프(65a08adc)용이다. 런타임이 지금 받는 Smoked Cheddar(e170f08) 그래프는 큐가 길고
+(desire 132틱, 특징 128틱) action_t가 plan에 들어가며 노드 이름도 달라, 그 axmodel은 모델 프로젝트의 빌드가 만든다.
+
 배포 그래프에는 이력 큐(이미지/desire/특징 시프트 레지스터, desire 20->5 Hz max-pool)도
 들어 있다. 이것들은 런타임이 CPU에서 하는 값싼 텐서 재배치라, 코어에는 네트워크만 남긴다:
 

@@ -105,7 +105,7 @@ TEST(ModelTemporal, DesireSequenceMatchesTheToolQueue) {
     EXPECT_EQ(pulses, (std::vector<std::pair<int, int>>{{0, 2}, {2, 1}, {5, 4}, {9, 3}, {19, 3}}));
 }
 
-// desire: rising-edge 펄스, 100틱 이력 밀기, 4틱 max-pool.
+// desire: rising-edge 펄스, 132틱 이력 밀기, 4틱 max-pool.
 TEST(ModelTemporal, Desire) {
     SupercomboTemporalState state;
     const auto &desire = state.desire_history();
@@ -121,7 +121,7 @@ TEST(ModelTemporal, Desire) {
     ASSERT_EQ(desire[last + 3], 0.0f);
     ASSERT_EQ(desire[last - kDesireLen + 3], 1.0f);
 
-    // 펄스는 마지막 풀(틱 96..99)에 들어 있고, 4틱 더 밀면 한 풀 앞으로 간다
+    // 펄스는 마지막 풀(틱 128..131)에 들어 있고, 4틱 더 밀면 한 풀 앞으로 간다
     std::vector<float> pooled(SupercomboTemporalState::kDesireInputTicks * kDesireLen);
     state.desire_input(pooled.data());
     const size_t last_pool = (SupercomboTemporalState::kDesireInputTicks - 1) * kDesireLen;
@@ -136,9 +136,15 @@ TEST(ModelTemporal, Desire) {
     ASSERT_EQ(pooled[last_pool - kDesireLen + 3], 1.0f);
 }
 
-// 특징: hidden_state 512개가 마지막 슬롯에 들어가고, 모델 입력은 0,4,...,92번
+// 특징: hidden_state 512개가 마지막 슬롯에 들어가고, 모델 입력은 0,4,...,124번
 // 슬롯이라 이번 출력은 3프레임을 더 밀어야 입력 마지막 행에 나타난다.
 TEST(ModelTemporal, Features) {
+    static_assert(
+        SupercomboTemporalState::kFeatureHistoryTicks == 128 && SupercomboTemporalState::kFeatureInputTicks == 32,
+        "Smoked Cheddar feature queue");
+    static_assert(
+        SupercomboTemporalState::kDesireHistoryTicks == 132 && SupercomboTemporalState::kDesireInputTicks == 33,
+        "Smoked Cheddar desire queue");
     static_assert(SupercomboTemporalState::kHiddenOffset == 1064, "hidden state offset moved");
     SupercomboTemporalState state;
     std::vector<float> raw(kModelOutputFloats, 0.0f), zeros(kModelOutputFloats, 0.0f);
@@ -161,7 +167,7 @@ TEST(ModelTemporal, Features) {
     ASSERT_EQ(input[last_row], 1.0f);
     ASSERT_EQ(input[last_row + kModelFeatureLen - 1], 512.0f);
 
-    // 이력은 96칸 링이다: 여러 바퀴 돈 뒤에도 입력 행은 오래된 것부터 4칸 간격이다
+    // 이력은 128칸 링이다: 여러 바퀴 돈 뒤에도 입력 행은 오래된 것부터 4칸 간격이다(가장 오래된 칸은 200 - 127번째 값)
     for (int k = 1; k <= 200; ++k) {
         std::fill(raw.begin() + SupercomboTemporalState::kHiddenOffset,
                   raw.begin() + SupercomboTemporalState::kHiddenOffset + kModelFeatureLen, static_cast<float>(k));
@@ -169,7 +175,7 @@ TEST(ModelTemporal, Features) {
     }
     state.feature_input(input.data());
     for (int t = 0; t < SupercomboTemporalState::kFeatureInputTicks; ++t)
-        ASSERT_EQ(input[t * kModelFeatureLen], static_cast<float>(105 + 4 * t)) << "행 " << t;
+        ASSERT_EQ(input[t * kModelFeatureLen], static_cast<float>(73 + 4 * t)) << "행 " << t;
     EXPECT_EQ(state.feature_history().back(), 200.0f) << "시간 순 사본의 마지막은 최신";
 }
 

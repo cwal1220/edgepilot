@@ -5,10 +5,13 @@
 // 같은 규약으로 관리한다. 모든 큐는 최신 값이 마지막 슬롯이고 매 프레임 한 칸씩
 // 앞으로 밀린다(특징 이력과 이미지는 복사 없이 링 인덱스만 돈다).
 //
-//  - desire: 20 Hz rising-edge 펄스 100틱. 모델에는 4틱씩 max-pool한 25x8(5 Hz).
-//  - 특징: 직전 96틱의 hidden_state(512). 모델에는 0,4,...,92번 슬롯 24개. 이번
-//    프레임 출력은 실행 뒤 마지막(95번) 슬롯에 넣으므로, 모델은 자기 출력을 4프레임
-//    뒤(92번 슬롯에 이를 때)부터 본다.
+// 크기는 Smoked Cheddar(openpilot e170f08, 2026-11-24, sha256 1fde7dcb…)의 그래프를 따른다. 이전 출시
+// 모델(65a08adc, desire 100틱·특징 96틱)과 그 그래프로 만든 학생 모델(43, 45)은 이 크기와 맞지 않아 로드에서
+// 거부된다.
+//  - desire: 20 Hz rising-edge 펄스 132틱. 모델에는 4틱씩 max-pool한 33x8(5 Hz).
+//  - 특징: 직전 128틱의 hidden_state(512). 모델에는 0,4,...,124번 슬롯 32개(6.4초). 이번
+//    프레임 출력은 실행 뒤 마지막(127번) 슬롯에 넣으므로, 모델은 자기 출력을 4프레임
+//    뒤(124번 슬롯에 이를 때)부터 본다.
 //  - 이미지: 탑마다 최근 5프레임(6평면 YUV). 모델에는 가장 오래된 것(t-4)과
 //    최신(t)을 이어 붙인 12평면.
 // axengine에 의존하지 않아 호스트 검사가 규약을 본다.
@@ -23,12 +26,12 @@
 
 class SupercomboTemporalState {
 public:
-    static constexpr int kDesireHistoryTicks = 100;
+    static constexpr int kDesireHistoryTicks = 132;
     static constexpr int kDesireTurnLeft = 1;  // 상류 DESIRES의 turnLeft, turnRight
     static constexpr int kDesireTurnRight = 2;
     static constexpr int kDesirePool = 4;
     static constexpr int kDesireInputTicks = kDesireHistoryTicks / kDesirePool;
-    static constexpr int kFeatureHistoryTicks = 96;
+    static constexpr int kFeatureHistoryTicks = 128;
     static constexpr int kFeatureStride = 4;
     static constexpr int kFeatureInputTicks = kFeatureHistoryTicks / kFeatureStride;
     static constexpr size_t kHiddenOffset = model_output_layout::kFeatureOffset;
@@ -65,7 +68,7 @@ public:
                     sizeof(float) * kDesireLen);
     }
 
-    // 모델 입력 desire [25, 8]: 연속한 4틱마다 원소별 최댓값.
+    // 모델 입력 desire [33, 8]: 연속한 4틱마다 원소별 최댓값.
     void desire_input(float *out) const {
         for (int t = 0; t < kDesireInputTicks; ++t) {
             for (int d = 0; d < kDesireLen; ++d) {
@@ -77,13 +80,13 @@ public:
         }
     }
 
-    // 모델 입력 features_buffer [24, 512]: 특징 이력의 0,4,...,92번 슬롯(0이 가장 오래된 것).
+    // 모델 입력 features_buffer [32, 512]: 특징 이력의 0,4,...,124번 슬롯(0이 가장 오래된 것).
     void feature_input(float *out) const {
         for (int t = 0; t < kFeatureInputTicks; ++t)
             std::memcpy(out + t * kModelFeatureLen, feature_slot(t * kFeatureStride), sizeof(float) * kModelFeatureLen);
     }
 
-    // 실행 직후 raw 출력(kModelOutputFloats)의 hidden_state를 특징 이력 마지막 슬롯에 넣는다. 이력은 96칸 링이라
+    // 실행 직후 raw 출력(kModelOutputFloats)의 hidden_state를 특징 이력 마지막 슬롯에 넣는다. 이력은 128칸 링이라
     // 가장 오래된 칸에 쓰고 머리만 옮긴다(예전에는 프레임마다 194 KB를 memmove로 밀었다).
     void push_feature_history(const float *raw_output) {
         std::memcpy(feature_history_.data() + static_cast<size_t>(feature_head_) * kModelFeatureLen,

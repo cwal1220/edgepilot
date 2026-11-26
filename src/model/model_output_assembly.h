@@ -7,6 +7,7 @@
 // 약 0.007 단위로 나왔다. plan yaw·yaw rate(직선에서 수 mrad)가 0 아니면 ±0.007이 되어
 // laneless 곡률이 계단마다 약 0.6 m/s²씩 뛰었다(2026-09-29 실차). 헤드마다, 그리고 plan은
 // 위치·방향·표준편차로 나눠 각자 범위로 양자화한다. 이름과 순서는 split_outputs.py와 같다.
+// Smoked Cheddar 빌드도 같은 이름 15개를 내고 out_action(4)을 하나 더 내는데, 그것은 쓰지 않는다.
 // axengine에 의존하지 않아 호스트 검사가 레이아웃을 본다.
 
 #include "common/model_output.h"

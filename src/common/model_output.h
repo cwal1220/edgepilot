@@ -23,8 +23,10 @@ constexpr int kLeadTrajLen = 6;
 constexpr int kDesireLen = 8;
 constexpr float kModelHeight = 1.22f;
 
-// openpilot master driving_supercombo 출력 계약(ONNX metadata output_slices).
-// SupercomboModel이 로드 시 이 값으로 axmodel을 검증하고 파서가 오프셋을 쓴다.
+// 런타임 안의 원시 출력 버퍼 배치. axmodel은 헤드를 이름 붙인 출력으로 따로 내고(split_outputs.py),
+// SupercomboModel이 그것들을 이 배치로 모은 뒤 파서가 오프셋으로 읽는다. 배치는 예전 출시 모델(65a08adc)의
+// output_slices 순서다. Smoked Cheddar(e170f08)의 출력 자체는 2580개이고 차선이 앞에 오는 다른 순서이며 action
+// 4개가 붙지만, 헤드를 이름으로 받으므로 이 버퍼 순서와는 상관없다.
 // 0.9.4와 달리 plan은 단일 가설(평균+표준편차), lead는 가설 없이 시간 오프셋
 // (0/2/4 s) 3개가 각자 궤적을 갖고, 특징(hidden_state)은 512다.
 constexpr int kModelOutputFloats = 2576;
