@@ -85,9 +85,6 @@ struct SteeringParams {
     // lateral_nn.json이 가리키는 models/lateral_nn/<차종>_v<버전>.json, common/lateral_nn_path.h)이 있어야 하고, 없으면
     // 켜도 선형 피드포워드를 쓴다. PID는 그대로다.
     bool nn_feedforward = false;
-    // 학습한 토크 모델의 곡선 이득(모델 파일 curve_gain)을 고속에서 줄이는 배율: 80 km/h까지 그대로, 100 km/h부터 이 배율
-    // (lateral_torque.cc kNnCurveGainFade*). 1이면 예전과 같다.
-    float nn_curve_gain_high_speed_scale = 1.0f;
     // paramsd·torqued 입력을 상류처럼 locationd 요레이트·롤로 받는다. 끄면 ESP12 요레이트(자체 바이어스
     // 추정)와 ESP12 횡가속 롤. locationd가 없거나 낡으면 ESP12로 돌아간다.
     bool use_locationd_learner_inputs = true;

@@ -143,10 +143,6 @@ bool LateralNnModel::load_text(const std::string &text, std::string *error) {
     if (!read_numbers(root.find("output_clip"), &clip) || clip.size() != 2 || !(clip[0] < clip[1]) || clip[0] < -1.0f ||
         clip[1] > 1.0f)
         return fail(error, "output_clip must be inside [-1, 1]");
-    // 곡선 이득은 2026-10-18에 더한 항목이라 없으면 0이다(그 전 모델은 이득 없이 썼다)
-    const JsonValue *curve_gain = root.find("curve_gain");
-    if (curve_gain && !(curve_gain->is_number() && curve_gain->number() >= 0.0 && curve_gain->number() <= 1.0))
-        return fail(error, "curve_gain must be a number in [0, 1]");
 
     const JsonValue *nets = root.find("nets");
     if (!nets || !nets->is_array() || nets->array().empty()) return fail(error, "no nets");
@@ -199,7 +195,6 @@ bool LateralNnModel::load_text(const std::string &text, std::string *error) {
     std_ = std::move(stdev);
     clip_lo_ = clip[0];
     clip_hi_ = clip[1];
-    curve_gain_ = curve_gain ? static_cast<float>(curve_gain->number()) : 0.0f;
     nets_ = std::move(parsed);
     for (size_t k = 0; k < vectors->array().size(); ++k) {
         const JsonValue &v = vectors->array()[k];

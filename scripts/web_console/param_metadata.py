@@ -113,8 +113,6 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
         "model_path_read_lead_s": number("path_mode", "s", 0.01, 0, 0.5, unused=(STEERING_OFF,)),
         "nn_feedforward": toggle("torque_controller", unused=(
             STEERING_OFF, when("lateral_nn_loaded", False, "nn_not_loaded", group="runtime"))),
-        "nn_curve_gain_high_speed_scale": number("torque_controller", "x", 0.05, 0, 1, unused=(
-            STEERING_OFF, when("nn_feedforward", False, "nn_off"))),
         "torque_friction": number("torque_model", "torque", 0.005, 0, 0.3, tab="vehicle", learned=True,
                                   caution="torqued_restart",
                                   role=(when("nn_feedforward", True, "nn_feedforward_friction", also=NN_LOADED),)),

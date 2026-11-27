@@ -47,9 +47,6 @@ public:
     bool loaded() const { return !nets_.empty(); }
     const std::string &name() const { return name_; }
     const LateralNnSpec &spec() const { return spec_; }
-    // 곡선에서 모델 출력을 (1 + 이것)배로 쓴다(파일의 curve_gain, 없으면 0). 학습한 역동역학은 계획 궤적을 그대로
-    // 따르는 토크라 곡선에서 늦게 덜 돈다. 그 몫을 학습 뒤 폐루프 재생으로 정해 모델 파일에 둔다(docs/lateral-nn.md).
-    float curve_gain() const { return curve_gain_; }
     size_t input_count() const { return mean_.size(); }
 
     // inputs: input_count()개, 원래 단위. 입력이나 망 출력이 NaN·무한대면 NaN을 돌려준다(호출자는 선형 피드포워드를
@@ -73,7 +70,6 @@ private:
     std::vector<std::vector<Layer>> nets_;
     float clip_lo_ = -1.0f;
     float clip_hi_ = 1.0f;
-    float curve_gain_ = 0.0f;
 };
 
 // 운용 때 입력을 만든다. 호출자는 매 제어 틱(100 Hz)마다 push로 지금의 목표 값을 쌓고, 조향할 때 evaluate를 부른다.

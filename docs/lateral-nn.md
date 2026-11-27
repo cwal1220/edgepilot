@@ -7,9 +7,8 @@ small neural network, trained on the K7's own recorded drives, that gives the
 steering torque a target trajectory needs. With `nn_feedforward` on and a
 model chosen from `models/lateral_nn/`, it replaces the linear feed-forward's
 lateral-acceleration, offset and bank terms. In curves the friction
-compensation stays on top of a model trained without it, the model's output is
-raised by the gain its file carries (`curve_gain`) while the curve tightens,
-and the PID stays as it is.
+compensation stays on top of a model trained without it, and the PID stays as
+it is.
 
 This diagram shows where the model comes from and where it enters the
 controller:
@@ -74,14 +73,14 @@ the car responds, it gives the torque command that produced it.
 - **Network:** three nets of 32×32 tanh, averaged, output clipped to ±1.
   Training mirrors every sample left to right, so the response is symmetric.
 - **File:** format `edgepilot-lateral-nn` version 1. It holds the input names,
-  the window definition, the normalisation, the weights, test vectors and the
-  curve gain (`curve_gain`, 0 when absent).
+  the window definition, the normalisation, the weights and test vectors. A
+  `curve_gain` left in files from 2026-10-18 to 11-27 is ignored
+  ([Curve gain, removed](#curve-gain-removed)).
   `LateralNnModel::load_text` refuses a file when:
   - the names it rebuilds from the window definition differ from the file's;
   - an input would read outside the 1 s history or the plan;
   - a value is not finite as a float;
   - the output clip is outside ±1;
-  - `curve_gain` is not a number from 0 to 1;
   - an activation is not `tanh` or `linear`;
   - or its own evaluation of the file's test vectors differs by more than
     2·10⁻⁴.
@@ -172,45 +171,6 @@ learned the torque that was sent, friction included, as the removed
 `k7_hev_v1` and `v2` did, runs alone: adding the term would count the friction
 twice.
 
-The model file's `curve_gain` raises the model's output while a curve
-tightens: ×(1 + `curve_gain`), ramped in over the same 0.2→0.6 m/s² of desired
-lateral acceleration as the friction, from 30 to 50 km/h, and with how fast
-the desired lateral acceleration grows in the plan (none at 0, all from
-0.3 m/s³). That rate is the difference between the plan's desired lateral
-acceleration 0.25 s after and 0.25 s before the time the controller requests
-(the lagd delay). Until 2026-10-22 the gain stayed on through the hold and the
-exit too. For a while after that, the rate was the request's own rate of
-change, filtered over 0.1 s. Each new plan moves the request by
-0.03–0.05 m/s², so that rate reached 0.7–1.1 m/s³ in steady curves and the gain
-came on in holds as well (+0.09–0.10 on average). Reading the plan's shape cut
-the 0.5–3 Hz lateral acceleration in curves by 13–16 % on entries and 12–23 %
-in holds, with the same lane-centre error (closed-loop replay of the ten NN
-drives). On the two 2026-10-18 drives with `v4`, the steering angle then gave
-1.07–1.09 times what the controller asked for in steady curves above 80 km/h
-and 1 m/s², and the car sat on the inside of right curves (11 cm in the
-closed-loop replay of those drives, 13–27 cm against the stock camera's lane
-lines on the road). With the gain on the entry only, the replay gives 7 cm
-with no more wobble. Taking the gain out altogether put left curves 4–10 cm
-to the outside. The models fit the torque
-that was sent, at curve entries too: over the entry samples of its training
-data, `v3`'s mean prediction is 1.01 of the sent torque. In the closed loop
-they still deliver less in curves than the linear feed-forward, which reads the
-plan at the lagd delay and gives 10–20 % more than the car needs while the PID
-trims the excess. A model that gives exactly what the plan asks follows it
-late, and training cannot ask for torque that was never sent. In the replay,
-training changes left the curve entry at 0.88–0.89 (`v3` 0.886):
-
-- sample weights on entries (×4, ×10) or on entries and exits;
-- a loss that counts too little torque at entries two to four times;
-- smoothed inputs (σ 50 and 100 ms) and lateral acceleration from the yaw rate;
-- a 64×64 network, 80 epochs, windows ending at +0.9 or +0.6 s;
-- the runtime inputs.
-
-The gain is calibrated per model in the [closed-loop
-replay](closed-loop-replay.md) after training; 0.3 brings `v3` and `v4` to the
-linear feed-forward's curve entry. Below 40 km/h the entries were already as
-good as linear, hence the speed ramp.
-
 On the 2026-10-16 drive, the first with the model, the car reached 92–93 % of
 the desired lateral acceleration at curve entries, against 100–109 % with
 the linear feed-forward on earlier drives, and the PID added torque in every
@@ -272,6 +232,53 @@ While the model contributes, `ControlState.hud_flags` bit 12
 brake lights. `LearnerState.flags` bit 16 (`kLearnerLateralNnLoaded`) says
 whether controlsd loaded a model.
 
+### Curve gain, removed
+
+From 2026-10-18 to 11-27 the model file's `curve_gain` (0.3 in `v3` and `v4`)
+raised the model's output by ×(1 + `curve_gain`) in curves above 30–50 km/h:
+through whole curves at first, from 2026-10-22 only while the plan's desired
+lateral acceleration grew, and from 2026-11-15 fading out from 80 to 100 km/h
+(`nn_curve_gain_high_speed_scale`). It made up for the curve-entry shortfall
+of the first models in the closed loop (table above): they fit the torque
+that was sent, but deliver less than the linear feed-forward, which gives
+10–20 % more than the car needs while the PID trims the excess. Training
+changes did not move the entry (0.88–0.89, `v3` 0.886):
+
+- sample weights on entries (×4, ×10) or on entries and exits;
+- a loss that counts too little torque at entries two to four times;
+- smoothed inputs (σ 50 and 100 ms) and lateral acceleration from the yaw rate;
+- a 64×64 network, 80 epochs, windows ending at +0.9 or +0.6 s;
+- the runtime inputs.
+
+It was removed on 2026-11-27, when the controller around the model had changed
+(entry-only gain, MPC start value, plan blend, the lane MPC's camera lever).
+Closed-loop replay of 37 drives from 2026-10-18 to 11-26 (84 minutes of curves
+above 40 km/h, `v4`, Lane mode), gain 0.3 against 0:
+
+- the entry already followed the request without it: entry over held curves
+  1.006/0.986 at 40–60 km/h and 1.054/0.987 at 60–80 km/h (simulated angle's
+  lateral acceleration over the request 0.55 s earlier);
+- the gain only moved the car 0.2–1.1 cm toward the inside of curves, and the
+  lane RMS of each curve phase by at most 0.3 cm (slightly better at
+  40–60 km/h, slightly worse above 60 km/h);
+- with the gain, the lane RMS of whole drives (above 40 km/h) was better on 20
+  drives and worse on 13, by −0.02 cm on average.
+
+The same held for `v3`, for a plant with 10 % less gain and for one 50 ms
+slower: the gain moved the car the same 0.2–1.1 cm inward and changed the
+lane RMS of whole drives by −0.01 cm on average. Its largest effect was on
+each curve's worst outward excursion: 0.3–0.9 cm less on average (22–31 cm),
+and up to 2.4 cm less at the 90th percentile of 331 curves (about 40 cm), most
+with the weaker and the slower plant.
+
+On the road (open-loop replay of the recorded inputs, 36 drives) the gain
+added about 10 % to the feed-forward in curves, but in the closed loop the
+PID took most of it back: the applied torque changed by 1–3 %. Drivers did not
+help the car into curves: above 60 km/h they pushed in the controller's
+direction for 1.2 % of entries, as in held curves and exits (1.3 %, 1.2 %). At
+40–60 km/h they did so in 16 % of held curves (median 309 raw against the
+gain's 6–7) but only 3.6 % of entries.
+
 ### Models, choice and switch
 
 A model fits only the car it was trained on. The board keeps a library of
@@ -279,7 +286,7 @@ models and one choice, and the web console picks from the library.
 
 | Item | Value |
 | --- | --- |
-| Library | `models/lateral_nn/<car>_v<version>.json`; the repository ships `k7_hev_v3` (curve gain 0.3 since 2026-10-18) and `k7_hev_v4` (runtime inputs, no steering angle, curve gain 0.3). `v1` and `v2` were removed on 2026-10-17, also from nnlc. `upload_to_board.sh` sends the folder and leaves files that exist only on the board |
+| Library | `models/lateral_nn/<car>_v<version>.json`; the repository ships `k7_hev_v3` and `k7_hev_v4` (runtime inputs, no steering angle). `v1` and `v2` were removed on 2026-10-17, also from nnlc. `upload_to_board.sh` sends the folder and leaves files that exist only on the board |
 | Choice | `params/lateral_nn.json`, `{"model": "k7_hev_v3"}`; the default sits in `params.defaults/` |
 | Web console | Steering tab, learned torque model card: the files in `models/lateral_nn/`, the choice and the model controlsd uses |
 | Override | `EDGEPILOT_LATERAL_NN_MODEL`, a file path, replaces the choice |
@@ -431,14 +438,11 @@ Before these, the nets alone took 82 µs a tick.
   PID included, for the plan it followed. The model learns that controller's
   closed-loop torque, so a replay of its own training drives flatters it. On
   the held-out drives it is not better than `v3` with the gain.
-- **Curve gain:** calibrated in the replay, whose plant is linear in torque.
-  Driven on 2026-10-18 while it applied through whole curves (see above); the
-  entry-only gain of 2026-10-22 is not yet driven.
 
 ## Next
 
 - **Road comparison:** drive the same roads with the linear feed-forward,
-  `v3` and `v4` (both with the curve gain), curves included. The recording's
+  `v3` and `v4`, curves included. The recording's
   `hud_flags` bit 12 tells the NN from the linear feed-forward, and the route's
   `models/lateral_nn.json` the model. Compare curvature tracking by curve phase
   (entry, hold, exit), lane position at curve exits, torque smoothness and

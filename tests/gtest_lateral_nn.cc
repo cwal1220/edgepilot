@@ -36,13 +36,11 @@ TorqueController::Input torque_in(bool active, float speed_mps, float curvature,
 }
 
 // 학습한 토크 모델의 피드포워드와 섞는 법
-TorqueController::NnFeedforward nn_ff(float torque, float weight = 1.0f, bool curve_friction = true,
-                                      float curve_gain = 0.0f) {
+TorqueController::NnFeedforward nn_ff(float torque, float weight = 1.0f, bool curve_friction = true) {
     TorqueController::NnFeedforward nn;
     nn.torque = torque;
     nn.weight = weight;
     nn.curve_friction = curve_friction;
-    nn.curve_gain = curve_gain;
     return nn;
 }
 
@@ -577,100 +575,13 @@ TEST(LateralNnModel, ReadsWhetherTheTargetIsFrictionFree) {
     EXPECT_NE(error.find("friction_free"), std::string::npos) << error;
 }
 
-TEST(LateralNnModel, ReadsTheCurveGain) {
-    // curve_gain은 2026-10-18에 더한 항목이라 없으면 0이다. 0..1 밖이나 숫자가 아니면 파일을 받지 않는다
-    LateralNnModel tiny;
-    std::string error;
-    ASSERT_TRUE(tiny.load_text(tiny_model(1.0f), &error)) << error;
-    EXPECT_FLOAT_EQ(tiny.curve_gain(), 0.0f) << "항목이 없으면 0";
-    const auto with_gain = [](const std::string &value) {
-        std::string text = tiny_model(1.0f);
-        text.insert(1, "\"curve_gain\": " + value + ", ");
-        return text;
-    };
+TEST(LateralNnModel, LoadsFilesWithTheRemovedCurveGain) {
+    // curve_gain(2026-10-18~11-27의 곡선 이득)은 지웠다. 보드에 남은 그때 파일도 그대로 읽고 그 값은 쓰지 않는다
+    std::string text = tiny_model(1.0f);
+    text.insert(1, "\"curve_gain\": 0.3, ");
     LateralNnModel model;
-    ASSERT_TRUE(model.load_text(with_gain("0.3"), &error)) << error;
-    EXPECT_FLOAT_EQ(model.curve_gain(), 0.3f);
-    for (const char *bad : {"-0.1", "1.5", "\"0.3\"", "true"}) {
-        EXPECT_FALSE(model.load_text(with_gain(bad), &error)) << bad;
-        EXPECT_NE(error.find("curve_gain"), std::string::npos) << error;
-    }
-    EXPECT_FLOAT_EQ(repository_model()->curve_gain(), 0.3f) << "k7_hev_v3의 폐루프 보정값";
-}
-
-TEST(TorqueController, CurveGainRaisesTheModelWhileTheCurveTightens) {
-    // 마찰을 빼고 모델 피드포워드만 보면 이득은 (1 + gain · 커짐 · 곡선 램프 · 속도 램프)배다: 계획의 |목표 횡가속|이
-    // 커지는 빠르기(curve_rise) 0→0.3 m/s³, |목표 횡가속| 0.2→0.6 m/s², 30→50 km/h.
-    const auto ratio = [](float speed_mps, float curvature, float rise) {
-        const auto ff = [&](float gain) {
-            SteeringParams params;
-            params.torque_friction = 0.0f;
-            TorqueController controller;
-            TorqueController::NnFeedforward nn = nn_ff(0.2f, 1.0f, true, gain);
-            nn.curve_rise = rise;
-            controller.update(torque_in(true, speed_mps, curvature, -3.0f, 0.3f), params, nn);
-            return controller.feedforward();
-        };
-        return ff(0.3f) / ff(0.0f);
-    };
-    // 20 m/s에서 곡률 0.002는 0.8 m/s²
-    EXPECT_NEAR(ratio(20.0f, 0.002f, 0.6f), 1.3f, 1e-3f) << "72 km/h, 커짐 0.6 m/s³: 전부";
-    EXPECT_NEAR(ratio(20.0f, 0.002f, 0.15f), 1.15f, 1e-3f) << "커짐 0.15 m/s³: 절반";
-    EXPECT_NEAR(ratio(20.0f, 0.002f, 0.0f), 1.0f, 1e-6f) << "곡선 유지: 이득 없음";
-    EXPECT_NEAR(ratio(20.0f, 0.002f, -0.5f), 1.0f, 1e-6f) << "곡선 탈출: 이득 없음";
-    EXPECT_NEAR(ratio(20.0f, -0.002f, 0.6f), 1.3f, 1e-3f) << "왼쪽 곡선도 |목표 횡가속|이 커지면 전부";
-    EXPECT_NEAR(ratio(20.0f, 0.001f, 0.6f), 1.15f, 1e-3f) << "0.4 m/s²: 곡선 램프 절반";
-    EXPECT_NEAR(ratio(40.0f / 3.6f, 0.006f, 0.6f), 1.15f, 1e-3f) << "40 km/h: 속도 램프 절반";
-    EXPECT_NEAR(ratio(25.0f / 3.6f, 0.02f, 0.6f), 1.0f, 1e-6f) << "30 km/h 아래";
-}
-
-// 곡선 이득을 거는 때는 계획의 모양으로 정한다: 계획이 조여들면(진입) 켜고, 일정한 곡선은 계획이 바뀔 때마다 곡률이
-// 조금씩 달라도(요청 잡음) 켜지 않는다. 같은 모델의 curve_gain만 0.3과 0으로 바꾼 두 컨트롤러의 피드포워드 비로 본다.
-TEST(LateralController, CurveGainFollowsThePlanShape) {
-    const auto model_with_gain = [](const char *gain) {
-        std::string text = read_text_file(kModelPath);
-        const std::string from = "\"curve_gain\": 0.3";
-        const size_t at = text.find(from);
-        EXPECT_NE(at, std::string::npos);
-        if (at != std::string::npos) text.replace(at, from.size(), std::string("\"curve_gain\": ") + gain);
-        auto model = std::make_shared<LateralNnModel>();
-        std::string error;
-        EXPECT_TRUE(model->load_text(text, &error)) << error;
-        return model;
-    };
-    const auto gained = model_with_gain("0.3"), plain = model_with_gain("0");
-    // 60 km/h. plan(tick)은 그 틱의 계획이고, 5틱(50 ms)마다 새 계획(촬영 시각)이 온다.
-    const auto ratio = [&](const std::function<LateralTarget(int)> &plan) {
-        const auto ff = [&](const std::shared_ptr<LateralNnModel> &model) {
-            LateralControllerConfig config;
-            config.force_engaged = true;
-            config.steering_params.nn_feedforward = true;
-            config.steering_params.torque_friction = 0.0f;
-            config.steering_params.use_live_torque_params = false;
-            LateralController controller(config);
-            controller.set_lateral_nn(model);
-            LateralControlOutput result;
-            for (int i = 0; i < 200; ++i) {
-                const double t = 1.0 + 0.01 * i;
-                LateralTarget target = plan(i);
-                target.capture_timestamp_ns = static_cast<uint64_t>((1.0 + 0.05 * (i / 5) - 0.05) * 1e9);
-                result = controller.update(usable_path(), target, ready_vehicle(t), t, i);
-            }
-            EXPECT_TRUE(result.nn_feedforward_used);
-            return result.feedforward;
-        };
-        return ff(gained) / ff(plain);
-    };
-    // 진입: 요청(psis, 0.0025 = 0.69 m/s²) 뒤의 계획 곡률이 초당 0.0016씩 조여든다(0.44 m/s³)
-    const auto entering = [](int) {
-        LateralTarget target = curve_target(0.0025f);
-        for (int i = 0; i < kLateralControlN; ++i) target.curvatures[i] = 0.0025f + 0.0016f * model_t_idx(i);
-        return target;
-    };
-    EXPECT_NEAR(ratio(entering), 1.3f, 1e-3f) << "조여드는 계획: 전부";
-    // 유지: 일정한 곡률 0.003(0.83 m/s²)이 계획마다 ±4 % 흔들린다
-    const auto holding = [](int tick) { return curve_target((tick / 5) % 2 ? 0.00312f : 0.00288f); };
-    EXPECT_NEAR(ratio(holding), 1.0f, 1e-6f) << "흔들리는 일정한 곡선: 이득 없음";
+    std::string error;
+    EXPECT_TRUE(model.load_text(text, &error)) << error;
 }
 
 TEST(TorqueController, CurveFrictionOnlyForFrictionFreeModels) {

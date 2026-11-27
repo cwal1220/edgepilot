@@ -78,16 +78,13 @@ public:
     };
     // 학습한 토크 모델(LateralNnModel)의 피드포워드(제어 부호, kHyundaiSteerMax로 나눈 토크)와 섞는 법. weight(0..1)만큼
     // 선형 피드포워드(목표 횡가속, 편향, 롤·편경사, 마찰)와 섞는다: 1이면 모델에 곡선(|목표 횡가속| 0.2→0.6 m/s²)에서만
-    // 선형의 마찰 보상을 더한 값(curve_friction이 거짓이면 모델만: 마찰 몫을 빼지 않고 배운 모델). curve_gain(모델 파일
-    // curve_gain)은 같은 곡선 범위와 30→50 km/h에서 모델 출력을 (1 + 이것)배로 키운다. NaN이거나 무게가 0이면 선형만.
+    // 선형의 마찰 보상을 더한 값(curve_friction이 거짓이면 모델만: 마찰 몫을 빼지 않고 배운 모델). NaN이거나 무게가 0이면
+    // 선형만.
     // 켜고 끌 때 피드포워드가 건너뛰지 않게 호출자가 무게를 천천히 바꾼다.
     struct NnFeedforward {
         float torque = NAN;
         float weight = 1.0f;
         bool curve_friction = true;
-        float curve_gain = 0.0f;
-        // 계획의 |목표 횡가속|이 커지는 빠르기(m/s³). 곡선 이득은 이것이 양수일 때(곡선 진입)만 건다.
-        float curve_rise = 0.0f;
     };
 
     // openpilot LatControlTorque와 같은 형태로 조향 토크를 계산한다. PID는 횡가속 공간에서 돈다.
