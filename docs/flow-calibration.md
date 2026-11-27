@@ -8,7 +8,7 @@ as the direction the camera actually travels, whereas the online calibrator
 (`model/calibration_online`, a port of openpilot's `calibrationd`) learns them
 from the model's own pose output. It runs on every frame of the GDC zero-copy
 path and is recorded; the device setting `calibration_use_flow` (web console,
-default off) makes the warp take its pitch and yaw.
+on by default since 2026-11-27) makes the warp take its pitch and yaw.
 
 Where the measurement goes, each model frame:
 
@@ -416,9 +416,10 @@ pitch about 0.0° and yaw -0.27°, with block-median standard deviations of 0.18
 
 ## Next
 
-The board has run with `calibration_use_flow` on since 2026-10-12 (the default
-stays off). One town drive is not much, so compare lane-relative position over
-more drives with the flow source, by day and on faster roads. The calibration
+The board has run with `calibration_use_flow` on since 2026-10-12, and it is
+the default since 2026-11-27. One town drive is not much, so compare
+lane-relative position over more drives with the flow source, by day and on
+faster roads. The calibration
 moved the car's mean lane offset by about 8 cm on that drive
 ([Road test](#road-test)), so `camera_offset_m` gets rechecked from those
 drives.

@@ -968,7 +968,7 @@ class LateralNnModelsTest(unittest.TestCase):
         self.assertIn(f'kLateralNnSelectionFile = "{SELECTION_FILE}";', path_cc)
         select_cc = cpp(ROOT / "src" / "controls" / "lateral_nn_select.cc")
         self.assertIn(f'"EDGEPILOT_LATERAL_NN_STATUS", "{STATUS_PATH}"', select_cc)
-        self.assertEqual(json.loads((ROOT / "params" / SELECTION_FILE).read_text())["model"], "k7_hev_v3")
+        self.assertEqual(json.loads((ROOT / "params" / SELECTION_FILE).read_text())["model"], "k7_hev_v4")
         for name, ok in (("k7_hev_v3", True), ("Car-2.1", True), (".hidden", False), ("../x", False),
                          ("a" * 64, True), ("a" * 65, False)):
             self.selection.parent.mkdir(exist_ok=True)

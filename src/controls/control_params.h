@@ -16,15 +16,15 @@
 // 호스트 검사·재생 도구가 실제로 쓰는 값이다.
 struct SteeringParams {
     bool enabled = true;
-    int steering_pressed_threshold = 150;
+    int steering_pressed_threshold = 200;  // 상류 150. 보드는 2026-10-02부터 200
 
     // openpilot 토크 튜닝 그대로(횡가속도 공간). 토크 = (FF + P + I) / 배율 + 마찰.
-    // 배율은 MaixCAM2 torqued 학습값(2026-09-27, 6769점 TLS 2.75).
-    float torque_lat_accel_factor = 2.75f;
+    // 배율·편향·마찰은 보드 설정(2026-11-27)이다. torqued가 이 값에서 시작해 학습한다.
+    float torque_lat_accel_factor = 2.66f;
     // KP_INTERP의 30 m/s 끝점. 나머지 점은 상류 고정값이다.
     float torque_kp = 0.8f;
     float torque_ki = 0.15f;
-    float torque_friction = 0.083f;  // 토크 공간, torqued 학습값(2026-09-27)
+    float torque_friction = 0.1f;  // 토크 공간
     // 상류 steeringAngleDeadzoneDeg: 오차가 이 조향각만큼의 횡가속 안이면 마찰 보상을 넣지 않는다. 상류는 일부
     // Toyota만 0.2도를 쓰고, openpilot_c2(TorqueAngDeadZone)는 1도였다. 상류와 달리 40 km/h 위에서 줄여
     // 60 km/h에서 0으로 만든다(lateral_torque.cc).
@@ -33,8 +33,8 @@ struct SteeringParams {
     // 곡률 0.008 쪽으로 가며 1로 돌린다(lateral_torque.cc). 1이면 상류 그대로다.
     float torque_straight_kp_scale = 0.7f;
 
-    // paramsd 학습값(2026-09-27): 조향비 14.72, 타이어 강성 0.83.
-    float steer_ratio = 14.72f;
+    // 조향비·타이어 강성·영점은 보드 설정(2026-11-27)이다. paramsd가 이 값에서 시작해 학습한다.
+    float steer_ratio = 16.23f;
     float tire_stiffness_factor = 0.83f;
     float steer_actuator_delay = 0.42f;
     bool avoid_lkas_fault_enabled = true;
@@ -44,16 +44,16 @@ struct SteeringParams {
     int avoid_lkas_fault_max_frames = 89;
     // 운전자가 핸들을 잡지 않았을 때 컨트롤러가 스스로 가는 최대 핸들 각도. 고장 각도(85도) 아래에서
     // 멈춰 토크를 끊김 없이 유지한다. 0이면 끄고, 파일 값은 84도까지로 자른다.
-    float avoid_lkas_fault_hold_angle_deg = 80.0f;
+    float avoid_lkas_fault_hold_angle_deg = 83.0f;
     // avoid_lkas_fault_enabled를 끈 경우에만: 85도 위에서 요청을 max_frames 낸 뒤 끊는 프레임 수. 상류
     // MAX_ANGLE_CONSECUTIVE_FRAMES와 같은 값이고 파일에서 읽지 않는다. 켠 경우 85도 위에서는 짧게 끊지 않고
     // 85도 아래로 올 때까지 끈다. K7에서 2프레임 컷 뒤 다시 켜면 3~14 ms 안에 fault가 났다(2026-10-03,
     // 4번 중 4번).
     int avoid_lkas_fault_cut_frames = 2;
-    float angle_offset_deg = -1.57f;  // paramsd 학습 평균(2026-09-27)
+    float angle_offset_deg = -1.77f;
     // openpilot latAccelOffset(m/s^2). 상수 횡가속 편향을 FF에서 뺀다.
-    // +y=오른쪽 관례라 양수 = 우측 쏠림 보정. torqued 학습값(녹화가 있으면 replay_lateral_learners 값)을 넣는다.
-    float torque_lat_accel_offset = -0.06f;  // torqued 학습값(2026-09-27)
+    // +y=오른쪽 관례라 양수 = 우측 쏠림 보정.
+    float torque_lat_accel_offset = -0.23f;
     // ESP12 실측으로 직선에서 추정한 도로 편경사(뱅크)를 FF에서 보정한다. 커브에서는 직전 값을
     // 유지하고 30초 넘게 갱신이 없으면 0으로 줄인다(controls/road_bank.h의 RoadBankEstimator).
     bool live_bank_compensation = true;
@@ -66,7 +66,7 @@ struct SteeringParams {
     bool use_live_torque_params = true;
     // lagd(locationd) 조향 지연 사용. 켜고 lagd가 확정(5블록)되면 경로 지연(목표 곡률을 읽는
     // 시점), 토크 컨트롤러의 요청 지연(torque_compare_delay가 0일 때), torqued 지연에 추정값을 쓴다(상류 lat_delay).
-    bool use_live_delay = false;
+    bool use_live_delay = true;
     // 토크 컨트롤러가 현재 측정(조향각 곡률)과 비교하는 요청의 지연(초). 0이면 경로 지연(lagd 또는 steer_actuator_delay)을
     // 그대로 쓴다(상류). 조향각은 3~8초 대역에서 요청을 0.56~0.73 s 늦게 따른다(2026-11-07, 10월 주행도 같다). 그보다
     // 짧게 비교하면 요청 변화의 일부가 오차에 남아 PID가 핸들을 더 일찍 돌린다(앞섬): 루프 여유를 사고 잔 핸들 움직임을
@@ -74,17 +74,17 @@ struct SteeringParams {
     // 주행 둘)에서 0.30이면 Lane 모드 직선의 3~8초 흔들림이 경로 지연은 그대로 둔 채 12~15 % 줄었다(모델이 차 움직임을
     // 0.15 s 늦게 보는 조건에서는 25~35 %). 실차(2026-11-08 밤, shippedadag, 0.30)에서는 조향각이 요청을 0.43 s에
     // 따랐고(11-07 0.60~0.65 s), 직선 흔들림이 11-07 주행보다 약 4분의 1 작았다(다른 길). 0.5~2 Hz 조향은 +9 %.
-    float torque_compare_delay = 0.0f;
+    float torque_compare_delay = 0.3f;
     // 모델 경로(Laneless 모드, Lane 모드의 모델 경로 구간)를 읽는 시점에 더하는 앞섬(초). 목표 곡률은 경로 지연 + plan 나이에서
     // 읽는데(lag_adjusted_curvature), 상류 0.9.x는 여기에 0.2 s를 더했다(steerActuatorDelay + 0.2). edgepilot은 lagd 추정(0.39~0.44 s)
     // + plan 나이(약 0.09 s)라 앞섬이 없다. 차선 MPC 경로에는 더하지 않는다(10월 Lane 모드 폐루프 재생에서 늦게 읽을수록 나빴다).
     // 2026-11-15 cl_sim(학생 모델, 지연 0.5 s): 0.49 s에서 읽으면 5초 흔들림이 출시 모델보다 컸고(5.4~6.3 대 3.6 cm), 0.7 s에서
     // 읽으면 30~50 % 줄어 출시 수준이 됐다(외란 유지 오프셋은 그대로). 0이면 예전과 같다.
-    float model_path_read_lead_s = 0.0f;
+    float model_path_read_lead_s = 0.2f;
     // 학습한 토크 모델로 피드포워드를 낸다(docs/lateral-nn.md). 웹 콘솔에서 고른 모델 파일(파라미터 디렉터리의
     // lateral_nn.json이 가리키는 models/lateral_nn/<차종>_v<버전>.json, common/lateral_nn_path.h)이 있어야 하고, 없으면
     // 켜도 선형 피드포워드를 쓴다. PID는 그대로다.
-    bool nn_feedforward = false;
+    bool nn_feedforward = true;
     // paramsd·torqued 입력을 상류처럼 locationd 요레이트·롤로 받는다. 끄면 ESP12 요레이트(자체 바이어스
     // 추정)와 ESP12 횡가속 롤. locationd가 없거나 낡으면 ESP12로 돌아간다.
     bool use_locationd_learner_inputs = true;
@@ -92,7 +92,7 @@ struct SteeringParams {
     // 3이면 고속도로 오른쪽 커브의 안쪽 치우침이 13.4 -> 10.6 cm로 줄고 횡저크는 12~19% 는다.
     // laneless 모드에는 쓰지 않는다.
     float lane_path_weight = 3.0f;
-    float min_steer_speed_mps = 1.0f;
+    float min_steer_speed_mps = 0.5f;
     // 경로 모드. false면 Lane 모드로 차선 확률이 높으면 차선 중심 경로를 섞고 낮으면 모델 경로만 쓴다. true면
     // Laneless 모드로 openpilot 메인처럼 모델 경로만 쓴다(get_curvature_from_plan).
     bool laneless_mode = false;

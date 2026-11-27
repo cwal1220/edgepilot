@@ -103,13 +103,14 @@ leaves out: the feed-forward ramps to the linear one over 1 s.
 
 - **Lateral acceleration at δ s ahead:** the MPC curvature trajectory at
   δ + plan age, times v².
-  - Each point is held to the same limits as the PID's request: the 80° hold
-    curvature while the driver's hands are off (`hold_angle_bounds`), and
+  - Each point is held to the same limits as the PID's request: the hold
+    angle's curvature while the driver's hands are off (`hold_angle_bounds`,
+    `avoid_lkas_fault_hold_angle_deg`, 83°), and
     ±3 m/s² (plus the learned roll) and the curvature limit
     (`limit_curvature`, shared with `clip_curvature`).
-  - Without the hold, a hands-off turn tighter than 80° would feed the model
-    angles far beyond its training and push the wheel toward the 85° fault
-    angle.
+  - Without the hold, a hands-off turn tighter than the hold angle would feed
+    the model angles far beyond its training and push the wheel toward the 85°
+    fault angle.
   - Points in the past come from a 1 s history of the target at 100 Hz.
   - A non-finite plan point makes the model's output NaN, and that tick uses
     the linear feed-forward.
@@ -287,10 +288,10 @@ models and one choice, and the web console picks from the library.
 | Item | Value |
 | --- | --- |
 | Library | `models/lateral_nn/<car>_v<version>.json`; the repository ships `k7_hev_v3` and `k7_hev_v4` (runtime inputs, no steering angle). `v1` and `v2` were removed on 2026-10-17, also from nnlc. `upload_to_board.sh` sends the folder and leaves files that exist only on the board |
-| Choice | `params/lateral_nn.json`, `{"model": "k7_hev_v3"}`; the default sits in `params.defaults/` |
+| Choice | `params/lateral_nn.json`, `{"model": "k7_hev_v4"}` (the board's choice since 2026-10-18, the repository default since 11-27); the default sits in `params.defaults/` |
 | Web console | Steering tab, learned torque model card: the files in `models/lateral_nn/`, the choice and the model controlsd uses |
 | Override | `EDGEPILOT_LATERAL_NN_MODEL`, a file path, replaces the choice |
-| Switch | `nn_feedforward` in `steering.json`, off by default |
+| Switch | `nn_feedforward` in `steering.json`, on by default since 2026-11-27 (as on the board) |
 | Status | `/dev/shm/edgepilot_lateral_nn_status.json` (`EDGEPILOT_LATERAL_NN_STATUS`): `selected`, `loaded`, `path`, `error`, `inputs` |
 | Start-up log | `controlsd: lateral nn <name> (<model name>, <n> inputs) nn_feedforward=<0/1>`, or `lateral nn off: <reason>` |
 | Switch log | `controlsd: lateral nn switched to <name> (<path>, <n> inputs)`, or `lateral nn <name> refused: <reason>; keeping <name>` |
@@ -343,10 +344,11 @@ fraction of `steer_max`:
 The shipped model is 31 % better than the linear model, and 35 % better above
 1 m/s².
 
-Since 2026-10-17 the shipped model is `k7_hev_v3`. It is the same
-configuration trained on the same drives, but the friction share the
-controller adds in curves is taken out of the target (nnlc `friction_free`),
-so the model and that term do not overlap. The share is recomputed from the
+From 2026-10-17 the shipped model was `k7_hev_v3` (`k7_hev_v4` since 11-27,
+as on the board since 10-18). `v3` is the same configuration trained on the
+same drives, but the friction share the controller adds in curves is taken
+out of the target (nnlc `friction_free`), so the model and that term do not
+overlap. The share is recomputed from the
 recorded desired and actual curvature with the controller's formula; on the
 10-16 route it matches the controller's own value
 (`replay_controls --dump`, field `fr`) within 0.7 raw on average. Held out

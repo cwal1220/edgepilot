@@ -292,8 +292,8 @@ TEST(LateralController, StandstillTracksActualCurvature) {
     config.steering_params.angle_offset_deg = 0.0f;
     LateralController controller(config);
     VehicleCanState vehicle = ready_vehicle();
-    vehicle.wheel_speed_fl_kph = vehicle.wheel_speed_fr_kph = 3.0f;  // 0.83 m/s: 최소 조향 속도 1 m/s 아래
-    vehicle.wheel_speed_rl_kph = vehicle.wheel_speed_rr_kph = 3.0f;
+    vehicle.wheel_speed_fl_kph = vehicle.wheel_speed_fr_kph = 1.5f;  // 0.42 m/s: 최소 조향 속도 0.5 m/s 아래
+    vehicle.wheel_speed_rl_kph = vehicle.wheel_speed_rr_kph = 1.5f;
     vehicle.steering_angle_deg = 30.0f;
     LateralControlOutput r;
     for (int i = 0; i < 300; ++i) {
@@ -632,7 +632,7 @@ TEST(LateralController, DriverTorqueDoesNotFadeRequest) {
 TEST(LateralController, FixedMaxCurvature) {
     LateralControllerConfig config;
     config.force_engaged = true;
-    // openpilot 곡률 한계만 본다. 손을 뗀 상태의 조향각 상한(80도)은 HoldAngleCapsOwnSteeringOnly가 본다.
+    // openpilot 곡률 한계만 본다. 손을 뗀 상태의 조향각 상한(avoid_lkas_fault_hold_angle_deg)은 HoldAngleCapsOwnSteeringOnly가 본다.
     config.steering_params.avoid_lkas_fault_hold_angle_deg = 0.0f;
     // 1 m/s(MIN_SPEED)에서 조향하도록 최소 조향 속도를 그 아래로 둔다(그 속도 이하는 상류처럼 정차다)
     config.steering_params.min_steer_speed_mps = 0.5f;
@@ -1214,7 +1214,7 @@ TEST(LateralController, DriverHoldingThePlannedCurveResumes) {
     EXPECT_EQ(run(held_curvature, -50.0f).first, -1) << "핸들이 계획보다 많이 풀렸으면(계획이 1.4배) 쉰다";
 }
 
-// 운전자가 핸들을 잡지 않으면 컨트롤러 목표를 avoid_lkas_fault_hold_angle_deg(80도) 조향각이 내는
+// 운전자가 핸들을 잡지 않으면 컨트롤러 목표를 avoid_lkas_fault_hold_angle_deg(83도) 조향각이 내는
 // 곡률 안으로 묶는다. 85도를 넘겨 토크가 끊겼다 다시 잡는 반복 대신 그 각도에서 버틴다. 운전자가
 // 조향 중이거나 0으로 끄면 묶지 않는다.
 TEST(LateralController, HoldAngleCapsOwnSteeringOnly) {
@@ -1243,13 +1243,14 @@ TEST(LateralController, HoldAngleCapsOwnSteeringOnly) {
         return r.desired_curvature;
     };
     const VehicleModel model = VehicleModel::make(config.steering_params);
-    const float right_cap = model.curvature_at_angle(v, -80.0f);
-    const float left_cap = model.curvature_at_angle(v, 80.0f);
-    // 80도가 내는 곡률은 반경 30 m 남짓이다(오른쪽 +, 왼쪽 −)
+    const float hold = config.steering_params.avoid_lkas_fault_hold_angle_deg;
+    const float right_cap = model.curvature_at_angle(v, -hold);
+    const float left_cap = model.curvature_at_angle(v, hold);
+    // 83도가 내는 곡률은 반경 30 m 남짓이다(오른쪽 +, 왼쪽 −)
     ASSERT_GT(right_cap, 0.02f);
     ASSERT_LT(right_cap, 0.05f);
     ASSERT_LT(left_cap, -0.02f);
-    EXPECT_NEAR(run(config, 0.1f, 0), right_cap, 1e-3f) << "혼자서는 80도까지만 요청한다(오른쪽)";
+    EXPECT_NEAR(run(config, 0.1f, 0), right_cap, 1e-3f) << "혼자서는 유지 한계 각도까지만 요청한다(오른쪽)";
     EXPECT_NEAR(run(config, -0.1f, 0), left_cap, 1e-3f) << "왼쪽도 같다";
     EXPECT_GT(run(config, 0.1f, 300), 2.0f * right_cap) << "운전자가 조향 중이면 plan을 따른다";
     LateralControllerConfig off = config;
@@ -1350,6 +1351,7 @@ TEST(LateralController, CurvatureLimitFollowsRoll) {
 TEST(LateralController, LiveDelaySwitch) {
     LateralControllerConfig config;
     config.steering_params.steer_actuator_delay = 0.34f;
+    config.steering_params.use_live_delay = false;
     LateralController controller(config);
     controller.set_live_delay(0.44f, true);
     EXPECT_FALSE(controller.live_delay_in_use()) << "스위치가 꺼져 있으면 쓰지 않는다";
@@ -1370,6 +1372,7 @@ TEST(LateralController, TorqueCompareDelay) {
     LateralControllerConfig config;
     config.steering_params.steer_actuator_delay = 0.34f;
     config.steering_params.use_live_delay = true;
+    config.steering_params.torque_compare_delay = 0.0f;
     LateralController follow(config);
     follow.set_live_delay(0.57f, true);
     EXPECT_FLOAT_EQ(follow.torque_compare_delay_s(), 0.57f) << "0이면 경로 지연(상류)";

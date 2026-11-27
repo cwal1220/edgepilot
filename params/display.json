@@ -1,8 +1,8 @@
 {
   "enabled": true,
   "brightness_percent": 100,
-  "alert_volume_percent": 70,
-  "camera_offset_m": 0.0,
+  "alert_volume_percent": 40,
+  "camera_offset_m": 0.05,
   "camera_height_m": 1.22,
-  "calibration_use_flow": false
+  "calibration_use_flow": true
 }

@@ -50,8 +50,8 @@ the separate [edgepilot-nnlc][nnlc] repository's `models/`:
 
 | File | Trained |
 | --- | --- |
-| `k7_hev_v3.json` | the trajectory that happened, 33 inputs, three nets, without the friction share the controller adds in curves; the default |
-| `k7_hev_v4.json` | the controller's runtime inputs (`replay_controls --nn-inputs`), 25 inputs without the steering angle, otherwise as `v3` |
+| `k7_hev_v3.json` | the trajectory that happened, 33 inputs, three nets, without the friction share the controller adds in curves |
+| `k7_hev_v4.json` | the controller's runtime inputs (`replay_controls --nn-inputs`), 25 inputs without the steering angle, otherwise as `v3`; the default |
 
 The earlier `k7_hev_v1` and `v2` learned the torque that was sent, friction
 included, and were removed on 2026-10-17, here and in nnlc. Git history keeps

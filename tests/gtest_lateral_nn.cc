@@ -599,7 +599,7 @@ TEST(TorqueController, CurveFrictionOnlyForFrictionFreeModels) {
         return ff(0.2f) - ff(0.0f);
     };
     EXPECT_NE(share(true), 0.0f);
-    EXPECT_FLOAT_EQ(share(false), 0.0f);
+    EXPECT_NEAR(share(false), 0.0f, 1e-6f) << "선형 몫을 모델로 바꾸는 계산의 반올림만 남는다";
 }
 
 TEST(LateralController, AddsCurveFrictionByTheModelsTarget) {
