@@ -764,19 +764,16 @@ TEST(LateralLearners, TorqueScheduleAndCache) {
     ASSERT_EQ(TorqueEstimator(tuning, kTorqueLag, "").restore_status(), TorqueRestore::None);
     ASSERT_EQ(valid_cache.compare(0, 8, "EDGETQC1"), 0);
 
-    // 다른 요레이트·롤 출처의 캐시: 점과 절편은 버리고(롤 출처 차이만큼 어긋난다) 배율·마찰만 이어 쓴다.
-    TorqueEstimator switched(tuning, kTorqueLag, valid_cache, true);
-    ASSERT_EQ(switched.restore_status(), TorqueRestore::SourceChanged);
-    ASSERT_EQ(switched.total_points(), 0);
-    switched.update(torque_input(tr, 0.0));
-    ASSERT_FALSE(switched.params().valid);
-    ASSERT_NEAR(switched.params().lat_accel_factor, cached.lat_accel_factor, 1e-6);
-    ASSERT_NEAR(switched.params().friction, cached.friction, 1e-6);
-    ASSERT_EQ(switched.params().lat_accel_offset, 0.0);
-    ASSERT_EQ(switched.params().decay, 50.0);
-    ASSERT_EQ(TorqueEstimator(tuning, kTorqueLag, switched.persist_data(), true).restore_status(),
-              TorqueRestore::Restored)
-        << "새 출처로 저장한 캐시는 그 출처로 복원한다";
+    // ESP12 출처로 쌓은 예전 캐시(출처 바이트 0)는 쓰지 않는다: 점의 횡가속도가 롤 출처 차이만큼 어긋난다
+    std::string esp_cache = valid_cache;
+    constexpr size_t kSourceByte = 8 + 4 + 4 + 4;  // 매직, 버전, 마찰·배율 키 뒤
+    ASSERT_EQ(esp_cache[kSourceByte], 1) << "locationd 출처";
+    esp_cache[kSourceByte] = 0;
+    TorqueEstimator esp(tuning, kTorqueLag, esp_cache);
+    ASSERT_EQ(esp.restore_status(), TorqueRestore::KeyMismatch);
+    ASSERT_EQ(esp.total_points(), 0);
+    esp.update(torque_input(tr, 0.0));
+    ASSERT_EQ(esp.params().lat_accel_factor, tuning.lat_accel_factor) << "사전값에서 다시 시작한다";
 }
 
 // ---------------------------------------------------------------- controlsd 연결
@@ -798,7 +795,7 @@ void update_learners(LateralLearners *l, const VehicleCanState &vehicle, double 
               vehicle_speed_kph(vehicle, now, kVehicleStateTimeoutS) / 3.6, true, apply_torque);
 }
 
-// controlsd·재생 도구 공용 판단: 스위치·0.5초·필터 유효면 쓴다. inputsOK는 보지 않는다(상류 paramsd).
+// controlsd·재생 도구 공용 판단: 0.5초 안이고 필터가 유효하면 쓴다. inputsOK는 보지 않는다(상류 paramsd).
 TEST(LateralLearners, LocalizerSampleFrom) {
     LocalizationState loc;
     loc.flags = kLocalizationFilterValid | kLocalizationSensorsOk | kLocalizationPosenetOk;  // inputs_ok 없음
@@ -807,23 +804,22 @@ TEST(LateralLearners, LocalizerSampleFrom) {
     loc.orientation_calib[0] = 0.02f;
     loc.orientation_std[0] = 0.004f;
     LocalizerSample s;
-    ASSERT_TRUE(localizer_sample_from(loc, true, 0.07, 12.0, &s));
+    ASSERT_TRUE(localizer_sample_from(loc, 0.07, 12.0, &s));
     // 자이로 교차검증으로 inputs_ok가 내려가도 학습 입력은 그대로다
     EXPECT_TRUE(s.pose_ok);
     EXPECT_TRUE(s.roll_ok);
     EXPECT_DOUBLE_EQ(s.t_s, 12.0);
     EXPECT_FLOAT_EQ(static_cast<float>(s.yaw_rate_std_rad_s), 0.013f);
-    // 스위치가 꺼졌거나 0.5초 넘게 낡았거나 필터가 무효면 ESP12
-    EXPECT_FALSE(localizer_sample_from(loc, false, 0.07, 12.0, &s));
-    EXPECT_FALSE(localizer_sample_from(loc, true, 0.6, 12.0, &s));
+    // 0.5초 넘게 낡았거나 필터가 무효면 ESP12
+    EXPECT_FALSE(localizer_sample_from(loc, 0.6, 12.0, &s));
     loc.flags &= ~kLocalizationFilterValid;
-    EXPECT_FALSE(localizer_sample_from(loc, true, 0.07, 12.0, &s));
+    EXPECT_FALSE(localizer_sample_from(loc, 0.07, 12.0, &s));
     // 자세(posenet)가 무효면 요레이트·롤 관측 조건이, 센서가 무효면 롤 관측 조건이 빠진다
     loc.flags = kLocalizationFilterValid | kLocalizationSensorsOk;
-    ASSERT_TRUE(localizer_sample_from(loc, true, 0.07, 12.0, &s));
+    ASSERT_TRUE(localizer_sample_from(loc, 0.07, 12.0, &s));
     EXPECT_FALSE(s.pose_ok);
     loc.flags = kLocalizationFilterValid | kLocalizationPosenetOk;
-    ASSERT_TRUE(localizer_sample_from(loc, true, 0.07, 12.0, &s));
+    ASSERT_TRUE(localizer_sample_from(loc, 0.07, 12.0, &s));
     EXPECT_TRUE(s.pose_ok);
     EXPECT_FALSE(s.roll_ok);
 }
@@ -902,7 +898,7 @@ TEST(LateralLearners, LocalizerSamplesObservedAtTheirTime) {
     EXPECT_FALSE(d.l.localizer_inputs());
     EXPECT_DOUBLE_EQ(d.l.last_vehicle_input().t_s, 3.01);
     EXPECT_NEAR(d.l.last_vehicle_input().yaw_rate_rad_s, d.esp_yaw_left, 1e-6);
-    EXPECT_FALSE(d.l.last_torque_input().pose_valid) << "torqued는 시작할 때의 출처(locationd) 점만 쓴다";
+    EXPECT_FALSE(d.l.last_torque_input().pose_valid) << "torqued는 locationd 점만 쓴다";
 }
 
 // 같은 locationd 표본을 여러 틱 읽어도 한 번만 쌓는다. 학습기 시계로 옮긴 시각(t_s)은 읽을 때마다 조금씩 달라서
@@ -1033,11 +1029,12 @@ TEST(LateralLearners, LearnersGlue) {
         ASSERT_TRUE(l.last_vehicle_input().inputs_fresh);
         ASSERT_NEAR(l.last_vehicle_input().lat_accel_mps2, 0.4, 1e-6);
         ASSERT_TRUE(l.last_torque_input().lat_active);
-        // 좌회전(보낸 토크 +, ESP12 요레이트 +)은 torqued에서 둘 다 음수다(우측 양수 관례)
+        // 좌회전(보낸 토크 +, ESP12 요레이트 +): torqued 토크는 음수다(우측 양수 관례). locationd가 없는 틱이라
+        // torqued는 이 점을 쓰지 않는다.
         {
             // torqued는 컨트롤러 좌표계라 오프셋이 torque_lat_accel_offset과 같은 방향이다
             ASSERT_LT(std::fabs(l.last_torque_input().steer_torque + 100.0 / kHyundaiSteerMax), 1e-12);
-            ASSERT_EQ(l.last_torque_input().yaw_rate_rad_s, -l.last_vehicle_input().yaw_rate_rad_s);
+            ASSERT_FALSE(l.last_torque_input().pose_valid);
             ASSERT_GT(l.last_vehicle_input().yaw_rate_rad_s, 0.0);
         }
         // 첫 틱에 둘 다 발행·저장한다(상류 frame 0)

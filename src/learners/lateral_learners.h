@@ -90,7 +90,7 @@ public:
     // 시각의 요레이트·롤을 받은 표본 사이에서 보간해 관측한다. 표본은 IMU 묶음마다(10 Hz)
     // 평균 70 ms 늦게 오므로, 받은 즉시 지금 시각으로 관측하면 요레이트가 조향보다 늦어 강성을
     // 낮게 배운다(2026-10-01 재생 0.92 → 0.71). 상류는 메시지 시각 순서로 넣는다.
-    // 그 시각의 표본이 없거나 자세가 무효(상류 posenetOK)인 틱은 ESP12 입력을 쓴다.
+    // 그 시각의 표본이 없거나 자세가 무효(상류 posenetOK)인 틱은 paramsd만 ESP12 입력으로 배우고 torqued는 건너뛴다.
     static constexpr double kLocalizerDelayS = 0.25;
     void set_localizer(bool use, const LocalizerSample &sample);
     // 조향 지연(컨트롤러가 경로를 읽는 지연과 같은 값). 상류 torqued처럼 점의 토크·활성 이력을 이만큼

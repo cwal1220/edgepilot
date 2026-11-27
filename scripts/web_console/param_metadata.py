@@ -72,7 +72,7 @@ PARAM_GROUPS: Dict[str, Dict[str, Any]] = {
 # 하나가 함께 내므로 스위치도 하나다. 켜면(자동 학습) 학습값을, 학습이 값을 내기 전과 끄면(수동) 수동값을 제어에
 # 쓴다(controlsd LateralController::live_params, plan_delay_s). 고정 제원은 학습하지 않는 차량 값이다.
 VEHICLE_TAB: Dict[str, Any] = {
-    "sections": ["vehicle_model", "torque_model", "steer_delay", "learner_inputs"],
+    "sections": ["vehicle_model", "torque_model", "steer_delay"],
     "learners": {
         "vehicle_model": {"learner": "paramsd", "switch": "use_live_vehicle_params"},
         "torque_model": {"learner": "torqued", "switch": "use_live_torque_params"},
@@ -123,11 +123,9 @@ PARAM_METADATA: Dict[str, Dict[str, Dict[str, Any]]] = {
         "avoid_lkas_fault_hold_angle_deg": number("lkas_fault", "°", 1, 0, 84, unused=(
             STEERING_OFF, when("avoid_lkas_fault_enabled", False, "lkas_fault_off"))),
         "live_bank_compensation": toggle("vehicle_model", tab="vehicle", learned=True, unused=(STEERING_OFF, NN_ON)),
-        "bank_yaw_bias_correction": toggle("torque_controller", unused=(STEERING_OFF,)),
         "use_live_vehicle_params": toggle("vehicle_model", tab="vehicle", labels=LEARNING),
         "use_live_torque_params": toggle("torque_model", tab="vehicle", labels=LEARNING),
         "use_live_delay": toggle("steer_delay", tab="vehicle", labels=LEARNING),
-        "use_locationd_learner_inputs": toggle("learner_inputs", tab="vehicle", labels=("locationd", "esp12")),
         "torque_lat_accel_offset": number("torque_model", "m/s²", 0.01, -1.0, 1.0, tab="vehicle", learned=True,
                                           unused=(STEERING_OFF, NN_ON)),
         "angle_offset_deg": number("vehicle_model", "°", 0.1, -10, 10, tab="vehicle", learned=True),

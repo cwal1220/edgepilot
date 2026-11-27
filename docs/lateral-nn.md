@@ -230,8 +230,8 @@ of about 0.01–0.03 m/s² that decays in 12–20 s.
 
 While the model contributes, `ControlState.hud_flags` bit 12
 (`kHudFlagNnFeedforward`) is set. In routes before 2026-10-09, bit 11 was the
-brake lights. `LearnerState.flags` bit 16 (`kLearnerLateralNnLoaded`) says
-whether controlsd loaded a model.
+brake lights. `LearnerState.flags` bit 15 (`kLearnerLateralNnLoaded`; bit 16
+in routes before 2026-11-27) says whether controlsd loaded a model.
 
 ### Curve gain, removed
 

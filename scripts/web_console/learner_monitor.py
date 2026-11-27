@@ -31,7 +31,7 @@ LEARNER_FLAGS = (  # ipc_messages.h kLearner* 비트 순서
     "vehicle_inputs_ok", "vehicle_valid", "sensor_valid", "steer_ratio_valid",
     "stiffness_valid", "offset_average_valid", "offset_valid", "torque_inputs_ok",
     "torque_valid", "use_vehicle", "use_torque", "vehicle_restored", "torque_restored", "use_delay",
-    "localizer_inputs", "torque_partly_restored", "lateral_nn_loaded",
+    "localizer_inputs", "lateral_nn_loaded",
 )
 LEARNER_HISTORY_S = 600
 # 추이 행 사이의 최소 간격. 1초 스레드 말고 요청도 sample을 불러서, 새 발행마다 행을 쌓으면 10분 창이 3~5분만 남았다.

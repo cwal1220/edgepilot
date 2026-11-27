@@ -113,14 +113,13 @@ torque sent come from `ControlState`; driver intervention comes from the
 recorded driver torque, debounced as the controller does it.
 
 - `--steering route/params/steering.json`: uses the tuning at the time of the
-  recording (priors, delay, input source). Without it the code defaults apply,
+  recording (priors, delay). Without it the code defaults apply,
   which may differ from the board.
 - `--vehicle-json route/params/live_parameters.json`: starts from the paramsd
   saved values.
-- `--source steering|locationd|esp`: the yaw-rate and roll source for paramsd
-  and torqued. The default (`steering`) follows
-  `use_locationd_learner_inputs` and, as controlsd does, falls back to ESP12
-  when locationd is more than 0.5 s stale or its filter is invalid.
+- The yaw rate and roll come from locationd, as in controlsd: ESP12 stands in
+  for paramsd while locationd is more than 0.5 s stale or its filter is
+  invalid; torqued takes locationd points only.
 - `--metric-from N`: counts the curvature comparison printed at the end from
   file N (counted from 0). The earlier files only serve to converge the
   learning.

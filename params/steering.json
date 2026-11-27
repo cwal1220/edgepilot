@@ -24,7 +24,5 @@
   "use_live_delay": true,
   "torque_compare_delay": 0.3,
   "nn_feedforward": true,
-  "use_locationd_learner_inputs": true,
-  "bank_yaw_bias_correction": false,
   "model_path_read_lead_s": 0.2
 }

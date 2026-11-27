@@ -251,21 +251,19 @@ LearnerState ControlsTick::make_learner_state() const {
     const TorqueParams &t = learners.torque_params();
     const LiveLateralParams live = learners.live();
     LearnerState state;
-    state.flags =
-        (v.inputs_ok ? kLearnerVehicleInputsOk : 0U) | (v.valid ? kLearnerVehicleValid : 0U) |
-        (v.sensor_valid ? kLearnerSensorValid : 0U) | (v.steer_ratio_valid ? kLearnerSteerRatioValid : 0U) |
-        (v.stiffness_factor_valid ? kLearnerStiffnessValid : 0U) |
-        (v.angle_offset_average_valid ? kLearnerOffsetAverageValid : 0U) |
-        (v.angle_offset_valid ? kLearnerOffsetValid : 0U) | (t.inputs_ok ? kLearnerTorqueInputsOk : 0U) |
-        (t.valid ? kLearnerTorqueValid : 0U) |
-        (live.use_vehicle && params.use_live_vehicle_params ? kLearnerUseVehicle : 0U) |
-        (live.use_torque && params.use_live_torque_params ? kLearnerUseTorque : 0U) |
-        (learners.vehicle_restored() ? kLearnerVehicleRestored : 0U) |
-        (learners.torque_restore_status() == TorqueRestore::Restored ? kLearnerTorqueRestored : 0U) |
-        (learners.torque_restore_status() == TorqueRestore::SourceChanged ? kLearnerTorquePartlyRestored : 0U) |
-        (controller_.live_delay_in_use() ? kLearnerUseDelay : 0U) |
-        (learners.localizer_inputs() ? kLearnerLocalizerInputs : 0U) |
-        (controller_.lateral_nn_loaded() ? kLearnerLateralNnLoaded : 0U);
+    state.flags = (v.inputs_ok ? kLearnerVehicleInputsOk : 0U) | (v.valid ? kLearnerVehicleValid : 0U) |
+                  (v.sensor_valid ? kLearnerSensorValid : 0U) | (v.steer_ratio_valid ? kLearnerSteerRatioValid : 0U) |
+                  (v.stiffness_factor_valid ? kLearnerStiffnessValid : 0U) |
+                  (v.angle_offset_average_valid ? kLearnerOffsetAverageValid : 0U) |
+                  (v.angle_offset_valid ? kLearnerOffsetValid : 0U) | (t.inputs_ok ? kLearnerTorqueInputsOk : 0U) |
+                  (t.valid ? kLearnerTorqueValid : 0U) |
+                  (live.use_vehicle && params.use_live_vehicle_params ? kLearnerUseVehicle : 0U) |
+                  (live.use_torque && params.use_live_torque_params ? kLearnerUseTorque : 0U) |
+                  (learners.vehicle_restored() ? kLearnerVehicleRestored : 0U) |
+                  (learners.torque_restore_status() == TorqueRestore::Restored ? kLearnerTorqueRestored : 0U) |
+                  (controller_.live_delay_in_use() ? kLearnerUseDelay : 0U) |
+                  (learners.localizer_inputs() ? kLearnerLocalizerInputs : 0U) |
+                  (controller_.lateral_nn_loaded() ? kLearnerLateralNnLoaded : 0U);
     state.steer_ratio = static_cast<float>(v.steer_ratio);
     state.stiffness_factor = static_cast<float>(v.stiffness_factor);
     state.roll_rad = static_cast<float>(v.roll_rad);
@@ -353,12 +351,8 @@ void ControlsTick::on_localization(const LocalizationRead &localization, double 
         const double age_s =
             static_cast<double>(static_cast<int64_t>(localization.read_ns - state.timestamp_ns)) * 1e-9;
         LocalizerSample sample;
-        const bool use =
-            localizer_sample_from(state, steering().use_locationd_learner_inputs, age_s, now_s - age_s, &sample);
+        const bool use = localizer_sample_from(state, age_s, now_s - age_s, &sample);
         learners_.set_localizer(use, sample);
-        float imu_yaw = 0.0f;
-        const bool imu_ok = imu_yaw_left_from(state, age_s, &imu_yaw);
-        controller_.set_imu_yaw_rate(imu_yaw, imu_ok, now_s);
     }
 }
 

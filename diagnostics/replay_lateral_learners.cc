@@ -5,12 +5,9 @@
 // --upstream-schedule: 조향각·속도를 상류처럼 20 Hz로만 관측(기본은 런타임과 같은 매 틱).
 // --outputs out.csv / --torque-outputs tout.csv: paramsd·torqued가 게시한 값.
 // --torque-cache c.bin: 있으면 복원하고 저장 틱마다 덮어쓴다(상류 LiveTorqueParameters).
-// --steering route/params/steering.json: 녹화 당시 파라미터(사전값·지연·토크 튜닝·입력 출처).
+// --steering route/params/steering.json: 녹화 당시 파라미터(사전값·지연·토크 튜닝).
 //   없으면 코드 기본값이라 보드와 다를 수 있다.
 // --vehicle-json route/params/live_parameters.json: paramsd 저장값으로 시작한다(보드와 같게).
-// --source steering|locationd|esp: paramsd·torqued 요레이트·롤 출처. 기본 steering은
-//   use_locationd_learner_inputs를 따른다(controlsd와 같이 locationd가 0.5초 넘게 낡거나 필터가
-//   무효면 ESP12).
 // --metric-from N: 곡률 대조를 0부터 센 N번 이벤트 파일부터 센다(앞 파일로 학습을 수렴시킬 때).
 // 끝에 결합 직진 구간의 조향각 기반 곡률(학습값 차량 모델) − 요레이트 곡률 평균을 출처별로 출력한다.
 #include "car/speed_filter.h"
@@ -40,7 +37,6 @@
 int main(int argc, char **argv) {
     std::string outputs_path, torque_outputs_path, torque_cache_path;
     std::string steering_path, vehicle_json_path;
-    std::string source = "steering";
     long metric_from_file = 0;  // 곡률 대조를 이 번호 파일부터만 센다(앞 파일은 학습 수렴용)
     VehicleParamsOptions options;
     std::vector<std::string> events;
@@ -60,20 +56,17 @@ int main(int argc, char **argv) {
             steering_path = args.value();
         else if (args.is("--vehicle-json"))
             vehicle_json_path = args.value();
-        else if (args.is("--source"))
-            source = args.value();
         else if (args.is_option())
             args.fail();
         else
             events.push_back(args.arg());
     }
-    if (source != "steering" && source != "locationd" && source != "esp") args.fail();
     if (events.empty() || args.error()) {
         std::fprintf(stderr,
                      "usage: %s [--upstream-schedule] [--outputs out.csv] [--torque-outputs tout.csv] "
                      "[--torque-cache c.bin] "
                      "[--steering steering.json] [--vehicle-json live_parameters.json] "
-                     "[--source steering|locationd|esp] [--metric-from N] <events.bin...>\n",
+                     "[--metric-from N] <events.bin...>\n",
                      argv[0]);
         return 2;
     }
@@ -92,8 +85,6 @@ int main(int argc, char **argv) {
     }
     const std::string cache = torque_cache_path.empty() ? std::string() : read_text_file(torque_cache_path);
     const std::string vehicle_json = vehicle_json_path.empty() ? std::string() : read_text_file(vehicle_json_path);
-    const bool use_locationd = source == "steering" ? sp.use_locationd_learner_inputs : source == "locationd";
-    std::printf("yaw rate and roll source: %s\n", use_locationd ? "locationd (ESP12 when invalid or stale)" : "ESP12");
     LateralLearners learners(sp, vehicle_json, cache, options);
     if (!vehicle_json.empty())
         std::printf("paramsd saved values: %s\n", learners.vehicle_restored() ? "restored" : "rejected");
@@ -157,7 +148,7 @@ int main(int argc, char **argv) {
         if (have_loc) {
             const double sample_t_s = static_cast<double>(loc.timestamp_ns) * 1e-9;
             LocalizerSample sample;
-            const bool use = localizer_sample_from(loc, use_locationd, now_s - sample_t_s, sample_t_s, &sample);
+            const bool use = localizer_sample_from(loc, now_s - sample_t_s, sample_t_s, &sample);
             learners.set_localizer(use, sample);
         }
         // controlsd처럼 컨트롤러가 거른 vEgo를 준다(상류 carState.vEgo)

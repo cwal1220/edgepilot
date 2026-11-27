@@ -57,9 +57,6 @@ struct SteeringParams {
     // ESP12 실측으로 직선에서 추정한 도로 편경사(뱅크)를 FF에서 보정한다. 커브에서는 직전 값을
     // 유지하고 30초 넘게 갱신이 없으면 0으로 줄인다(controls/road_bank.h의 RoadBankEstimator).
     bool live_bank_compensation = true;
-    // 편경사 추정에 넣는 ESP12 요레이트에서 주행 중 바이어스(locationd 요레이트와의 차이, EspYawBiasEstimator)를 뺀다.
-    // 편경사 추정은 선형 피드포워드의 편경사 보정과 학습한 토크 모델의 롤 입력이 쓴다. 끄면 예전처럼 원시값이다.
-    bool bank_yaw_bias_correction = false;
     // paramsd·torqued 학습값 사용. 끄면 학습기는 계산·기록만 한다. 차량 값을 켜면
     // 롤 보정이 live_bank_compensation을 대신한다.
     bool use_live_vehicle_params = true;
@@ -85,9 +82,6 @@ struct SteeringParams {
     // lateral_nn.json이 가리키는 models/lateral_nn/<차종>_v<버전>.json, common/lateral_nn_path.h)이 있어야 하고, 없으면
     // 켜도 선형 피드포워드를 쓴다. PID는 그대로다.
     bool nn_feedforward = true;
-    // paramsd·torqued 입력을 상류처럼 locationd 요레이트·롤로 받는다. 끄면 ESP12 요레이트(자체 바이어스
-    // 추정)와 ESP12 횡가속 롤. locationd가 없거나 낡으면 ESP12로 돌아간다.
-    bool use_locationd_learner_inputs = true;
     // Lane 모드 MPC의 경로(횡위치) 가중치. 상류 0.9.4 PATH_COST는 1이다. 2026-10-05 폐루프 재생에서
     // 3이면 고속도로 오른쪽 커브의 안쪽 치우침이 13.4 -> 10.6 cm로 줄고 횡저크는 12~19% 는다.
     // laneless 모드에는 쓰지 않는다.

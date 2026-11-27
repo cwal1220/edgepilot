@@ -11,12 +11,10 @@ constexpr JsonBoolField<SteeringParams> kSteeringBools[] = {
     {"enabled", &SteeringParams::enabled},
     {"avoid_lkas_fault_enabled", &SteeringParams::avoid_lkas_fault_enabled},
     {"live_bank_compensation", &SteeringParams::live_bank_compensation},
-    {"bank_yaw_bias_correction", &SteeringParams::bank_yaw_bias_correction},
     {"use_live_vehicle_params", &SteeringParams::use_live_vehicle_params},
     {"use_live_torque_params", &SteeringParams::use_live_torque_params},
     {"use_live_delay", &SteeringParams::use_live_delay},
     {"nn_feedforward", &SteeringParams::nn_feedforward},
-    {"use_locationd_learner_inputs", &SteeringParams::use_locationd_learner_inputs},
     {"laneless_mode", &SteeringParams::laneless_mode},
 };
 constexpr JsonIntField<SteeringParams> kSteeringInts[] = {

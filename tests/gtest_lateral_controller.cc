@@ -933,23 +933,6 @@ TEST(RoadBankEstimator, HoldsInCurvesAndFadesWhenStale) {
     }
 }
 
-// ESP12 요레이트 바이어스는 직선 주행 중 locationd 요레이트와의 차이로 배우고(시정수 20초), 커브·저속·locationd 무효일
-// 때는 멈춰 유지하며, ±0.02 rad/s로 자른다.
-TEST(EspYawBiasEstimator, LearnsOnStraightsHoldsOtherwise) {
-    EspYawBiasEstimator bias;
-    const float dt = 0.01f;
-    for (int i = 0; i < 100 * 100; ++i) bias.update(dt, 25.0f, -0.006f + 0.001f, true, 0.001f, true);
-    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "직선 100초면 수렴";
-    for (int i = 0; i < 30 * 100; ++i) bias.update(dt, 25.0f, 0.05f, true, 0.04f, true);  // |0.04·25| = 1 m/s²: 커브
-    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "커브에서는 유지";
-    for (int i = 0; i < 30 * 100; ++i) bias.update(dt, 5.0f, 0.0f, true, 0.0f, true);
-    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "저속에서는 유지";
-    for (int i = 0; i < 30 * 100; ++i) bias.update(dt, 25.0f, 0.0f, true, 0.0f, false);
-    EXPECT_NEAR(bias.bias(), -0.006f, 1e-4f) << "locationd가 무효면 유지";
-    for (int i = 0; i < 300 * 100; ++i) bias.update(dt, 25.0f, 0.012f, true, -0.012f, true);  // |0.012·25| < 0.4
-    EXPECT_NEAR(bias.bias(), EspYawBiasEstimator::kMaxBias, 1e-6f) << "한계로 자른다";
-}
-
 // 스스로 가는 최대 조향각은 고장 각도 아래에서 멈춰야 뜻이 있다: 파일이 더 큰 값을 줘도 그 아래로 자른다.
 TEST(LateralController, HoldAngleStaysBelowTheFaultAngle) {
     const std::string path = "/tmp/gtest_lateral_controller_hold_angle_" + std::to_string(getpid()) + ".json";

@@ -106,8 +106,6 @@ struct LateralControlOutput {
 class LateralController {
 public:
     float road_bank_lat_accel() const { return road_bank_.lat_accel(); }
-    // 주행 중 배운 ESP12 요레이트 바이어스(rad/s, ESP12 관례 왼쪽 +). bank_yaw_bias_correction이 켜져 있으면 편경사 추정에서 뺀다.
-    float esp_yaw_bias() const { return esp_yaw_bias_.bias(); }
     explicit LateralController(LateralControllerConfig config = LateralControllerConfig{});
 
     // 제어 상태를 유지한 채 런타임 파라미터를 즉시 교체한다.
@@ -125,13 +123,6 @@ public:
     // lagd 추정 지연. valid는 확정(5블록)이고 신선할 때. use_live_delay가 켜져 있으면 경로
     // 지연에 쓴다.
     void set_live_delay(float delay_s, bool valid);
-    // locationd 요레이트(ESP12 관례 왼쪽 +, 자이로 바이어스를 뺀 값). valid는 자이로 입력이 정상일 때. 새 표본마다 부르고,
-    // 0.5초 넘게 새 표본이 없으면 낡은 것으로 본다(ESP12 바이어스 학습이 멈춘다).
-    void set_imu_yaw_rate(float yaw_rate_rad_s, bool valid, double now_s) {
-        imu_yaw_rate_ = yaw_rate_rad_s;
-        imu_yaw_valid_ = valid;
-        imu_yaw_time_s_ = now_s;
-    }
     bool live_delay_in_use() const;
     // 목표 곡률을 읽는 경로 지연: lagd 사용 중이면 추정값(0.15~0.65 s), 아니면 steer_actuator_delay
     float plan_delay_s() const;
@@ -281,10 +272,6 @@ private:
     bool steer_req_sent_ = false;
     SteeringPressedFilter steering_pressed_;  // 운전자 조향 판정(openpilot 방식 카운터 필터)
     RoadBankEstimator road_bank_;             // 라이브 편경사 추정(직선에서만 갱신, 2초 저역통과)
-    EspYawBiasEstimator esp_yaw_bias_;        // 주행 중 ESP12 요레이트 바이어스(locationd 기준)
-    float imu_yaw_rate_ = 0.0f;
-    bool imu_yaw_valid_ = false;
-    double imu_yaw_time_s_ = -1000.0;
     bool lkas11_counter_valid_ = false;
     int lkas11_counter_ = 0;
     // Panda health는 100 Hz 컨트롤러보다 낮은 주기로 발행된다.

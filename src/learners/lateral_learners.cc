@@ -64,7 +64,7 @@ LateralLearners::LateralLearners(const SteeringParams &params, const std::string
       vehicle_restore_rejected_(!vehicle_json.empty() && !init_.restored),
       bias_(init_.yaw_bias_rad_s),
       vehicle_(constants_, init_.steer_ratio, init_.stiffness_factor, init_.angle_offset_deg * kPi / 180.0, options),
-      torque_(torque_tuning(params), params.steer_actuator_delay, torque_cache, params.use_locationd_learner_inputs) {}
+      torque_(torque_tuning(params), params.steer_actuator_delay, torque_cache) {}
 
 void LateralLearners::set_localizer(bool use, const LocalizerSample &sample) {
     use_localizer_ = use;
@@ -175,16 +175,12 @@ void LateralLearners::feed(Tick tick) {
         live_.roll_rad = static_cast<float>(vp.roll_rad);
     }
 
-    // torqued 점은 시작할 때 정한 출처(캐시에 남는다)의 틱만 쓴다. 출처가 섞이면 점의 횡가속도가
-    // 롤 출처 차이만큼 어긋난다. 상류 torqued는 자세 롤을 그대로 쓴다.
+    // torqued 점은 locationd 틱만 쓴다(상류 torqued처럼 자세 롤 그대로). ESP12로 돌아간 동안은 paramsd만 배운다:
+    // 롤 출처가 섞이면 점의 횡가속도가 출처 차이(g·Δroll, 0.1~0.25 m/s²)만큼 어긋난다.
+    tin.pose_valid = localizer && loc.roll_ok;
     if (localizer) {
-        tin.pose_valid = loc.roll_ok && torque_.localizer_source();
         tin.yaw_rate_rad_s = loc.yaw_rate_rad_s;
         tin.roll_rad = loc.roll_rad;
-    } else {
-        tin.pose_valid = in.yaw_rate_valid && !torque_.localizer_source();
-        tin.yaw_rate_rad_s = -in.yaw_rate_rad_s;
-        tin.roll_rad = vp.roll_rad;
     }
     last_torque_input_ = tin;
     const bool torque_published = torque_.update(tin);

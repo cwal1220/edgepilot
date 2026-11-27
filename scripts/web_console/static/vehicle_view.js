@@ -6,7 +6,7 @@ import {codeText, locale, t} from "./i18n.js";
 import {
   clampToMeta, defaultOf, metaFor, onParamsChanged, params, sectionName, updateRuntime, valueOf,
 } from "./param_state.js";
-import {conditionNoteList, effectsDetails, formatValue, paramCard, paramEditor} from "./param_editor.js";
+import {conditionNoteList, effectsDetails, formatValue, paramEditor} from "./param_editor.js";
 import {
   actionButton, api, badges, confirmAction, DASH, deg, el, fitRange, helpText, infoTable, liveCard, ms, note, num, poller,
   runAction, section, segmented, setBadge, sgn, sparkline, staleBadge,
@@ -135,7 +135,7 @@ const LEARNERS = {
     summary: ({learner: s}) => t("vehicle.torqued_summary", {
       points: s.total_bucket_points.toLocaleString(locale), decay: num(s.decay, 1),
       count: Math.max(0, Math.round(s.max_resets) - 1),
-      restored: s.flags.torque_partly_restored ? t("vehicle.partly_restored") : restored(s.flags.torque_restored),
+      restored: restored(s.flags.torque_restored),
     }),
   },
   lagd: {
@@ -503,8 +503,6 @@ export function createVehicleView() {
     const spec = tab.learners[id];
     return learnerGroup(id, spec, keysOf(id).filter(key => key !== spec.switch));
   });
-  const plain = new Map(tab.sections.filter(id => !tab.learners[id]).map(id => [id, keysOf(id).map(key => paramCard("steering", key))]));
-  const plainSection = id => (plain.get(id)?.length ? section(sectionName(id), plain.get(id), {count: plain.get(id).length}) : null);
   const calibration = calibrationCard();
   const notice = el("div");
   const trends = TREND_CHARTS.map(trendCard);
@@ -561,16 +559,13 @@ export function createVehicleView() {
       el("p.group-note", {text: tab.note}),
       notice,
       groups.map(group => group.element),
-      plainSection("learner_inputs"),
       section(t("vehicle.trends"), trends.map(trend => trend.element)),
       section(t("calibration.section"), [calibration.element]),
-      [...plain.keys()].filter(id => id !== "learner_inputs").map(plainSection),
       el("p.file-path", {text: t("params.file", {path: params().paths.steering})})),
     start() {
       // 가려져 있던 동안의 추이는 서버에서 다시 받는다
       trendLoaded = false;
       groups.forEach(group => group.refresh());
-      plain.forEach(cards => cards.forEach(card => card.refresh()));
       polling.start();
     },
     stop: polling.stop,

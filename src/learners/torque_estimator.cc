@@ -27,8 +27,6 @@ const char *torque_restore_name(TorqueRestore status) {
             return "key_mismatch";
         case TorqueRestore::Corrupt:
             return "corrupt";
-        case TorqueRestore::SourceChanged:
-            return "source_changed";
     }
     return "unknown";
 }
@@ -46,7 +44,8 @@ constexpr double kMinFilterDecay = 50.0;
 constexpr double kMaxFilterDecay = 250.0;
 constexpr double kLatAccThreshold = 1.0;
 constexpr double kMinEngageBuffer = 2.0;
-constexpr int kTorqueVersion = 2;  // 2: 요레이트·롤 출처 바이트
+constexpr int kTorqueVersion = 2;                   // 2: 요레이트·롤 출처 바이트
+constexpr uint8_t kTorqueCacheLocalizerSource = 1;  // 출처 바이트: locationd(0이던 ESP12 출처는 2026-11-27에 뺐다)
 constexpr double kSteerBucketBounds[TorqueEstimator::kBuckets][2] = {
     {-0.5, -0.3}, {-0.3, -0.2}, {-0.2, -0.1}, {-0.1, 0.0}, {0.0, 0.1}, {0.1, 0.2}, {0.2, 0.3}, {0.3, 0.5}};
 constexpr int kMinBucketPoints[TorqueEstimator::kBuckets] = {100, 300, 500, 500, 500, 500, 300, 100};
@@ -104,9 +103,8 @@ bool take(const std::string &in, size_t *pos, T *v) {
 
 }  // namespace
 
-TorqueEstimator::TorqueEstimator(const TorqueTuning &offline, double lag_s, const std::string &cache,
-                                 bool localizer_source)
-    : offline_(offline), localizer_source_(localizer_source), lag_s_(lag_s) {
+TorqueEstimator::TorqueEstimator(const TorqueTuning &offline, double lag_s, const std::string &cache)
+    : offline_(offline), lag_s_(lag_s) {
     reset();
     decay_ = kMinFilterDecay;
     min_factor_ = (1.0 - kFactorSanity) * offline_.lat_accel_factor;
@@ -340,7 +338,7 @@ std::string TorqueEstimator::serialize(const TorqueParams &p) const {
     put(&out, static_cast<int32_t>(kTorqueVersion));
     put(&out, static_cast<float>(offline_.friction));
     put(&out, static_cast<float>(offline_.lat_accel_factor));
-    put(&out, static_cast<uint8_t>(localizer_source_ ? 1 : 0));
+    put(&out, static_cast<uint8_t>(kTorqueCacheLocalizerSource));
     put(&out, static_cast<uint8_t>(p.valid ? 1 : 0));
     put(&out, static_cast<float>(p.lat_accel_factor));
     put(&out, static_cast<float>(p.lat_accel_offset));
@@ -372,16 +370,10 @@ TorqueRestore TorqueEstimator::restore(const std::string &cache, double *factor,
         !take(cache, &pos, &f_friction) || !take(cache, &pos, &decay) || !take(cache, &pos, &n) ||
         cache.size() != pos + static_cast<size_t>(n) * 2 * sizeof(float))
         return TorqueRestore::Corrupt;
+    // 출처 바이트: 점의 요레이트·롤 출처. 2026-11-27부터 늘 locationd라 ESP12로 쌓은 예전 캐시는 쓰지 않는다.
     if (version != kTorqueVersion || key_friction != static_cast<float>(offline_.friction) ||
-        key_factor != static_cast<float>(offline_.lat_accel_factor))
+        key_factor != static_cast<float>(offline_.lat_accel_factor) || source != kTorqueCacheLocalizerSource)
         return TorqueRestore::KeyMismatch;
-    if ((source != 0) != localizer_source_) {
-        if (valid) {
-            *factor = f_factor;
-            *friction = f_friction;
-        }
-        return TorqueRestore::SourceChanged;
-    }
     if (valid) {
         *factor = f_factor;
         *offset = f_offset;

@@ -2,7 +2,7 @@
 // 추정(상류 lagd)을 돌려 /edgepilot_localization에 발행한다. 본체는 LocalizationPipeline이고
 // 이 파일은 공유 메모리 입출력과 lagd 저장만 맡는다.
 //
-// controlsd는 이 출력을 paramsd·torqued 입력(use_locationd_learner_inputs)과 경로 지연
+// controlsd는 이 출력을 paramsd·torqued 입력과 경로 지연
 // (use_live_delay)에 쓴다. 입력이 없으면(IMU 없음 등) 발행하지 않고 기다리고, 그동안 controlsd는
 // ESP12 값으로 돌아간다. lagd 추정은 params/live_delay.json에 60초마다와 종료 때 저장하고,
 // 시작 때 저장된 추정이 무효가 아니면 이어서 쓴다(steer_actuator_delay가 바뀌어도 그대로 쓴다).

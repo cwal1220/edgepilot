@@ -1,7 +1,6 @@
 #pragma once
 
-// openpilot torqued(TorqueEstimator) 이식. 점의 요레이트·롤 출처(ESP12/locationd)를 캐시에 남기고
-// 출처가 바뀐 캐시는 배율·마찰만 이어 쓴다.
+// openpilot torqued(TorqueEstimator) 이식. 점은 locationd 요레이트·롤로 모은다(LateralLearners).
 
 #include <algorithm>
 #include <array>
@@ -45,11 +44,8 @@ struct TorqueParams {
     double max_resets = 0.0;
 };
 
-// SourceChanged: 다른 요레이트·롤 출처(ESP12 ↔ locationd)로 쌓은 캐시. 점의 횡가속도가 롤 출처
-// 차이(g·Δroll, 0.1~0.25 m/s²)만큼 어긋나 섞으면 절편이 몇 시간 끌려가므로 점과 절편은 버리고
-// 출처와 무관한 배율·마찰만 이어 쓴다.
-enum class TorqueRestore { None, Restored, KeyMismatch, Corrupt, SourceChanged };
-// 로그에 쓰는 이름(fresh, restored, key_mismatch, corrupt, source_changed)
+enum class TorqueRestore { None, Restored, KeyMismatch, Corrupt };
+// 로그에 쓰는 이름(fresh, restored, key_mismatch, corrupt)
 const char *torque_restore_name(TorqueRestore status);
 
 class TorqueEstimator {
@@ -60,9 +56,7 @@ public:
 
     // lag_s는 상류 lateralDelay 자리. cache가 비어 있지 않으면 상류처럼 먼저 복원한다.
     // Corrupt면 호출자가 캐시를 지운다(상류 params.remove). 키 불일치는 두기만 한다.
-    // localizer_source: 점의 요레이트·롤 출처(캐시에 남기고 복원 때 대조한다).
-    TorqueEstimator(const TorqueTuning &offline, double lag_s, const std::string &cache = std::string(),
-                    bool localizer_source = false);
+    TorqueEstimator(const TorqueTuning &offline, double lag_s, const std::string &cache = std::string());
 
     // 제어 틱마다 부른다. 4 Hz 출력 틱이면 true이고 params()가 갱신된다. 입력이 낡은 동안(차가 꺼짐)은 쉰다:
     // 상류 torqued는 시동이 켜졌을 때만 돈다.
@@ -75,7 +69,6 @@ public:
     const std::string &persist_data() const { return persist_data_; }
     TorqueRestore restore_status() const { return restore_; }
     const TorqueTuning &tuning() const { return offline_; }
-    bool localizer_source() const { return localizer_source_; }
     // 상류 torqued는 lateralDelay 메시지(lagd)로 lag를 바꾼다. 이후 들어오는 점부터 적용한다. 값은 controlsd의 경로
     // 지연이다(lagd 0.15~0.65 s 또는 설정값).
     void set_lag(double lag_s) { lag_s_ = lag_s; }
@@ -126,7 +119,6 @@ private:
     TorqueRestore restore(const std::string &cache, double *factor, double *offset, double *friction);
 
     TorqueTuning offline_;
-    bool localizer_source_ = false;
     double lag_s_ = 0.0;
     double min_factor_ = 0.0, max_factor_ = 0.0, min_friction_ = 0.0, max_friction_ = 0.0;
     double resets_ = 0.0;

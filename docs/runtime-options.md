@@ -226,9 +226,9 @@ corrupt cache). paramsd's state also fails when the wheelbase or centre of
 gravity changed, or when its steering ratio is outside 0.5-2x the manual one.
 A changed tyre stiffness keeps it, as openpilot does: the learned stiffness
 factor starts at 1.0 at every start anyway. torqued starts over when its prior
-(torque factor, friction) changed, and keeps only the factor and friction when
-the learner input source changed. The web console's calibration reset deletes
-`calibration.json` and `flow_calibration.json`.
+(torque factor, friction) changed, or when its cache was collected from ESP12
+rather than locationd (before 2026-11-27). The web console's calibration reset
+deletes `calibration.json` and `flow_calibration.json`.
 
 ## Web console
 
@@ -280,7 +280,7 @@ press. A value is written as soon as it is changed.
 | Tab | Address | Holds |
 | --- | --- | --- |
 | Steering | `#steering` | the controller tuning, the learned torque model card, the path mode (Laneless) and the lane-change minimum speed; searching it for a moved value links to Vehicle |
-| Vehicle | `#vehicle` | the steering values that belong to the car rather than to the controller, the learner input source, the learners' trend, the camera calibration and the fixed specs |
+| Vehicle | `#vehicle` | the steering values that belong to the car rather than to the controller, the learners' trend, the camera calibration and the fixed specs |
 | Vision cruise | `#adaptive_cruise` | `adaptive_cruise.json` |
 | Recording | `#recording` | `recording.json`, and the recording files card: the routes on the SD card with their length and size, the free space, and deleting the selected routes |
 | Device settings | `#display` | backlight, sound and camera mount from `display.json`, and the Panda firmware card |
@@ -318,9 +318,9 @@ control uses now and where it comes from (controlsd's LearnerState says
 whether the learned values are in use), the learned value, the manual value
 with what it does while learning is on, and a button that copies the learned
 value into the manual one (tyre stiffness and road roll have none: their
-learned value is a factor and a roll). Below are the learner input source
-(locationd or ESP12), the learners' last ten minutes, the camera calibration
-and the fixed specs (wheelbase, centre of gravity). There is no vehicle mass:
+learned value is a factor and a roll). Below are the learners' last ten
+minutes, the camera calibration and the fixed specs (wheelbase, centre of
+gravity). There is no vehicle mass:
 tyre stiffness scales with it, so it cancels out of the vehicle model, and
 openpilot dropped it in 2026-10.
 

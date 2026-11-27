@@ -485,10 +485,8 @@ constexpr uint32_t kLearnerUseTorque = 1U << 10;
 constexpr uint32_t kLearnerVehicleRestored = 1U << 11;
 constexpr uint32_t kLearnerTorqueRestored = 1U << 12;
 constexpr uint32_t kLearnerUseDelay = 1U << 13;         // 경로 지연에 lagd 추정 사용 중
-constexpr uint32_t kLearnerLocalizerInputs = 1U << 14;  // paramsd·torqued 입력이 locationd
-// 학습 입력 출처가 바뀐 torqued 캐시에서 배율·마찰만 이어 썼다(점·절편은 새로 모은다)
-constexpr uint32_t kLearnerTorquePartlyRestored = 1U << 15;
-constexpr uint32_t kLearnerLateralNnLoaded = 1U << 16;  // controlsd가 학습한 토크 모델 파일을 읽었다
+constexpr uint32_t kLearnerLocalizerInputs = 1U << 14;  // paramsd·torqued 입력이 locationd(아니면 ESP12로 돌아감)
+constexpr uint32_t kLearnerLateralNnLoaded = 1U << 15;  // controlsd가 학습한 토크 모델 파일을 읽었다
 
 struct LearnerState {
     uint64_t timestamp_ns = 0;
